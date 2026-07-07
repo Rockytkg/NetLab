@@ -1,0 +1,20 @@
+{
+  "title": "Topology Editor",
+  "device": "Device",
+  "connection": "Connection",
+  "save": "Save Topology",
+  "export": "Export",
+  "undo": "Undo",
+  "redo": "Redo",
+  "zoomIn": "Zoom In",
+  "zoomOut": "Zoom Out",
+  "fitView": "Fit View",
+  "delete": "Delete Selected",
+  "selectAll": "Select All",
+  "comingSoon": "Topology Editor is coming soon",
+  "underDevelopment": "This feature is under active development. Stay tuned!",
+  "addDevice": "Add Device",
+  "addConnection": "Add Connection",
+  "deviceConfig": "Device Configuration",
+  "connectionConfig": "Connection Configuration"
+}

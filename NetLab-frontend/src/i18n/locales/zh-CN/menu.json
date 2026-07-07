@@ -1,0 +1,17 @@
+{
+  "workspace": "工作台",
+  "dashboard": "仪表盘",
+  "recentExperiments": "最近实验",
+  "favoriteTemplates": "收藏模板",
+  "labs": "实验室",
+  "myLabs": "我的实验室",
+  "deviceLibrary": "设备库",
+  "runMonitor": "运行监控",
+  "templateMarket": "模板市场",
+  "browseTemplates": "浏览模板",
+  "myUploads": "我的上传",
+  "installed": "已安装",
+  "settings": "系统设置",
+  "help": "帮助中心",
+  "home": "首页"
+}

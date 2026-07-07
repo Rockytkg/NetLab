@@ -1,0 +1,17 @@
+{
+  "workspace": "Workspace",
+  "dashboard": "Dashboard",
+  "recentExperiments": "Recent Experiments",
+  "favoriteTemplates": "Favorites",
+  "labs": "Labs",
+  "myLabs": "My Labs",
+  "deviceLibrary": "Device Library",
+  "runMonitor": "Runtime Monitor",
+  "templateMarket": "Template Market",
+  "browseTemplates": "Browse Templates",
+  "myUploads": "My Uploads",
+  "installed": "Installed",
+  "settings": "Settings",
+  "help": "Help Center",
+  "home": "Home"
+}
