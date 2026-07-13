@@ -10,7 +10,7 @@ export interface LocaleOption {
 }
 
 /** i18n 命名空间 */
-export type I18nNamespace = 'common' | 'login' | 'menu' | 'lab' | 'topology'
+export type I18nNamespace = 'common' | 'login' | 'menu' | 'lab' | 'topology' | 'settings'
 
 const APP_STORE_KEY = 'netlab-app'
 

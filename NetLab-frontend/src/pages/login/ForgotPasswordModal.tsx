@@ -25,10 +25,11 @@ interface ForgotPasswordModalProps {
 type StepKey = 'verify' | 'reset' | 'done'
 
 /** 第一步的内部组件 —— 需要访问父级 Form 实例 */
-function Step1Form({ t, themeToken, loading, cooldown, onSendCode, onFinish }: {
+function Step1Form({ t, themeToken, sendCodeLoading, verifyLoading, cooldown, onSendCode, onFinish }: {
   t: (key: string, opts?: Record<string, unknown>) => string
   themeToken: ReturnType<typeof theme.useToken>['token']
-  loading: boolean
+  sendCodeLoading: boolean
+  verifyLoading: boolean
   cooldown: number
   onSendCode: (email: string) => Promise<void>
   onFinish: (values: { email: string; verifyCode: string }) => void
@@ -72,7 +73,7 @@ function Step1Form({ t, themeToken, loading, cooldown, onSendCode, onFinish }: {
             <Button
               type="link"
               size="small"
-              loading={loading}
+              loading={sendCodeLoading}
               disabled={cooldown > 0}
               onClick={handleSendCodeLocal}
               style={{ padding: 0, fontSize: 12 }}
@@ -84,7 +85,7 @@ function Step1Form({ t, themeToken, loading, cooldown, onSendCode, onFinish }: {
       </Form.Item>
 
       <Form.Item style={{ marginBottom: 0 }}>
-        <Button type="primary" htmlType="submit" block loading={loading}>
+        <Button type="primary" htmlType="submit" block loading={verifyLoading}>
           {t('forgotPasswordStep1')}
         </Button>
       </Form.Item>
@@ -99,7 +100,9 @@ export default function ForgotPasswordModal({ open, onClose }: ForgotPasswordMod
   const [currentStep, setCurrentStep] = useState<StepKey>('verify')
   const [email, setEmail] = useState('')
   const [verifiedCode, setVerifiedCode] = useState('')
-  const [loading, setLoading] = useState(false)
+  const [sendCodeLoading, setSendCodeLoading] = useState(false)
+  const [verifyLoading, setVerifyLoading] = useState(false)
+  const [resetLoading, setResetLoading] = useState(false)
   const [cooldown, setCooldown] = useState(0)
   const timerRef = useRef<ReturnType<typeof setInterval>>()
 
@@ -120,9 +123,9 @@ export default function ForgotPasswordModal({ open, onClose }: ForgotPasswordMod
       message.warning(t('emailInvalid'))
       return
     }
-    setLoading(true)
+    setSendCodeLoading(true)
     try {
-      await authApi.sendCode({ email: emailValue, purpose: 'reset-password' })
+      await authApi.forgotPassword({ email: emailValue })
       message.success(t('sendCodeSuccess'))
       const cd = 60
       setCooldown(cd)
@@ -138,7 +141,7 @@ export default function ForgotPasswordModal({ open, onClose }: ForgotPasswordMod
     } catch {
       // HTTP/业务错误已由 Axios 拦截器（request.ts）弹出提示
     } finally {
-      setLoading(false)
+      setSendCodeLoading(false)
     }
   }, [cooldown, t, message])
 
@@ -149,7 +152,7 @@ export default function ForgotPasswordModal({ open, onClose }: ForgotPasswordMod
   // 若在此再弹一次提示，会导致一次失败出现两条消息。
   // 只有 AuthSecurityError（客户端、HTTP 之前）需要手动弹出提示。
   const handleVerify = useCallback(async (values: { email: string; verifyCode: string }) => {
-    setLoading(true)
+    setVerifyLoading(true)
     try {
       const result = await authApi.verifyCode({
         email: values.email,
@@ -174,13 +177,13 @@ export default function ForgotPasswordModal({ open, onClose }: ForgotPasswordMod
         message.error(error.message)
       }
     } finally {
-      setLoading(false)
+      setVerifyLoading(false)
     }
   }, [t, message])
 
   // ── 第二步 → 第三步：重置密码 ──
   const handleReset = useCallback(async (values: { newPassword: string }) => {
-    setLoading(true)
+    setResetLoading(true)
     try {
       await authApi.resetPassword({
         email,
@@ -196,7 +199,7 @@ export default function ForgotPasswordModal({ open, onClose }: ForgotPasswordMod
         message.error(error.message)
       }
     } finally {
-      setLoading(false)
+      setResetLoading(false)
     }
   }, [email, verifiedCode, message])
 
@@ -239,7 +242,8 @@ export default function ForgotPasswordModal({ open, onClose }: ForgotPasswordMod
           <Step1Form
             t={t}
             themeToken={themeToken}
-            loading={loading}
+            sendCodeLoading={sendCodeLoading}
+            verifyLoading={verifyLoading}
             cooldown={cooldown}
             onSendCode={handleSendCode}
             onFinish={handleVerify}
@@ -264,7 +268,7 @@ export default function ForgotPasswordModal({ open, onClose }: ForgotPasswordMod
             </Form.Item>
 
             <Form.Item style={{ marginBottom: 0 }}>
-              <Button type="primary" htmlType="submit" block loading={loading}>
+              <Button type="primary" htmlType="submit" block loading={resetLoading}>
                 {t('forgotPasswordStep2')}
               </Button>
             </Form.Item>

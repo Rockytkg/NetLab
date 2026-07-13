@@ -46,8 +46,8 @@ type Store interface {
 
 // CaptchaResult 包含生成的验证码信息。
 type CaptchaResult struct {
-	CaptchaID    string `json:"captcha_id"`
-	CaptchaImage string `json:"captcha_image"` // base64 编码的 PNG
+	CaptchaID    string `json:"captchaId"`
+	CaptchaImage string `json:"captchaImage"` // base64 编码的 PNG
 }
 
 const (

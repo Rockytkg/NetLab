@@ -61,7 +61,7 @@ func resolveLocale(userLang, acceptLang string) string {
 
 // matchLocale 尝试将原始的请求头值匹配到受支持的 locale。
 // 它首先尝试精确匹配，然后回退到前缀匹配
-//（例如 "zh" → "zh-CN"，"en" → "en-US"）。
+// （例如 "zh" → "zh-CN"，"en" → "en-US"）。
 func matchLocale(header string) string {
 	// 提取第一个语言标签（位于逗号、分号或空格之前）
 	locale := extractPrimaryTag(header)

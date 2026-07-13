@@ -44,6 +44,14 @@ const componentToken: ThemeConfig['components'] = {
     itemSelectedBg: 'var(--ant-color-bg-container)',
     trackBg: 'var(--ant-color-fill-tertiary)',
   },
+  Tabs: {
+    // 左侧竖排页签的视觉调优：加大标题间距、垂直内边距，
+    // 让「系统设置」等纵向页签更清晰、更符合 Ant Design 规范。
+    titleFontSize: 14,
+    horizontalItemGutter: 24,
+    verticalItemPadding: '8px 16px',
+    verticalItemMargin: '4px 0',
+  },
   Table: {
     headerBorderRadius: 0,
   },

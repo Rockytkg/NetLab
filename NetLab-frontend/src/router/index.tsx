@@ -11,6 +11,9 @@ import Loading from '@/components/common/Loading'
 // ── 懒加载页面 ──
 const LoginPage = lazy(() => import('@/pages/login'))
 const OAuthCallbackPage = lazy(() => import('@/pages/login/OAuthCallbackPage'))
+const SecurityRequiredPage = lazy(() => import('@/pages/account/SecurityRequiredPage'))
+const TwoFactorSetupPage = lazy(() => import('@/pages/account/TwoFactorSetupPage'))
+const TwoFactorVerifyPage = lazy(() => import('@/pages/login/TwoFactorVerifyPage'))
 const ForbiddenPage = lazy(() => import('@/pages/error/403'))
 const NotFoundPage = lazy(() => import('@/pages/error/404'))
 const DashboardPage = lazy(() => import('@/pages/dashboard'))
@@ -23,6 +26,7 @@ const TemplateUploadPage = lazy(() => import('@/pages/templates/upload'))
 const TemplateInstalledPage = lazy(() => import('@/pages/templates/installed'))
 const SettingsPage = lazy(() => import('@/pages/settings'))
 const SettingsProfilePage = lazy(() => import('@/pages/settings/profile'))
+const UsersPage = lazy(() => import('@/pages/settings/users'))
 const HelpPage = lazy(() => import('@/pages/help'))
 
 /**
@@ -36,12 +40,32 @@ const router = createBrowserRouter([
     element: <LoginPage />,
   },
   {
+    path: '/login/2fa',
+    element: <TwoFactorVerifyPage />,
+  },
+  {
     path: '/oauth/callback',
     element: <OAuthCallbackPage />,
   },
   {
     path: '/403',
     element: <ForbiddenPage />,
+  },
+  {
+    path: '/account/security-required',
+    element: (
+      <AuthGuard>
+        <SecurityRequiredPage />
+      </AuthGuard>
+    ),
+  },
+  {
+    path: '/account/2fa-setup',
+    element: (
+      <AuthGuard>
+        <TwoFactorSetupPage />
+      </AuthGuard>
+    ),
   },
   {
     path: '*',
@@ -81,6 +105,7 @@ const router = createBrowserRouter([
       // 设置
       { path: '/settings', element: <SettingsPage /> },
       { path: '/settings/profile', element: <SettingsProfilePage /> },
+      { path: '/settings/users', element: <UsersPage /> },
 
       // 帮助
       { path: '/help', element: <HelpPage /> },

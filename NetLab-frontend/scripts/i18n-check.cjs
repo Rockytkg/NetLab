@@ -13,7 +13,6 @@
 
 const fs = require('fs')
 const path = require('path')
-const { execSync } = require('child_process')
 
 const ROOT = path.resolve(__dirname, '..')
 const SRC = path.join(ROOT, 'src')
@@ -67,7 +66,6 @@ for (const file of sourceFiles) {
 
   for (let i = 0; i < lines.length; i++) {
     const trimmed = lines[i].trim()
-    const line = lines[i]
 
     // Track block comment state
     if (trimmed.startsWith('/*') || trimmed.startsWith('/**') || trimmed.startsWith('{/*')) {

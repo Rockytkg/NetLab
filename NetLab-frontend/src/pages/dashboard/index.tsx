@@ -30,7 +30,7 @@ import { useNavigate } from 'react-router-dom'
 import type { LabItem, LabFilter, LabStatus } from '@/types/lab'
 import { LAB_STATUS_CONFIG } from '@/types/lab'
 
-const { Title, Text } = Typography
+const { Text } = Typography
 const { RangePicker } = DatePicker
 
 export default function DashboardPage() {
@@ -187,27 +187,13 @@ export default function DashboardPage() {
 
   return (
     <div style={{ width: '100%' }}>
-      {/* ── 页面头部 ── */}
-      <div className="netlab-page-header">
-        <div>
-          <Title level={3}>{t('menu:dashboard')}</Title>
-          <Text type="secondary">{t('lab:createFirstLab')}</Text>
-        </div>
-        <Space wrap>
-          <Button icon={<ReloadOutlined />}>{t('common:refresh')}</Button>
-          <Button type="primary" icon={<PlusOutlined />}>
-            {t('lab:createLab')}
-          </Button>
-        </Space>
-      </div>
-
       {/* ── 批量操作栏 ── */}
       {selectedRowKeys.length > 0 && (
         <Alert
           className="netlab-dashboard-batch-bar"
           type="info"
           showIcon
-          message={t('lab:selectedCount', { count: selectedRowKeys.length })}
+          title={t('lab:selectedCount', { count: selectedRowKeys.length })}
           action={
             <Space>
               <Button size="small" icon={<PlayCircleOutlined />}>
@@ -257,6 +243,12 @@ export default function DashboardPage() {
           ]}
         />
         <RangePicker placeholder={[t('lab:dateRangeStart'), t('lab:dateRangeEnd')]} />
+        <Space wrap>
+          <Button icon={<ReloadOutlined />}>{t('common:refresh')}</Button>
+          <Button type="primary" icon={<PlusOutlined />}>
+            {t('lab:createLab')}
+          </Button>
+        </Space>
       </div>
 
       {/* ── 表格 ── */}

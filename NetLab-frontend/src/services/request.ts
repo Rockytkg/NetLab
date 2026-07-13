@@ -9,8 +9,6 @@ import { useAppStore } from '@/stores/appStore'
 import { getI18nT } from '@/utils/i18n-bridge'
 import { getMessageApi } from '@/utils/message-bridge'
 import {
-  importSigningKey,
-  createRequestSignature,
   decodeJwtPayload,
 } from '@/utils/crypto'
 import { createAuthSignatureHeaders } from './authSecurity'
@@ -18,52 +16,6 @@ import {
   HTTP_ERROR_I18N_MAP,
   BUSINESS_ERROR_I18N_MAP,
 } from '@/types/api'
-
-// ── snake_case ↔ camelCase 键名转换 ──────────────────────────────
-
-/** 将 snake_case 字符串转换为 camelCase */
-function snakeToCamel(str: string): string {
-  return str.replace(/_([a-z])/g, (_, char: string) => char.toUpperCase())
-}
-
-/** 将 camelCase 字符串转换为 snake_case */
-function camelToSnake(str: string): string {
-  return str.replace(/[A-Z]/g, (char) => '_' + char.toLowerCase())
-}
-
-/** 递归地将对象所有键名从 snake_case 转换为 camelCase */
-function deepSnakeToCamel<T>(value: T): T {
-  if (value === null || value === undefined) return value
-  if (Array.isArray(value)) {
-    return value.map((item) => deepSnakeToCamel(item)) as unknown as T
-  }
-  if (typeof value === 'object') {
-    const converted: Record<string, unknown> = {}
-    for (const [key, val] of Object.entries(value as Record<string, unknown>)) {
-      const camelKey = snakeToCamel(key)
-      converted[camelKey] = deepSnakeToCamel(val)
-    }
-    return converted as unknown as T
-  }
-  return value
-}
-
-/** 递归地将对象所有键名从 camelCase 转换为 snake_case */
-function deepCamelToSnake<T>(value: T): T {
-  if (value === null || value === undefined) return value
-  if (Array.isArray(value)) {
-    return value.map((item) => deepCamelToSnake(item)) as unknown as T
-  }
-  if (typeof value === 'object' && !(value instanceof FormData) && !(value instanceof URLSearchParams)) {
-    const converted: Record<string, unknown> = {}
-    for (const [key, val] of Object.entries(value as Record<string, unknown>)) {
-      const snakeKey = camelToSnake(key)
-      converted[snakeKey] = deepCamelToSnake(val)
-    }
-    return converted as unknown as T
-  }
-  return value
-}
 
 // ── Axios 实例 ──────────────────────────────────────────────────
 
@@ -92,26 +44,6 @@ let pendingQueue: Array<(token: string | null) => void> = []
 function resolvePendingQueue(token: string | null) {
   pendingQueue.forEach((cb) => cb(token))
   pendingQueue = []
-}
-
-// ── 加密密钥缓存（避免每次请求都重新导入） ────────
-
-let _signingCryptoKey: CryptoKey | null = null
-let _signingKeySource: string | null = null // 该密钥从中导入的 base64 密钥
-
-async function getSigningKey(): Promise<CryptoKey | null> {
-  const key = useAuthStore.getState().signingKey
-  if (!key) return null
-  if (key === _signingKeySource && _signingCryptoKey) return _signingCryptoKey
-  _signingCryptoKey = await importSigningKey(key)
-  _signingKeySource = key
-  return _signingCryptoKey
-}
-
-/** 使缓存的 CryptoKey 对象失效（在登出或密钥轮换时调用）。 */
-function invalidateCryptoKeys() {
-  _signingCryptoKey = null
-  _signingKeySource = null
 }
 
 // ── JWT 过期辅助函数 ───────────────────────────────────────────────
@@ -146,7 +78,6 @@ async function tryProactiveRefresh(): Promise<string | null> {
   isRefreshing = true
   try {
     const newToken = await store.refreshAccessToken()
-    invalidateCryptoKeys()
     resolvePendingQueue(newToken)
     return newToken
   } catch {
@@ -182,14 +113,7 @@ request.interceptors.request.use(
       }
     }
 
-    // ── 2. 将出站数据的 camelCase → snake_case ────
-    // 后端期望 snake_case 的 JSON 键名（标准 Go JSON 约定）。
-    // 这与响应拦截器的 snake→camel 反向转换相对应。
-    if (config.data != null && typeof config.data === 'object') {
-      config.data = deepCamelToSnake(config.data)
-    }
-
-    // ── 3. 语言头 ───────────────────────────────────────
+    // ── 2. 语言头 ───────────────────────────────────────
     if (config.headers) {
       const locale = useAppStore.getState().locale
       config.headers['Accept-Language'] = locale
@@ -198,40 +122,13 @@ request.interceptors.request.use(
       config.headers['X-User-Language'] = locale
     }
 
-    // ── 4. 请求追踪 ID ──────────────────────────────────
+    // ── 3. 请求追踪 ID ──────────────────────────────────
     if (config.headers) {
       config.headers['X-Request-Id'] ??=
         `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
     }
 
-    // ── 5. HMAC 签名 ──────────────────────────────────────
-    if (config.requireSign && config.headers) {
-      const signingKey = await getSigningKey()
-      if (signingKey) {
-        const timestamp = new Date().toISOString()
-        config._timestamp = timestamp
-
-        // 计算路径（不含 base 的相对 URL）
-        const url = new URL(
-          config.baseURL + (config.url ?? ''),
-          window.location.origin,
-        )
-        const path = url.pathname + url.search
-
-        const signature = await createRequestSignature(
-          signingKey,
-          config.method ?? 'GET',
-          path,
-          timestamp,
-          config.data,
-        )
-
-        config.headers['X-Signature'] = signature
-        config.headers['X-Timestamp'] = timestamp
-      }
-    }
-
-    // ── 6. 预共享密钥 auth 签名 ───────────────────────
+    // ── 4. 预共享密钥 auth 签名 ───────────────────────
     // 用于携带敏感字段的公开 auth 接口（login/register/reset-password）。
     // 请求体以明文发送（由 HTTPS 保护）；
     // 我们仅附加 HMAC 签名，以便后端校验完整性并拒绝重放。
@@ -265,7 +162,7 @@ request.interceptors.response.use(
 
       // 成功码
       if (apiResponse.code === 0 || apiResponse.code === 200) {
-        return deepSnakeToCamel(apiResponse.data)
+        return apiResponse.data
       }
 
       // ── 2. 业务错误码 → i18n 消息 ──────────────────────
@@ -282,7 +179,6 @@ request.interceptors.response.use(
       if (bizCode === 1004 || bizCode === 1005 || bizCode === 1012) {
         const authStore = useAuthStore.getState()
         authStore.logout({ callApi: false })
-        invalidateCryptoKeys()
         // 重定向到登录页 —— 使用 window.location 以在 React 树之外生效
         window.location.href = `/login?redirect=${encodeURIComponent(window.location.pathname)}`
       }
@@ -336,7 +232,6 @@ request.interceptors.response.use(
       isRefreshing = true
       try {
         const newToken = await useAuthStore.getState().refreshAccessToken()
-        invalidateCryptoKeys()
         resolvePendingQueue(newToken)
 
         if (newToken && config.headers) {

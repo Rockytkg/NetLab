@@ -9,8 +9,7 @@ import (
 
 // VerifyHMACSHA256Hex 校验以十六进制编码的 HMAC-SHA256 签名。
 //
-// 预共享密钥认证路径和会话签名路径均对签名和密钥使用
-// 十六进制编码（代码库不对任何机密材料使用 base64）。
+// 预共享密钥认证路径对签名和密钥使用十六进制编码。
 func VerifyHMACSHA256Hex(key []byte, message, signatureHex string) (bool, error) {
 	sig, err := hex.DecodeString(signatureHex)
 	if err != nil {
@@ -33,15 +32,4 @@ func VerifyHMACSHA256Hex(key []byte, message, signatureHex string) (bool, error)
 func BuildSignPayloadWithTimestamp(requestID, salt, timestamp, bodyJSON string) string {
 	bodyHash := SHA256Hex(bodyJSON)
 	return requestID + salt + timestamp + bodyHash
-}
-
-// BuildSessionSignPayload 为会话级签名创建签名负载：
-//
-//	{METHOD}\n{path}\n{ISO_TIMESTAMP}\n{SHA256(JSON.stringify(body) || '')}
-func BuildSessionSignPayload(method, path, timestamp, bodyJSON string) string {
-	bodyHash := ""
-	if bodyJSON != "" && bodyJSON != "{}" {
-		bodyHash = SHA256Hex(bodyJSON)
-	}
-	return fmt.Sprintf("%s\n%s\n%s\n%s", method, path, timestamp, bodyHash)
 }

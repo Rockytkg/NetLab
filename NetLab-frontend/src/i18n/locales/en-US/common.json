@@ -29,7 +29,6 @@
   "requestFailed": "Request failed",
   "fetchUserFailed": "Failed to fetch user information",
   "sessionExpiredLoginAgain": "Session expired. Please log in again",
-
   "error400": "Bad request — invalid parameters",
   "error401": "Unauthorized — please log in",
   "forbidden": "Access denied. Insufficient permissions",
@@ -44,7 +43,6 @@
   "error503": "Service temporarily unavailable. Please try again later",
   "error504": "Gateway timeout. Please try again later",
   "errorUnknown": "Unknown error ({{code}})",
-
   "errInvalidCredentials": "Invalid username or password",
   "errAccountLocked": "Account has been locked. Please contact the administrator",
   "errAccountDisabled": "Account has been disabled",
@@ -62,16 +60,17 @@
   "errResourceInUse": "Resource is in use and cannot be deleted",
   "errEmailNotConfigured": "Email service is not configured. Please contact the administrator",
   "errEmailSendFailed": "Failed to send verification email. Please try again later",
-
+  "errPasswordResetDisabled": "Password reset is disabled",
   "themeMode": "Theme Mode",
   "themeLight": "Light",
   "themeDark": "Dark",
   "themeSystem": "Auto",
   "language": "Language",
-
   "openNavigation": "Open navigation menu",
   "toggleSidebar": "Toggle sidebar",
   "notifications": "Notifications",
   "guestUser": "Guest",
-  "authSecurityUnavailable": "Authentication security configuration is unavailable. Please contact the administrator"
+  "authSecurityUnavailable": "Authentication security configuration is unavailable. Please contact the administrator",
+  "errInvalidTwoFactorCode": "Invalid or expired two-factor code",
+  "errTwoFactorNotConfigured": "Two-factor authentication is not configured"
 }

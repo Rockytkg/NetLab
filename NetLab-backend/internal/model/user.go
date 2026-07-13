@@ -11,9 +11,10 @@ import (
 type UserRole string
 
 const (
-	RoleAdmin  UserRole = "admin"
-	RoleEditor UserRole = "editor"
-	RoleViewer UserRole = "viewer"
+	RoleSuperAdmin UserRole = "super_admin"
+	RoleAdmin      UserRole = "admin"
+	RoleEditor     UserRole = "editor"
+	RoleViewer     UserRole = "viewer"
 )
 
 // UserStatus 表示账户状态。
@@ -32,10 +33,14 @@ type User struct {
 	Email               string     `gorm:"type:varchar(255);uniqueIndex;not null" json:"email"`
 	PasswordHash        string     `gorm:"type:varchar(255);not null" json:"-"`
 	Avatar              string     `gorm:"type:varchar(512)" json:"avatar"`
-	Roles               []string   `gorm:"type:jsonb;serializer:json;not null;default:'[\"viewer\"]'" json:"roles"`
+	Role                UserRole   `gorm:"type:varchar(32);not null;default:'viewer'" json:"role"`
 	Status              UserStatus `gorm:"type:varchar(16);not null;default:'active'" json:"status"`
-	FailedLoginAttempts int        `gorm:"type:int;default:0" json:"-"`
-	LockedUntil         *time.Time `gorm:"type:timestamptz" json:"-"`
+	ForcePasswordChange bool       `gorm:"type:boolean;not null;default:false" json:"force_password_change"`
+	ForceEmailChange    bool       `gorm:"type:boolean;not null;default:false" json:"force_email_change"`
+	TwoFactorEnabled    bool       `gorm:"type:boolean;not null;default:false" json:"two_factor_enabled"`
+	TwoFactorSecret     string     `gorm:"type:varchar(512)" json:"-"`
+	PreferredAuthMethod string     `gorm:"type:varchar(16);not null;default:'totp'" json:"preferred_auth_method"`
+	PasswordChangedAt   *time.Time `gorm:"type:timestamptz" json:"password_changed_at"`
 	LastLoginAt         *time.Time `gorm:"type:timestamptz" json:"last_login_at"`
 	CreatedAt           time.Time  `gorm:"type:timestamptz;not null;default:now()" json:"created_at"`
 	UpdatedAt           time.Time  `gorm:"type:timestamptz;not null;default:now()" json:"updated_at"`
@@ -46,8 +51,8 @@ func (u *User) BeforeCreate(tx *gorm.DB) error {
 	if u.ID == uuid.Nil {
 		u.ID = uuid.New()
 	}
-	if u.Roles == nil {
-		u.Roles = []string{string(RoleViewer)}
+	if u.Role == "" {
+		u.Role = RoleViewer
 	}
 	if u.Status == "" {
 		u.Status = StatusActive
@@ -62,8 +67,5 @@ func (u *User) IsActive() bool {
 
 // IsLocked 在账户当前处于锁定状态时返回 true。
 func (u *User) IsLocked() bool {
-	if u.Status == StatusLocked && u.LockedUntil != nil {
-		return time.Now().Before(*u.LockedUntil)
-	}
-	return false
+	return u.Status == StatusLocked
 }

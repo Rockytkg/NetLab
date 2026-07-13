@@ -1,17 +1,14 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import type { UserInfo, LoginParams, LoginResult } from '@/types/auth'
+import type { UserInfo, LoginParams, LoginResult, SecurityActions } from '@/types/auth'
 import { authApi } from '@/services/auth'
-import { tokenStorage } from '@/utils/token'
 
 interface AuthState {
   accessToken: string | null
   refreshToken: string | null
   userInfo: UserInfo | null
+  securityActions: SecurityActions | null
   loading: boolean
-
-  /** 会话级签名密钥（不持久化——每次登录时需重新建立） */
-  signingKey: string | null
 
   /** 登录 —— 返回完整结果。调用方在存储 token 前需检查 requiresTwoFactor。 */
   login: (params: LoginParams) => Promise<LoginResult>
@@ -24,9 +21,6 @@ interface AuthState {
   refreshAccessToken: () => Promise<string | null>
   fetchUserInfo: () => Promise<void>
   isAuthenticated: () => boolean
-
-  /** 从登录结果中存储会话签名密钥 */
-  setSessionKeys: (signingKey?: string) => void
 }
 
 export const useAuthStore = create<AuthState>()(
@@ -35,18 +29,17 @@ export const useAuthStore = create<AuthState>()(
       accessToken: null,
       refreshToken: null,
       userInfo: null,
+      securityActions: null,
       loading: false,
-      signingKey: null,
 
       login: async (params: LoginParams) => {
         const result = await authApi.login(params)
-        tokenStorage.setAccessToken(result.accessToken)
-        tokenStorage.setRefreshToken(result.refreshToken)
+        if (!result.accessToken || !result.refreshToken || !result.user) return result
         set({
           accessToken: result.accessToken,
           refreshToken: result.refreshToken,
           userInfo: result.user,
-          signingKey: result.signingKey ?? null,
+          securityActions: result.securityActions,
         })
         return result
       },
@@ -64,12 +57,11 @@ export const useAuthStore = create<AuthState>()(
             /* 忽略 —— 继续清除本地会话 */
           }
         }
-        tokenStorage.clear()
         set({
           accessToken: null,
           refreshToken: null,
           userInfo: null,
-          signingKey: null,
+          securityActions: null,
         })
       },
 
@@ -79,13 +71,9 @@ export const useAuthStore = create<AuthState>()(
 
         try {
           const result = await authApi.refreshToken(refreshToken)
-          tokenStorage.setAccessToken(result.accessToken)
-          tokenStorage.setRefreshToken(result.refreshToken)
           set({
             accessToken: result.accessToken,
             refreshToken: result.refreshToken,
-            // 若服务端轮换了会话密钥则更新
-            signingKey: result.signingKey ?? get().signingKey,
           })
           return result.accessToken
         } catch {
@@ -109,12 +97,6 @@ export const useAuthStore = create<AuthState>()(
       isAuthenticated: () => {
         return !!get().accessToken
       },
-
-      setSessionKeys: (signingKey?: string) => {
-        set({
-          signingKey: signingKey ?? null,
-        })
-      },
     }),
     {
       name: 'netlab-auth',
@@ -122,8 +104,7 @@ export const useAuthStore = create<AuthState>()(
         accessToken: state.accessToken,
         refreshToken: state.refreshToken,
         userInfo: state.userInfo,
-        // 注意：signingKey 不持久化 ——
-        // 每次会话都必须从服务端重新建立。
+        securityActions: state.securityActions,
       }),
     }
   )

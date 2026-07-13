@@ -61,14 +61,15 @@ select {
   transition: width 0.2s ease;
 }
 
-/* Main content area — responsive padding */
+/* Main content area */
 .netlab-main-content {
-  transition: padding 0.2s ease;
+  min-width: 0;
 }
 
 /* Layout footer status bar */
 .netlab-layout-footer {
   display: flex;
+  flex-shrink: 0;
   align-items: center;
   justify-content: space-between;
   height: 48px;
@@ -80,21 +81,47 @@ select {
 }
 
 /* -------------------------------------------------------
-   3. Page Header (shared across pages)
+   3b. Settings page
    ------------------------------------------------------- */
-.netlab-page-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 16px;
-  margin-bottom: 24px;
+.netlab-settings-shell {
+  min-width: 0;
 }
 
-.netlab-page-header h1,
-.netlab-page-header h2,
-.netlab-page-header h3,
-.netlab-page-header h4 {
-  margin: 0 !important;
+.netlab-settings-tabs {
+  width: 100%;
+  min-width: 0;
+}
+
+.netlab-settings-tabs > .ant-tabs-nav,
+.netlab-settings-tabs .ant-tabs-nav-wrap {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.netlab-settings-tabs > .ant-tabs-content-holder,
+.netlab-settings-tabs > .ant-tabs-body-holder {
+  width: 100%;
+  min-height: 0;
+  flex: 1;
+  overflow-x: hidden;
+  overflow-y: hidden;
+  border-top: 1px solid var(--ant-color-border-secondary);
+}
+
+.netlab-settings-tabs .ant-tabs-content {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+
+.netlab-settings-tabs .ant-tabs-tabpane {
+  width: 100%;
+  max-width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: hidden;
 }
 
 /* -------------------------------------------------------
@@ -294,14 +321,6 @@ select {
     display: none;
   }
 
-  .netlab-main-content {
-    padding: 16px !important;
-  }
-
-  .netlab-page-header {
-    flex-direction: column;
-  }
-
   .netlab-header-search {
     display: none;
   }
@@ -328,23 +347,12 @@ select {
     max-width: 100%;
   }
 
-  .netlab-page-header {
-    gap: 12px;
-  }
 }
 
 /* < 576px (xs) — Ultra-compact, read-only optimized */
 @media (max-width: 575px) {
-  .netlab-main-content {
-    padding: 12px !important;
-  }
-
   .netlab-layout-footer {
     display: none;
-  }
-
-  .netlab-page-header {
-    margin-bottom: 16px;
   }
 
   .netlab-canvas-container {

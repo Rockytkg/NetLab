@@ -8,9 +8,11 @@ import {
   SettingOutlined,
   QuestionCircleOutlined,
   MonitorOutlined,
+  TeamOutlined,
 } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import type { MenuProps } from 'antd'
+import { useAuthStore } from '@/stores/authStore'
 
 interface SideMenuProps {
   collapsed: boolean
@@ -21,6 +23,8 @@ export default function SideMenu({ collapsed }: SideMenuProps) {
   const navigate = useNavigate()
   const location = useLocation()
   const { token } = theme.useToken()
+  const role = useAuthStore((s) => s.userInfo?.role)
+  const isAdmin = role === 'admin' || role === 'super_admin'
 
   type MenuItem = Required<MenuProps>['items'][number]
 
@@ -65,11 +69,21 @@ export default function SideMenu({ collapsed }: SideMenuProps) {
     {
       type: 'divider',
     },
-    {
-      key: '/settings',
-      icon: <SettingOutlined />,
-      label: t('settings'),
-    },
+    // 系统设置仅对管理员可见。
+    ...(isAdmin
+      ? [
+          {
+            key: '/settings/users',
+            icon: <TeamOutlined />,
+            label: t('userManagement'),
+          } as MenuItem,
+          {
+            key: '/settings',
+            icon: <SettingOutlined />,
+            label: t('settings'),
+          } as MenuItem,
+        ]
+      : []),
     {
       key: '/help',
       icon: <QuestionCircleOutlined />,

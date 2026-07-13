@@ -10,10 +10,13 @@ import (
 
 	"netlab-backend/config"
 	_ "netlab-backend/docs" // Swagger 文档（匿名导入以触发 init() 注册）
+	"netlab-backend/internal/handler/admin"
 	"netlab-backend/internal/handler/auth"
 	"netlab-backend/internal/middleware"
 	authsvc "netlab-backend/internal/service/auth"
 	pkgjwt "netlab-backend/pkg/jwt"
+
+	"github.com/casbin/casbin/v3"
 )
 
 // RouterConfig 持有路由配置所需的全部依赖。
@@ -21,12 +24,14 @@ type RouterConfig struct {
 	Config        *config.Config
 	Logger        *zap.Logger
 	AuthHandler   *auth.AuthHandler
+	AdminHandler  *admin.AdminHandler
 	AuthService   *authsvc.AuthService
 	TokenService  *authsvc.TokenService
 	CryptoService *authsvc.CryptoService
 	JWTManager    *pkgjwt.Manager
-	Blacklist     pkgjwt.BlacklistManager
+	SessionStore  pkgjwt.SessionValidator
 	RateLimiter   *middleware.RateLimiter
+	Enforcer      *casbin.Enforcer
 }
 
 // Setup 配置所有路由和中间件，并返回 Gin 引擎。
@@ -56,7 +61,7 @@ func Setup(cfg RouterConfig) *gin.Engine {
 	api := r.Group("/api")
 	{
 		publicAuth := api.Group("/auth")
-		publicAuth.Use(middleware.OptionalAuth(cfg.JWTManager, cfg.Blacklist))
+		publicAuth.Use(middleware.OptionalAuth(cfg.JWTManager, cfg.SessionStore))
 		{
 			// ── 预共享密钥保护的端点（仅签名）──
 			// 请求体以明文发送（机密性由 HTTPS 保证）。
@@ -131,6 +136,18 @@ func Setup(cfg RouterConfig) *gin.Engine {
 				cfg.AuthHandler.VerifyPasskeyAuth,
 			)
 
+			// 两步验证登录校验 (严格限流): 交换挑战令牌为访问令牌
+			publicAuth.POST("/login/2fa",
+				cfg.limitStrict("auth-login-2fa"),
+				cfg.AuthHandler.VerifyTwoFactorLogin,
+			)
+
+			// 两步验证恢复码登录 (严格限流)
+			publicAuth.POST("/login/recovery",
+				cfg.limitStrict("auth-login-recovery"),
+				cfg.AuthHandler.VerifyRecoveryLogin,
+			)
+
 			// OAuth 授权——中等限流（用于发起 OAuth 流程）
 			publicAuth.GET("/oauth/authorize",
 				cfg.limitModerate("oauth-authorize"),
@@ -142,6 +159,14 @@ func Setup(cfg RouterConfig) *gin.Engine {
 				cfg.limitModerate("oauth-callback"),
 				cfg.AuthHandler.OAuthCallback,
 			)
+			publicAuth.POST("/oauth/bind-existing",
+				cfg.limitStrict("oauth-bind-existing"),
+				cfg.AuthHandler.OAuthBindExisting,
+			)
+			publicAuth.POST("/oauth/create-account",
+				cfg.limitStrict("oauth-create-account"),
+				cfg.AuthHandler.OAuthCreateAccount,
+			)
 
 			// 系统配置——中等限流（登录页加载时调用）
 			publicAuth.GET("/config",
@@ -150,14 +175,10 @@ func Setup(cfg RouterConfig) *gin.Engine {
 			)
 		}
 
-		// ── 已认证路由（需要 JWT + 会话签名）──
+		// ── 已认证路由（需要 JWT）──
 		authenticated := api.Group("")
-		authenticated.Use(middleware.RequireAuth(cfg.JWTManager, cfg.Blacklist))
-		// 会话级 HMAC 签名，用于保证请求完整性。
-		// 签名密钥由 TokenService 从 Redis 中按用户解析获得。
-		// 未携带签名的请求会放行以保持向后兼容；
-		// 携带无效签名的请求则会被拒绝。
-		authenticated.Use(middleware.SessionSignature(cfg.TokenService.GetSessionSigningKey))
+		authenticated.Use(middleware.RequireAuth(cfg.JWTManager, cfg.SessionStore))
+		authenticated.Use(middleware.Authorize(cfg.Enforcer))
 		{
 			authUser := authenticated.Group("/auth")
 			{
@@ -184,6 +205,145 @@ func Setup(cfg RouterConfig) *gin.Engine {
 					cfg.limitModerate("passkey-register"),
 					cfg.AuthHandler.VerifyPasskeyRegistration,
 				)
+
+				// Passkey 列表——标准限流
+				authUser.GET("/passkey/list",
+					cfg.limitStandard("passkey-list"),
+					cfg.AuthHandler.ListPasskeys,
+				)
+
+				// Passkey 删除——标准限流
+				authUser.DELETE("/passkey/:id",
+					cfg.limitStandard("passkey-delete"),
+					cfg.AuthHandler.DeletePasskey,
+				)
+
+				// ── 账户自助操作 ──
+				// 修改密码——严格限流
+				authUser.POST("/account/change-password",
+					cfg.limitStrict("account-change-pw"),
+					cfg.AuthHandler.ChangePassword,
+				)
+				authUser.POST("/account/security-update",
+					cfg.limitStrict("account-security-update"),
+					cfg.AuthHandler.CompleteSecurityUpdate,
+				)
+
+				// 两步验证 (TOTP) 绑定与管理 - 已登录用户
+				authUser.POST("/2fa/setup",
+					cfg.limitModerate("account-2fa-setup"),
+					cfg.AuthHandler.BeginTwoFactorSetup,
+				)
+				authUser.POST("/2fa/enable",
+					cfg.limitStrict("account-2fa-enable"),
+					cfg.AuthHandler.ConfirmTwoFactorSetup,
+				)
+				authUser.POST("/2fa/disable",
+					cfg.limitStrict("account-2fa-disable"),
+					cfg.AuthHandler.DisableTwoFactor,
+				)
+				authUser.PUT("/account/preferred-auth-method",
+					cfg.limitModerate("account-preferred-auth-method"),
+					cfg.AuthHandler.SetPreferredAuthMethod,
+				)
+
+				// 账户内取验证码（发往本人邮箱）——非常严格限流
+				authUser.POST("/account/email-code",
+					cfg.limitVeryStrict("account-email-code"),
+					cfg.AuthHandler.SendAccountEmailCode,
+				)
+				authUser.POST("/account/email-change-code",
+					cfg.limitVeryStrict("account-email-change-code"),
+					cfg.AuthHandler.SendChangeEmailCode,
+				)
+				authUser.PUT("/account/email",
+					cfg.limitStrict("account-change-email"),
+					cfg.AuthHandler.ChangeEmail,
+				)
+
+				// ── 第三方账号绑定管理 ──
+				// 绑定列表——标准限流
+				authUser.GET("/oauth/bindings",
+					cfg.limitStandard("oauth-bindings-list"),
+					cfg.AuthHandler.ListOAuthBindings,
+				)
+				// 获取绑定授权 URL——中等限流
+				authUser.GET("/oauth/bind-url",
+					cfg.limitModerate("oauth-bind-url"),
+					cfg.AuthHandler.GetOAuthBindURL,
+				)
+				// 完成绑定——中等限流
+				authUser.POST("/oauth/bind",
+					cfg.limitModerate("oauth-bind"),
+					cfg.AuthHandler.BindOAuth,
+				)
+				// 解绑——标准限流
+				authUser.DELETE("/oauth/bindings/:provider",
+					cfg.limitStandard("oauth-unbind"),
+					cfg.AuthHandler.UnbindOAuth,
+				)
+			}
+
+			// ── 管理端路由（需要 admin 角色）──
+			// 系统设置的读写仅对 admin 开放。
+			if cfg.AdminHandler != nil {
+				adminGroup := authenticated.Group("/admin")
+				{
+					adminGroup.GET("/settings",
+						cfg.limitStandard("admin-settings-get"),
+						cfg.AdminHandler.GetSettings,
+					)
+					adminGroup.PUT("/settings/security",
+						cfg.limitModerate("admin-security"),
+						cfg.AdminHandler.UpdateSecurity,
+					)
+					adminGroup.PUT("/settings/beian",
+						cfg.limitModerate("admin-beian"),
+						cfg.AdminHandler.UpdateBeian,
+					)
+					adminGroup.PUT("/settings/smtp",
+						cfg.limitModerate("admin-smtp"),
+						cfg.AdminHandler.UpdateSMTP,
+					)
+					adminGroup.POST("/settings/smtp/test",
+						cfg.limitStrict("admin-smtp-test"),
+						cfg.AdminHandler.TestSMTP,
+					)
+					adminGroup.PUT("/settings/oauth/:provider",
+						cfg.limitModerate("admin-oauth"),
+						cfg.AdminHandler.UpdateOAuthProvider,
+					)
+
+					// ── 用户管理 ──
+					adminGroup.GET("/users",
+						cfg.limitStandard("admin-users-list"),
+						cfg.AdminHandler.ListUsers,
+					)
+					adminGroup.POST("/users",
+						cfg.limitModerate("admin-users-create"),
+						cfg.AdminHandler.CreateUser,
+					)
+					adminGroup.DELETE("/users",
+						cfg.limitModerate("admin-users-delete"),
+						cfg.AdminHandler.BatchDeleteUsers,
+					)
+					adminGroup.PUT("/users/role",
+						cfg.limitModerate("admin-users-role"),
+						cfg.AdminHandler.BatchUpdateRole,
+					)
+					adminGroup.PUT("/users/reset-password",
+						cfg.limitModerate("admin-users-reset-pw"),
+						cfg.AdminHandler.BatchResetPassword,
+					)
+					adminGroup.POST("/users/import",
+						cfg.limitStrict("admin-users-import"),
+						cfg.AdminHandler.ImportUsers,
+					)
+					adminGroup.PUT("/users/:id",
+						cfg.limitModerate("admin-users-update"),
+						cfg.AdminHandler.UpdateUser,
+					)
+				}
 			}
 		}
 	}

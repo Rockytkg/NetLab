@@ -2,7 +2,6 @@ package middleware
 
 import (
 	"bytes"
-	"context"
 	"io"
 	"time"
 
@@ -31,11 +30,6 @@ type SignatureConfig struct {
 	// SignatureSalt 是预共享的 HMAC 盐值（来自 AUTH_SIGNATURE_SALT 环境变量）。
 	SignatureSalt string
 }
-
-// SessionKeyLookup 解析指定用户的会话签名密钥。
-// 返回原始的密钥字节及可能的错误。若未找到密钥，
-// 则返回 (nil, nil) —— 此时中间件将跳过验证。
-type SessionKeyLookup func(ctx context.Context, userID string) ([]byte, error)
 
 // Signature 返回一个验证 X-Signature 请求头的中间件。
 // 对于公开的认证端点，签名负载为：
@@ -106,86 +100,6 @@ func Signature(cfg SignatureConfig) gin.HandlerFunc {
 		valid, err := crypto.VerifyHMACSHA256Hex(cfg.SignatureKey, payload, sigHeader)
 		if err != nil || !valid {
 			response.Error(c, apperrors.New(apperrors.ErrCodeInvalidCredentials, "invalid signature"))
-			return
-		}
-
-		c.Next()
-	}
-}
-
-// SessionSignature 返回一个中间件，用于为已认证端点验证
-// 会话级别的请求签名。
-//
-// 签名密钥通过 lookup 函数按请求解析，该函数通常
-// 从 Redis 读取（以用户 ID 为键）。若某用户没有可用的
-// 签名密钥，则跳过签名验证。
-//
-// 签名负载格式：
-//
-//	METHOD\npath\nX-Timestamp\nSHA256(body)
-//
-// 前端使用认证期间建立的会话签名密钥
-//（在 login/refresh 响应中返回）来计算该签名。
-func SessionSignature(lookup SessionKeyLookup) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		// 从 context 中获取用户 ID（由 RequireAuth 中间件设置）
-		userID := GetUserID(c)
-		if userID == "" {
-			c.Next()
-			return
-		}
-
-		// 查找会话签名密钥
-		signingKey, err := lookup(c.Request.Context(), userID)
-		if err != nil || signingKey == nil {
-			// 无可用的会话密钥 —— 跳过签名强制校验
-			c.Next()
-			return
-		}
-
-		sigHeader := c.GetHeader(HeaderSignature)
-		tsHeader := c.GetHeader(HeaderTimestamp)
-
-		// 两个请求头都必须存在才能进行会话签名强制校验
-		if sigHeader == "" || tsHeader == "" {
-			c.Next()
-			return
-		}
-
-		// 校验时间戳以防止重放
-		ts, err := time.Parse(time.RFC3339, tsHeader)
-		if err != nil {
-			c.Next()
-			return
-		}
-		skew := time.Since(ts)
-		if skew < 0 {
-			skew = -skew
-		}
-		if skew > MaxTimestampSkew {
-			c.Next()
-			return
-		}
-
-		// 读取请求体
-		body, err := io.ReadAll(c.Request.Body)
-		if err != nil {
-			c.Next()
-			return
-		}
-		c.Request.Body.Close()
-		c.Request.Body = io.NopCloser(bytes.NewReader(body))
-
-		bodyStr := string(body)
-		if bodyStr == "" {
-			bodyStr = "{}"
-		}
-
-		payload := crypto.BuildSessionSignPayload(c.Request.Method, c.Request.URL.Path, tsHeader, bodyStr)
-
-		valid, err := crypto.VerifyHMACSHA256Hex(signingKey, payload, sigHeader)
-		if err != nil || !valid {
-			response.Error(c, apperrors.New(apperrors.ErrCodeInvalidCredentials, "invalid session signature"))
 			return
 		}
 

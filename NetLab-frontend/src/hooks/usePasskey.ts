@@ -2,8 +2,11 @@ import { useCallback } from 'react'
 import { App } from 'antd'
 import { useNavigate } from 'react-router-dom'
 import { authApi } from '@/services/auth'
-import { useAuthStore } from '@/stores/authStore'
-import { tokenStorage } from '@/utils/token'
+import { completeLogin } from '@/utils/auth-flow'
+import type {
+  PublicKeyCredentialCreationOptionsJSON,
+  PublicKeyCredentialRequestOptionsJSON,
+} from '@/types/auth'
 
 /**
  * WebAuthn Passkey hook
@@ -11,6 +14,9 @@ import { tokenStorage } from '@/utils/token'
  * 封装浏览器原生的 Web Authentication API
  * （navigator.credentials），用于通过指纹、面部识别、
  * Windows Hello 或安全密钥实现免密登录。
+ *
+ * 后端使用 go-webauthn 进行符合规范的签名校验，因此本 hook 负责在
+ * base64url（服务端 JSON）与 ArrayBuffer（浏览器 API）之间做转换。
  */
 
 /** 将 base64url 转换为 ArrayBuffer（符合 WebAuthn 规范） */
@@ -37,30 +43,84 @@ function bufferToBase64url(buffer: ArrayBuffer): string {
   return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
 }
 
-/** 序列化 PublicKeyCredential 以发送给服务器 */
+/** 序列化 PublicKeyCredential 以发送给服务器（标准 WebAuthn JSON 形态） */
 function serializeCredential(cred: PublicKeyCredential): Record<string, unknown> {
-  const response = cred.response as AuthenticatorAssertionResponse | AuthenticatorAttestationResponse
+  const response = cred.response as AuthenticatorAssertionResponse & AuthenticatorAttestationResponse
   const serialized: Record<string, unknown> = {
     id: cred.id,
     rawId: bufferToBase64url(cred.rawId),
     type: cred.type,
   }
 
-  if ('authenticatorData' in response) {
-    serialized.response = {
-      authenticatorData: bufferToBase64url(response.authenticatorData),
-      clientDataJSON: bufferToBase64url(response.clientDataJSON),
-      signature: bufferToBase64url(response.signature),
-      userHandle: response.userHandle ? bufferToBase64url(response.userHandle) : null,
-    }
+  const resp: Record<string, unknown> = {
+    clientDataJSON: bufferToBase64url(response.clientDataJSON),
   }
-  if ('attestationObject' in response) {
-    serialized.response = {
-      ...((serialized.response as object) || {}),
-      attestationObject: bufferToBase64url(response.attestationObject),
-    }
+  if ('attestationObject' in response && response.attestationObject) {
+    resp.attestationObject = bufferToBase64url(response.attestationObject)
   }
+  if ('authenticatorData' in response && response.authenticatorData) {
+    resp.authenticatorData = bufferToBase64url(response.authenticatorData)
+    resp.signature = bufferToBase64url(response.signature)
+    resp.userHandle = response.userHandle ? bufferToBase64url(response.userHandle) : null
+  }
+  serialized.response = resp
   return serialized
+}
+
+/** 将服务端创建选项映射为浏览器 API 所需的结构 */
+function toCreationOptions(
+  opts: PublicKeyCredentialCreationOptionsJSON,
+): PublicKeyCredentialCreationOptions {
+  return {
+    challenge: base64urlToBuffer(opts.challenge),
+    rp: opts.rp,
+    user: {
+      id: base64urlToBuffer(opts.user.id),
+      name: opts.user.name,
+      displayName: opts.user.displayName,
+    },
+    pubKeyCredParams: opts.pubKeyCredParams as PublicKeyCredentialParameters[],
+    timeout: opts.timeout,
+    attestation: opts.attestation as AttestationConveyancePreference | undefined,
+    excludeCredentials: opts.excludeCredentials?.map((c) => ({
+      id: base64urlToBuffer(c.id),
+      type: c.type as 'public-key',
+      transports: c.transports as AuthenticatorTransport[] | undefined,
+    })),
+    authenticatorSelection: opts.authenticatorSelection
+      ? {
+          authenticatorAttachment: opts.authenticatorSelection
+            .authenticatorAttachment as AuthenticatorAttachment | undefined,
+          residentKey: opts.authenticatorSelection.residentKey as
+            | ResidentKeyRequirement
+            | undefined,
+          requireResidentKey: opts.authenticatorSelection.requireResidentKey,
+          userVerification: opts.authenticatorSelection.userVerification as
+            | UserVerificationRequirement
+            | undefined,
+        }
+      : undefined,
+  }
+}
+
+/** 将服务端断言选项映射为浏览器 API 所需的结构 */
+function toRequestOptions(
+  opts: PublicKeyCredentialRequestOptionsJSON,
+): PublicKeyCredentialRequestOptions {
+  const publicKey: PublicKeyCredentialRequestOptions = {
+    challenge: base64urlToBuffer(opts.challenge),
+    rpId: opts.rpId,
+    timeout: opts.timeout,
+    userVerification: opts.userVerification as UserVerificationRequirement | undefined,
+  }
+  if (opts.allowCredentials?.length) {
+    publicKey.allowCredentials = opts.allowCredentials.map((c) => ({
+      id: base64urlToBuffer(c.id),
+      type: c.type as 'public-key',
+      transports: c.transports as AuthenticatorTransport[] | undefined,
+    }))
+  }
+  return publicKey
 }
 
 export function usePasskey() {
@@ -76,109 +136,71 @@ export function usePasskey() {
   const isPlatformAuthAvailable = useCallback(async (): Promise<boolean> => {
     if (!window.PublicKeyCredential) return false
     try {
-      const available = await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable()
-      return available
+      return await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable()
     } catch {
       return false
     }
   }, [])
 
   /**
-   * 注册新的 passkey（凭证创建）
-   * 从用户设置页面调用，为现有账户添加 passkey
+   * 注册新的 passkey（凭证创建）。
+   * 从个人中心调用，为现有账户添加 passkey。
+   * name 为用户为该 passkey 指定的可读名称；
+   * verifyCode 为发送到用户邮箱的一次性验证码（后端二次校验）。
    */
-  const register = useCallback(async (): Promise<boolean> => {
-    try {
-      const options = await authApi.getPasskeyRegisterOptions()
+  const register = useCallback(
+    async (name: string, verifyCode: string): Promise<boolean> => {
+      try {
+        const options = await authApi.getPasskeyRegisterOptions()
+        const publicKey = toCreationOptions(options.publicKey)
 
-      const publicKey: PublicKeyCredentialCreationOptions = {
-        challenge: base64urlToBuffer(options.challenge),
-        rp: options.rp,
-        user: {
-          ...options.user,
-          id: base64urlToBuffer(options.user.id),
-        },
-        pubKeyCredParams: options.pubKeyCredParams,
-        timeout: options.timeout,
-        attestation: options.attestation as AttestationConveyancePreference,
-        authenticatorSelection: {
-          ...options.authenticatorSelection,
-          authenticatorAttachment: options.authenticatorSelection.authenticatorAttachment as AuthenticatorAttachment,
-          residentKey: options.authenticatorSelection.residentKey as ResidentKeyRequirement,
-          userVerification: options.authenticatorSelection.userVerification as UserVerificationRequirement,
-        },
-      }
+        const credential = await navigator.credentials.create({ publicKey })
+        if (!(credential instanceof PublicKeyCredential)) {
+          throw new Error('Failed to create passkey')
+        }
 
-      const credential = await navigator.credentials.create({ publicKey })
-      if (!(credential instanceof PublicKeyCredential)) {
-        throw new Error('Failed to create passkey')
+        const serialized = serializeCredential(credential)
+        await authApi.verifyPasskeyRegistration({ name, verifyCode, credential: serialized })
+        return true
+      } catch (err) {
+        if ((err as Error).name !== 'NotAllowedError') {
+          message.error((err as Error).message || 'Passkey registration failed')
+        }
+        return false
       }
-
-      const serialized = serializeCredential(credential)
-      await authApi.verifyPasskeyRegistration(serialized)
-      message.success('Passkey registered successfully')
-      return true
-    } catch (err) {
-      if ((err as Error).name !== 'NotAllowedError') {
-        message.error('Passkey registration failed')
-      }
-      return false
-    }
-  }, [message])
+    },
+    [message],
+  )
 
   /**
-   * 使用现有 passkey 登录（凭证断言）
-   * 触发浏览器原生的生物识别/安全密钥提示
+   * 使用现有 passkey 登录（凭证断言）。
+   * 触发浏览器原生的生物识别/安全密钥提示。
    */
   const login = useCallback(async (): Promise<boolean> => {
     try {
-      // 1. 从服务器获取 challenge
+      // 1. 从服务器获取 challenge 与会话 ID
       const options = await authApi.getPasskeyAuthOptions()
 
-      // 2. 构建 WebAuthn 断言请求
-      const publicKey: PublicKeyCredentialRequestOptions = {
-        challenge: base64urlToBuffer(options.challenge),
-        rpId: options.rpId,
-        timeout: options.timeout,
-        userVerification: options.userVerification as UserVerificationRequirement,
-      }
-
-      if (options.allowCredentials?.length) {
-        publicKey.allowCredentials = options.allowCredentials.map((cred) => ({
-          ...cred,
-          id: base64urlToBuffer(cred.id),
-        }))
-      }
-
-      // 3. 触发浏览器生物识别/安全密钥提示
+      // 2. 触发浏览器生物识别/安全密钥提示
+      const publicKey = toRequestOptions(options.publicKey)
       const credential = await navigator.credentials.get({ publicKey })
       if (!(credential instanceof PublicKeyCredential)) {
         throw new Error('Failed to authenticate with passkey')
       }
 
-      // 4. 将断言发送给服务器进行验证
+      // 3. 将断言连同会话 ID 发送给服务器验证
       const serialized = serializeCredential(credential)
-      const result = await authApi.verifyPasskeyAuth(serialized)
-
-      // 5. 存储 token、会话密钥并重定向
-      tokenStorage.setAccessToken(result.accessToken)
-      tokenStorage.setRefreshToken(result.refreshToken)
-      useAuthStore.setState({
-        accessToken: result.accessToken,
-        refreshToken: result.refreshToken,
-        userInfo: result.user,
-        signingKey: result.signingKey ?? null,
+      const result = await authApi.verifyPasskeyAuth({
+        sessionId: options.sessionId,
+        credential: serialized,
       })
 
-      message.success('Welcome back!')
-      navigate('/dashboard', { replace: true })
+      completeLogin(result, navigate)
       return true
     } catch (err) {
       const e = err as Error
-      if (e.name === 'NotAllowedError') {
-        // 用户取消了生物识别提示 —— 这不是错误，不显示提示
-      } else {
-        message.error('Passkey authentication failed')
+      if (e.name !== 'NotAllowedError') {
+        message.error(e.message || 'Passkey authentication failed')
       }
       return false
     }

@@ -7,7 +7,6 @@ import (
 	"net/smtp"
 	"strings"
 
-	"netlab-backend/config"
 	"netlab-backend/pkg/i18n"
 )
 
@@ -18,22 +17,33 @@ type Sender interface {
 	SendVerificationCode(to, code, purpose, locale string) error
 }
 
+// smtpSettings 是 SMTP 连接参数。pkg/email 不依赖任何上层配置类型，
+// 由调用方通过 NewSMTPSenderFrom 传入具体字段。
+type smtpSettings struct {
+	Host     string
+	Port     int
+	Username string
+	Password string
+	From     string
+	UseTLS   bool
+}
+
 // SMTPSender 通过 SMTP（可选 TLS）发送邮件。
 type SMTPSender struct {
-	cfg config.SMTPConfig
+	cfg smtpSettings
 }
 
-// NewSMTPSender 创建一个新的 SMTPSender。若未配置 SMTP 则返回 nil。
-func NewSMTPSender(cfg config.SMTPConfig) *SMTPSender {
-	if !cfg.IsConfigured() {
-		return nil
-	}
-	return &SMTPSender{cfg: cfg}
-}
-
-// IsEnabled 在 sender 已配置且就绪时返回 true。
-func (s *SMTPSender) IsEnabled() bool {
-	return s != nil
+// NewSMTPSenderFrom 根据显式字段构建一个 SMTPSender。
+// 供运行时热加载配置的调用方使用（可用性由调用方判断）。
+func NewSMTPSenderFrom(host string, port int, username, password, from string, useTLS bool) *SMTPSender {
+	return &SMTPSender{cfg: smtpSettings{
+		Host:     host,
+		Port:     port,
+		Username: username,
+		Password: password,
+		From:     from,
+		UseTLS:   useTLS,
+	}}
 }
 
 // SendVerificationCode 发送一封本地化的验证码邮件。
@@ -92,13 +102,13 @@ func buildVerificationHTML(title, description, action, code, expiry, footer, bra
 	fullDesc := strings.Replace(description, "{{.Action}}", action, 1)
 
 	return fmt.Sprintf(verificationHTMLTemplate,
-		brand,       // 预览头 / 报头品牌
-		title,       // 标题
-		fullDesc,    // 描述
-		code,        // 验证码
-		expiry,      // 过期 / 安全提示
-		footer,      // 自动邮件页脚
-		brand,       // 页脚品牌行
+		brand,    // 预览头 / 报头品牌
+		title,    // 标题
+		fullDesc, // 描述
+		code,     // 验证码
+		expiry,   // 过期 / 安全提示
+		footer,   // 自动邮件页脚
+		brand,    // 页脚品牌行
 	)
 }
 

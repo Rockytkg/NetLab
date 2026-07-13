@@ -29,11 +29,6 @@ declare module 'axios' {
     requireAuth?: boolean
 
     /**
-     * 是否需要 HMAC 请求签名 (default: false)。
-     */
-    requireSign?: boolean
-
-    /**
      * 是否对公开 auth 接口做预共享密钥签名 (default: false)。
      */
     authSign?: boolean
@@ -42,6 +37,7 @@ declare module 'axios' {
      * 跳过 401 自动 token 刷新 (default: false)。
      */
     skipAuthRefresh?: boolean
+
   }
 
   interface InternalAxiosRequestConfig {
@@ -50,13 +46,6 @@ declare module 'axios' {
      * 设为 false 可跳过 Bearer token 注入（如登录、刷新 token 等公开接口）。
      */
     requireAuth?: boolean
-
-    /**
-     * 是否需要 HMAC 请求签名 (default: false)。
-     * 启用后自动添加 X-Signature / X-Timestamp 头。
-     * 需要 authStore 中有 signingKey。
-     */
-    requireSign?: boolean
 
     /**
      * 是否对公开 auth 接口做预共享密钥签名 (default: false)。
@@ -72,10 +61,6 @@ declare module 'axios' {
      */
     skipAuthRefresh?: boolean
 
-    /**
-     * 请求时间戳（签名用，由拦截器自动填充）。
-     */
-    _timestamp?: string
   }
 }
 
@@ -117,4 +102,7 @@ export const BUSINESS_ERROR_I18N_MAP: Record<number, string> = {
   1015: 'common:errResourceInUse',
   1016: 'common:errEmailNotConfigured',
   1017: 'common:errEmailSendFailed',
+  1018: 'common:errPasswordResetDisabled',
+  1020: 'common:errInvalidTwoFactorCode',
+  1021: 'common:errTwoFactorNotConfigured',
 }

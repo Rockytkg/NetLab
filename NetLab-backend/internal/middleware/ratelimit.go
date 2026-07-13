@@ -28,9 +28,9 @@ import (
 
 // RateLimitRule 定义限流参数。
 type RateLimitRule struct {
-	MaxRequests int           // 时间窗口内的最大请求数
-	Window      time.Duration // 时间窗口
-	KeyPrefix   string        // Redis key 的前缀（例如 "auth"、"global"、"sensitive"）
+	MaxRequests int                         // 时间窗口内的最大请求数
+	Window      time.Duration               // 时间窗口
+	KeyPrefix   string                      // Redis key 的前缀（例如 "auth"、"global"、"sensitive"）
 	KeyFunc     func(c *gin.Context) string // 自定义 key 构建函数（默认：基于 IP）
 }
 
@@ -136,7 +136,7 @@ func RateLimitByIP(max int, window time.Duration, prefix string) RateLimitRule {
 }
 
 // RateLimitByUser 创建一条按已认证用户 ID 限流的规则
-//（若用户未认证，则回退到按 IP 限流）。
+// （若用户未认证，则回退到按 IP 限流）。
 func RateLimitByUser(max int, window time.Duration, prefix string) RateLimitRule {
 	return RateLimitRule{
 		MaxRequests: max,

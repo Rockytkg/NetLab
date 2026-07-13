@@ -2,9 +2,11 @@ package crypto
 
 import (
 	"crypto/rand"
+	"encoding/base64"
 	"encoding/hex"
 	"fmt"
 	"io"
+	"math/big"
 )
 
 // GenerateRandomKey 生成一个随机的 32 字节密钥，用于会话级签名。
@@ -25,4 +27,32 @@ func GenerateRandomKeyHex() (string, error) {
 		return "", err
 	}
 	return hex.EncodeToString(key), nil
+}
+
+// GenerateRandomBase64URL returns a compact URL-safe random identifier.
+func GenerateRandomBase64URL(size int) (string, error) {
+	if size <= 0 {
+		return "", fmt.Errorf("invalid random size: %d", size)
+	}
+	key := make([]byte, size)
+	if _, err := io.ReadFull(rand.Reader, key); err != nil {
+		return "", fmt.Errorf("generate random id: %w", err)
+	}
+	return base64.RawURLEncoding.EncodeToString(key), nil
+}
+
+// GenerateNumericCode returns a zero-padded cryptographically random decimal code.
+func GenerateNumericCode(digits int) (string, error) {
+	if digits <= 0 || digits > 18 {
+		return "", fmt.Errorf("invalid code length: %d", digits)
+	}
+	max := big.NewInt(1)
+	for i := 0; i < digits; i++ {
+		max.Mul(max, big.NewInt(10))
+	}
+	n, err := rand.Int(rand.Reader, max)
+	if err != nil {
+		return "", fmt.Errorf("generate numeric code: %w", err)
+	}
+	return fmt.Sprintf("%0*d", digits, n), nil
 }

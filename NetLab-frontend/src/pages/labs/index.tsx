@@ -9,15 +9,11 @@ export default function LabListPage() {
 
   return (
     <div style={{ width: '100%' }}>
-      <div className="netlab-page-header">
-        <div>
-          <Title level={3}>{t('menu:myLabs')}</Title>
-          <Text type="secondary">{t('lab:createFirstLab')}</Text>
-        </div>
+      <Space style={{ width: '100%', justifyContent: 'flex-end', marginBottom: 16 }}>
         <Button type="primary" icon={<PlusOutlined />}>
           {t('lab:createLab')}
         </Button>
-      </div>
+      </Space>
       <Card>
         <Space orientation="vertical" size="large" style={{ width: '100%', textAlign: 'center', padding: '80px 0' }}>
           <ExperimentOutlined style={{ fontSize: 48, color: '#BFBFBF' }} />

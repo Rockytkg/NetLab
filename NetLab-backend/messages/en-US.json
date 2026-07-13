@@ -20,6 +20,9 @@
   { "id": "error.1015", "translation": "Resource is in use and cannot be modified" },
   { "id": "error.1016", "translation": "Email service is not configured. Please contact the administrator" },
   { "id": "error.1017", "translation": "Failed to send verification email. Please try again later" },
+  { "id": "error.1018", "translation": "Password reset is disabled" },
+  { "id": "error.1020", "translation": "Invalid or expired two-factor code" },
+  { "id": "error.1021", "translation": "Two-factor authentication is not configured" },
 
   { "id": "error.crypto.read_body", "translation": "Failed to read request body" },
   { "id": "error.crypto.decrypt", "translation": "Failed to decrypt request. Check encryption configuration" },

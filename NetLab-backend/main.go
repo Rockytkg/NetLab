@@ -16,13 +16,17 @@ import (
 
 	"netlab-backend/config"
 	"netlab-backend/internal/database"
+	"netlab-backend/internal/handler/admin"
 	"netlab-backend/internal/handler/auth"
+	"netlab-backend/internal/mailer"
 	"netlab-backend/internal/middleware"
 	"netlab-backend/internal/repository"
 	"netlab-backend/internal/router"
 	authsvc "netlab-backend/internal/service/auth"
+	sysconfig "netlab-backend/internal/service/config"
+	"netlab-backend/internal/service/rbac"
 	"netlab-backend/pkg/captcha"
-	"netlab-backend/pkg/email"
+	"netlab-backend/pkg/crypto"
 	"netlab-backend/pkg/i18n"
 )
 
@@ -80,8 +84,21 @@ func main() {
 		logger.Warn("Auto-migration warning", zap.Error(err))
 	}
 
+	// ── 初始化配置加密器 ─────────────────────────────────────────────
+	// 敏感配置（SMTP 密码、OAuth 密钥）以 AES-256-GCM 加密后存储于数据库。
+	encKey := cfg.Auth.EffectiveEncryptionKey()
+	if encKey == "" {
+		logger.Warn("no CONFIG_ENCRYPTION_KEY or AUTH_SIGNATURE_KEY set — using an insecure default key for config encryption; set one in production")
+		encKey = "netlab-insecure-default-config-key"
+	}
+	configCipher, err := crypto.NewAESCipher(encKey)
+	if err != nil {
+		logger.Fatal("Failed to initialize config cipher", zap.Error(err))
+	}
+
 	// ── 填充默认数据（幂等 —— 若已存在则跳过） ────
-	if err := database.SeedDefaultConfigs(db, cfg.OAuth); err != nil {
+	// 仅初始化安全策略与备案信息默认值；SMTP / OAuth 由「系统设置」管理。
+	if err := database.SeedDefaultConfigs(db); err != nil {
 		logger.Warn("Seed configs warning", zap.Error(err))
 	}
 	if err := database.SeedDefaultAdmin(db); err != nil {
@@ -98,7 +115,11 @@ func main() {
 	userRepo := repository.NewUserRepository(db)
 	tokenRepo := repository.NewTokenRepository(rdb)
 	passkeyRepo := repository.NewPasskeyRepository(db)
+	bindingRepo := repository.NewOAuthBindingRepository(db)
 	configRepo := repository.NewConfigRepository(db)
+
+	// ── 初始化运行时配置服务 ─────────────────────────────────────────
+	configService := sysconfig.NewService(configRepo, configCipher)
 
 	// ── 初始化服务层 ─────────────────────────────────────────────────
 	cryptoService, err := authsvc.NewCryptoService(cfg.Auth)
@@ -114,34 +135,37 @@ func main() {
 	captchaStore := captcha.NewRedisStore(rdb)
 	captchaMgr := captcha.NewManager(captchaStore, cfg.Captcha.Width, cfg.Captcha.Height, cfg.Captcha.MaxRetries)
 
-	// 邮件发送器（可选 —— 仅在配置了 SMTP 时初始化）
-	emailSender := email.NewSMTPSender(cfg.SMTP)
-	if emailSender != nil {
-		logger.Info("SMTP email sender configured",
-			zap.String("host", cfg.SMTP.Host),
-			zap.String("from", cfg.SMTP.From),
-		)
-	}
+	// 邮件发送器 —— 从运行时配置服务热加载 SMTP 设置
+	emailSender := mailer.NewProvider(configService)
 
 	authService := authsvc.NewAuthService(
-		db, userRepo, tokenRepo, passkeyRepo, configRepo,
-		tokenService, captchaMgr, emailSender, logger,
+		userRepo, tokenRepo, configService,
+		tokenService, emailSender, logger,
 	)
 
 	passkeyService := authsvc.NewPasskeyService(
-		passkeyRepo, userRepo, tokenService, logger,
-		"localhost", // RP ID —— 生产环境请使用域名
-		"NetLab",
+		passkeyRepo, userRepo, tokenRepo, tokenService, configService, rdb, logger,
+		cfg.Server.Mode,
 	)
 
 	oauthService := authsvc.NewOAuthService(
-		cfg.OAuth, db, userRepo, tokenService, rdb, logger,
+		configService, userRepo, bindingRepo, tokenRepo, tokenService, logger,
 	)
 
+	adminService := authsvc.NewAdminService(configService, passkeyService)
+	userAdminService := authsvc.NewUserAdminService(userRepo, logger)
+	enforcer, err := rbac.NewEnforcer(db)
+	if err != nil {
+		logger.Fatal("Failed to initialize RBAC", zap.Error(err))
+	}
+
 	// ── 初始化处理器 ─────────────────────────────────────────────────
+	twoFactorService := authsvc.NewTwoFactorService(userRepo, tokenRepo, tokenService, configService, logger)
+
 	authHandler := auth.NewAuthHandler(
-		authService, passkeyService, tokenService, oauthService, captchaMgr, logger,
+		authService, passkeyService, tokenService, oauthService, twoFactorService, captchaMgr, logger,
 	)
+	adminHandler := admin.NewAdminHandler(adminService, userAdminService, emailSender, logger)
 
 	// ── 初始化限流器 ─────────────────────────────────────────────────
 	var rateLimiter *middleware.RateLimiter
@@ -154,12 +178,14 @@ func main() {
 		Config:        cfg,
 		Logger:        logger,
 		AuthHandler:   authHandler,
+		AdminHandler:  adminHandler,
 		AuthService:   authService,
 		TokenService:  tokenService,
 		CryptoService: cryptoService,
 		JWTManager:    tokenService.JWTManager(),
-		Blacklist:     tokenRepo,
+		SessionStore:  tokenRepo,
 		RateLimiter:   rateLimiter,
+		Enforcer:      enforcer,
 	})
 
 	// ── 启动服务器并支持优雅关闭 ─────────────────────────────────────

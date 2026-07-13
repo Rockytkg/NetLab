@@ -3,54 +3,59 @@ package auth
 import (
 	"context"
 	"encoding/json"
-	"fmt"
-	"io"
-	"math/rand"
 	"net/http"
-	"net/url"
 	"strings"
 	"time"
 
-	"github.com/redis/go-redis/v9"
+	"github.com/google/uuid"
 	"go.uber.org/zap"
-	"gorm.io/gorm"
 
-	"netlab-backend/config"
 	"netlab-backend/internal/model"
 	"netlab-backend/internal/repository"
+	sysconfig "netlab-backend/internal/service/config"
+	"netlab-backend/internal/validation"
 	"netlab-backend/pkg/apperrors"
+	"netlab-backend/pkg/crypto"
+)
+
+const (
+	oauthStateTTL         = 10 * time.Minute
+	oauthStateNamespace   = "oauth:state"
+	oauthPendingNamespace = "oauth:pending"
 )
 
 // OAuthService 处理第三方 OAuth 登录流程。
+//
+// 状态令牌（CSRF state）与待绑定会话（pending binding）均通过
+// TokenRepository 的 OneTimeToken 基础设施存储——仅保存令牌哈希，
+// 消费时原子删除，避免直接操作裸 Redis key。
 type OAuthService struct {
-	cfg          config.OAuthConfig
-	db           *gorm.DB
-	userRepo     *repository.UserRepository
-	tokenService *TokenService
-	redis        *redis.Client
-	logger       *zap.Logger
-	httpClient   *http.Client
+	configService *sysconfig.Service
+	userRepo      *repository.UserRepository
+	bindingRepo   *repository.OAuthBindingRepository
+	tokenRepo     *repository.TokenRepository
+	tokenService  *TokenService
+	logger        *zap.Logger
+	httpClient    *http.Client
 }
 
 // NewOAuthService 创建一个新的 OAuthService。
 func NewOAuthService(
-	cfg config.OAuthConfig,
-	db *gorm.DB,
+	configService *sysconfig.Service,
 	userRepo *repository.UserRepository,
+	bindingRepo *repository.OAuthBindingRepository,
+	tokenRepo *repository.TokenRepository,
 	tokenService *TokenService,
-	redis *redis.Client,
 	logger *zap.Logger,
 ) *OAuthService {
 	return &OAuthService{
-		cfg:          cfg,
-		db:           db,
-		userRepo:     userRepo,
-		tokenService: tokenService,
-		redis:        redis,
+		configService: configService,
+		userRepo:      userRepo,
+		bindingRepo:   bindingRepo,
+		tokenRepo:     tokenRepo,
+		tokenService:  tokenService,
 		logger:        logger,
-		httpClient: &http.Client{
-			Timeout: 15 * time.Second,
-		},
+		httpClient:    &http.Client{Timeout: 15 * time.Second},
 	}
 }
 
@@ -63,855 +68,446 @@ type OAuthUserInfo struct {
 	AvatarURL      string
 }
 
-// HandleCallback 处理 OAuth 回调：校验 state、交换 code、
-// 获取用户信息，并创建/查找本地用户。
+// PendingOAuthBindingResult 描述一个待完成的 OAuth 绑定会话。
+type PendingOAuthBindingResult struct {
+	Token    string `json:"token"`
+	Provider string `json:"provider"`
+	Email    string `json:"email,omitempty"`
+	Username string `json:"username,omitempty"`
+	Avatar   string `json:"avatar,omitempty"`
+}
+
+// ─── state / pending binding ─────────────────────────────────────────
+
+// oauthState 是存入 OneTimeToken 的 state 载荷。
+type oauthState struct {
+	Intent string `json:"intent"`           // login | bind
+	UserID string `json:"userId,omitempty"` // bind 时为发起用户
+}
+
+// pendingOAuthBinding 是待绑定会话中暂存的第三方身份。
+type pendingOAuthBinding struct {
+	Provider       string `json:"provider"`
+	ProviderUserID string `json:"providerUserId"`
+	Email          string `json:"email"`
+	Username       string `json:"username"`
+	AvatarURL      string `json:"avatarUrl"`
+}
+
+// GenerateState 创建一个加密随机 state 并携带 login 意图。
+func (s *OAuthService) GenerateState(ctx context.Context) (string, *apperrors.AppError) {
+	return s.generateState(ctx, oauthState{Intent: "login"})
+}
+
+// GenerateBindState 创建一个绑定意图的 state（记录发起用户）。
+func (s *OAuthService) GenerateBindState(ctx context.Context, userID string) (string, *apperrors.AppError) {
+	return s.generateState(ctx, oauthState{Intent: "bind", UserID: userID})
+}
+
+func (s *OAuthService) generateState(ctx context.Context, payload oauthState) (string, *apperrors.AppError) {
+	data, _ := json.Marshal(payload)
+	token, err := s.tokenRepo.StoreOneTimeToken(ctx, oauthStateNamespace, data, oauthStateTTL)
+	if err != nil {
+		return "", apperrors.Wrap(apperrors.ErrCodeOperationDenied, "failed to generate state", err)
+	}
+	return token, nil
+}
+
+func (s *OAuthService) consumeState(ctx context.Context, state string) (oauthState, *apperrors.AppError) {
+	raw, err := s.tokenRepo.ConsumeOneTimeToken(ctx, oauthStateNamespace, state)
+	if err != nil {
+		return oauthState{}, apperrors.Wrap(apperrors.ErrCodeTokenExpired, "invalid oauth state", err)
+	}
+	if len(raw) == 0 {
+		return oauthState{}, apperrors.ErrTokenExpired
+	}
+	var st oauthState
+	if err := json.Unmarshal(raw, &st); err != nil {
+		return oauthState{}, apperrors.ErrTokenExpired
+	}
+	if st.Intent == "" {
+		st.Intent = "login"
+	}
+	return st, nil
+}
+
+func (s *OAuthService) storePendingBinding(ctx context.Context, u *OAuthUserInfo) (*PendingOAuthBindingResult, *apperrors.AppError) {
+	data, _ := json.Marshal(pendingOAuthBinding{
+		Provider:       u.Provider,
+		ProviderUserID: u.ProviderUserID,
+		Email:          u.Email,
+		Username:       u.Username,
+		AvatarURL:      u.AvatarURL,
+	})
+	token, err := s.tokenRepo.StoreOneTimeToken(ctx, oauthPendingNamespace, data, oauthStateTTL)
+	if err != nil {
+		return nil, apperrors.Wrap(apperrors.ErrCodeOperationDenied, "failed to store pending binding", err)
+	}
+	return &PendingOAuthBindingResult{
+		Token:    token,
+		Provider: u.Provider,
+		Email:    u.Email,
+		Username: u.Username,
+		Avatar:   u.AvatarURL,
+	}, nil
+}
+
+func (s *OAuthService) consumePendingBinding(ctx context.Context, token string) (*OAuthUserInfo, *apperrors.AppError) {
+	raw, err := s.tokenRepo.ConsumeOneTimeToken(ctx, oauthPendingNamespace, token)
+	if err != nil {
+		return nil, apperrors.Wrap(apperrors.ErrCodeSessionExpired, "invalid pending binding", err)
+	}
+	if len(raw) == 0 {
+		return nil, apperrors.ErrSessionExpired
+	}
+	var p pendingOAuthBinding
+	if err := json.Unmarshal(raw, &p); err != nil {
+		return nil, apperrors.ErrSessionExpired
+	}
+	return &OAuthUserInfo{
+		Provider:       p.Provider,
+		ProviderUserID: p.ProviderUserID,
+		Email:          p.Email,
+		Username:       p.Username,
+		AvatarURL:      p.AvatarURL,
+	}, nil
+}
+
+// ─── 登录回调 ─────────────────────────────────────────────────────────
+
+// HandleCallback 处理 OAuth 登录回调：校验 state、交换 code、获取用户信息。
+// 若第三方身份尚未绑定本地账号，返回 pending 绑定会话，交由前端引导用户
+// 绑定已有账号或创建新账号。
 func (s *OAuthService) HandleCallback(ctx context.Context, provider, code, state string) (*LoginServiceResult, *apperrors.AppError) {
-	// 1. 校验 OAuth state 参数（CSRF 防护）
-	if err := s.validateState(ctx, state); err != nil {
+	st, err := s.consumeState(ctx, state)
+	if err != nil {
 		return nil, err
 	}
+	if st.Intent != "login" {
+		return nil, apperrors.New(apperrors.ErrCodeOperationDenied, "state intent mismatch")
+	}
 
-	// 2. 用 code 交换 access token 并获取用户信息
 	oauthUser, appErr := s.fetchUserInfo(ctx, provider, code)
 	if appErr != nil {
 		return nil, appErr
 	}
 
-	// 3. 查找现有用户或创建新用户
-	user, appErr := s.findOrCreateUser(ctx, oauthUser)
+	user, pending, appErr := s.resolveLoginUser(ctx, oauthUser)
 	if appErr != nil {
 		return nil, appErr
 	}
-
-	// 4. 签发 token
-	tokens, appErr := s.tokenService.IssueTokens(ctx, user)
-	if appErr != nil {
-		return nil, appErr
+	if pending != nil {
+		return &LoginServiceResult{PendingOAuthBinding: pending}, nil
 	}
-
-	// 5. 记录登录
-	_ = s.userRepo.UpdateLoginSuccess(ctx, user.ID.String())
 
 	s.logger.Info("oauth login success",
 		zap.String("provider", provider),
 		zap.String("user_id", user.ID.String()),
 		zap.String("email", oauthUser.Email),
 	)
-
-	return &LoginServiceResult{
-		Tokens: tokens,
-		User:   userToInfo(user),
-	}, nil
+	return s.issueOAuthLogin(ctx, user, provider)
 }
 
-// GenerateState 创建一个加密安全的随机 state 字符串并存入 Redis。
-func (s *OAuthService) GenerateState(ctx context.Context) (string, *apperrors.AppError) {
-	state := fmt.Sprintf("%d-%d", time.Now().UnixNano(), rand.Int63())
-	if err := s.redis.Set(ctx, "oauth:state:"+state, "1", 10*time.Minute).Err(); err != nil {
-		s.logger.Error("failed to store oauth state", zap.Error(err))
-		return "", apperrors.Wrap(apperrors.ErrCodeOperationDenied, "failed to generate state", err)
+// HandleBindCallback 处理已登录用户的"绑定第三方账号"回调：校验 state
+// 归属当前用户、交换 code 获取第三方身份，并写入绑定关系。
+func (s *OAuthService) HandleBindCallback(ctx context.Context, userID, provider, code, state string) *apperrors.AppError {
+	st, err := s.consumeState(ctx, state)
+	if err != nil {
+		return err
 	}
-	return state, nil
-}
-
-// ─── 私有辅助函数 ───────────────────────────────────────────────────
-
-func (s *OAuthService) validateState(ctx context.Context, state string) *apperrors.AppError {
-	key := "oauth:state:" + state
-	val, err := s.redis.Get(ctx, key).Result()
-	if err != nil || val == "" {
-		return apperrors.ErrTokenExpired // 复用：state 已过期或无效
+	if st.Intent != "bind" || st.UserID != userID {
+		return apperrors.New(apperrors.ErrCodeOperationDenied, "state intent mismatch")
 	}
-	_ = s.redis.Del(ctx, key) // 一次性使用
+
+	oauthUser, appErr := s.fetchUserInfo(ctx, provider, code)
+	if appErr != nil {
+		return appErr
+	}
+
+	uid, parseErr := uuid.Parse(userID)
+	if parseErr != nil {
+		return apperrors.New(apperrors.ErrCodeInvalidCredentials, "invalid user id")
+	}
+
+	// 该第三方身份是否已被其他账号绑定？
+	existing, dbErr := s.bindingRepo.FindByProviderUID(ctx, oauthUser.Provider, oauthUser.ProviderUserID)
+	if dbErr != nil {
+		return apperrors.Wrap(apperrors.ErrCodeOperationDenied, "database error", dbErr)
+	}
+	if existing != nil {
+		if existing.UserID == uid {
+			return nil // 幂等：已绑定到本账号
+		}
+		return apperrors.New(apperrors.ErrCodeDuplicateEntry, "this third-party account is already linked to another user")
+	}
+
+	// 同一提供商每账号仅允许一个绑定。
+	if has, dbErr := s.bindingRepo.ExistsForUser(ctx, uid, oauthUser.Provider); dbErr != nil {
+		return apperrors.Wrap(apperrors.ErrCodeOperationDenied, "database error", dbErr)
+	} else if has {
+		return apperrors.New(apperrors.ErrCodeDuplicateEntry, "provider already linked to this account")
+	}
+
+	binding := &model.UserOAuthBinding{
+		UserID:         uid,
+		Provider:       oauthUser.Provider,
+		ProviderUserID: oauthUser.ProviderUserID,
+		Email:          oauthUser.Email,
+	}
+	if err := s.bindingRepo.Create(ctx, binding); err != nil {
+		s.logger.Error("create oauth binding failed", zap.Error(err))
+		return apperrors.Wrap(apperrors.ErrCodeOperationDenied, "failed to bind provider", err)
+	}
+	s.logger.Info("oauth provider bound",
+		zap.String("provider", oauthUser.Provider),
+		zap.String("user_id", userID),
+	)
 	return nil
 }
 
+// UnbindProvider 解除当前用户与某提供商的绑定。
+// 为防止账号被锁死：若用户没有本地密码，且解绑后将不再有任何绑定，则拒绝。
+func (s *OAuthService) UnbindProvider(ctx context.Context, userID, provider string) *apperrors.AppError {
+	uid, err := uuid.Parse(userID)
+	if err != nil {
+		return apperrors.New(apperrors.ErrCodeInvalidCredentials, "invalid user id")
+	}
+	user, dbErr := s.userRepo.FindByID(ctx, userID)
+	if dbErr != nil || user == nil {
+		return apperrors.ErrUserNotFound
+	}
+	if user.PasswordHash == "" {
+		count, cErr := s.bindingRepo.CountByUser(ctx, uid)
+		if cErr != nil {
+			return apperrors.Wrap(apperrors.ErrCodeOperationDenied, "database error", cErr)
+		}
+		if count <= 1 {
+			return apperrors.New(apperrors.ErrCodeOperationDenied, "cannot unbind the only login method; set a password first")
+		}
+	}
+	affected, dbErr := s.bindingRepo.DeleteByProviderForUser(ctx, uid, provider)
+	if dbErr != nil {
+		return apperrors.Wrap(apperrors.ErrCodeOperationDenied, "failed to unbind provider", dbErr)
+	}
+	if affected == 0 {
+		return apperrors.New(apperrors.ErrCodeOperationDenied, "provider not linked")
+	}
+	s.logger.Info("oauth provider unbound",
+		zap.String("provider", provider),
+		zap.String("user_id", userID),
+	)
+	return nil
+}
+
+// ListBindings 返回当前用户已绑定的提供商列表。
+func (s *OAuthService) ListBindings(ctx context.Context, userID string) ([]model.UserOAuthBinding, *apperrors.AppError) {
+	uid, err := uuid.Parse(userID)
+	if err != nil {
+		return nil, apperrors.New(apperrors.ErrCodeInvalidCredentials, "invalid user id")
+	}
+	list, dbErr := s.bindingRepo.ListByUser(ctx, uid)
+	if dbErr != nil {
+		return nil, apperrors.Wrap(apperrors.ErrCodeOperationDenied, "failed to list bindings", dbErr)
+	}
+	return list, nil
+}
+
+// ─── pending -> 绑定 / 创建 ──────────────────────────────────────────
+
+// BindPendingToExisting 将 pending 第三方身份绑定到已有账号。
+// account 可为用户名或邮箱；需提供该账号邮箱收到的验证码以证明归属。
+func (s *OAuthService) BindPendingToExisting(ctx context.Context, pendingToken, account, verifyCode string) (*LoginServiceResult, *apperrors.AppError) {
+	oauthUser, appErr := s.consumePendingBinding(ctx, pendingToken)
+	if appErr != nil {
+		return nil, appErr
+	}
+	account = strings.TrimSpace(account)
+	user, appErr := s.findUserByIdentifier(ctx, account)
+	if appErr != nil {
+		return nil, appErr
+	}
+	if !user.IsActive() {
+		return nil, apperrors.ErrAccountDisabled
+	}
+	code, appErr := validation.NormalizeVerifyCode(verifyCode)
+	if appErr != nil {
+		return nil, appErr
+	}
+	if appErr := s.verifyEmailCode(ctx, user.Email, "change-email", code); appErr != nil {
+		return nil, appErr
+	}
+	if appErr := s.createBindingStrict(ctx, user.ID, oauthUser); appErr != nil {
+		return nil, appErr
+	}
+	return s.issueOAuthLogin(ctx, user, oauthUser.Provider)
+}
+
+// CreateAccountForPending 为 pending 第三方身份创建新账号并完成登录。
+func (s *OAuthService) CreateAccountForPending(ctx context.Context, pendingToken, username, email, password, verifyCode string) (*LoginServiceResult, *apperrors.AppError) {
+	oauthUser, appErr := s.consumePendingBinding(ctx, pendingToken)
+	if appErr != nil {
+		return nil, appErr
+	}
+	username, appErr = validation.NormalizeUsername(username)
+	if appErr != nil {
+		return nil, appErr
+	}
+	email, appErr = validation.NormalizeEmail(email)
+	if appErr != nil {
+		return nil, appErr
+	}
+	verifyCode, appErr = validation.NormalizeVerifyCode(verifyCode)
+	if appErr != nil {
+		return nil, appErr
+	}
+	if appErr := validation.ValidatePassword(password); appErr != nil {
+		return nil, appErr
+	}
+	if exists, err := s.userRepo.ExistsByUsername(ctx, username); err != nil {
+		return nil, apperrors.Wrap(apperrors.ErrCodeDuplicateEntry, "database error", err)
+	} else if exists {
+		return nil, apperrors.ErrUsernameExists
+	}
+	if exists, err := s.userRepo.ExistsByEmail(ctx, email); err != nil {
+		return nil, apperrors.Wrap(apperrors.ErrCodeDuplicateEntry, "database error", err)
+	} else if exists {
+		return nil, apperrors.ErrEmailExists
+	}
+	if appErr := s.verifyEmailCode(ctx, email, "register", verifyCode); appErr != nil {
+		return nil, appErr
+	}
+	hash, err := crypto.HashPassword(password)
+	if err != nil {
+		return nil, apperrors.Wrap(apperrors.ErrCodeWeakPassword, "failed to hash password", err)
+	}
+	now := time.Now()
+	user := &model.User{
+		Username:          username,
+		Email:             email,
+		PasswordHash:      hash,
+		Avatar:            oauthUser.AvatarURL,
+		Role:              model.RoleViewer,
+		Status:            model.StatusActive,
+		PasswordChangedAt: &now,
+	}
+	if err := s.userRepo.Create(ctx, user); err != nil {
+		return nil, apperrors.Wrap(apperrors.ErrCodeDuplicateEntry, "failed to create user", err)
+	}
+	if appErr := s.createBindingStrict(ctx, user.ID, oauthUser); appErr != nil {
+		return nil, appErr
+	}
+	return s.issueOAuthLogin(ctx, user, oauthUser.Provider)
+}
+
+// ─── 内部辅助 ─────────────────────────────────────────────────────────
+
+// fetchUserInfo 依据 provider 分发到对应的获取函数，交换 code 并取得第三方身份。
 func (s *OAuthService) fetchUserInfo(ctx context.Context, provider, code string) (*OAuthUserInfo, *apperrors.AppError) {
-	switch provider {
-	case "github":
-		return s.fetchGitHubUser(ctx, code)
-	case "google":
-		return s.fetchGoogleUser(ctx, code)
-	case "linuxdo":
-		return s.fetchLinuxDOUser(ctx, code)
-	case "wechat":
-		return s.fetchWeChatUser(ctx, code)
-	case "qq":
-		return s.fetchQQUser(ctx, code)
-	default:
+	fetch, ok := oauthFetchers[provider]
+	if !ok {
 		return nil, apperrors.New(apperrors.ErrCodeOperationDenied, "unsupported oauth provider: "+provider)
 	}
+	cfg, ok, err := s.configService.OAuthProvider(ctx, provider)
+	if err != nil {
+		return nil, apperrors.Wrap(apperrors.ErrCodeOperationDenied, "failed to load oauth config", err)
+	}
+	if !ok || !cfg.IsConfigured() {
+		return nil, apperrors.New(apperrors.ErrCodeOperationDenied, provider+" oauth is not configured")
+	}
+	user, err := fetch(ctx, s.httpClient, cfg, code)
+	if err != nil {
+		s.logger.Error("oauth fetch failed", zap.String("provider", provider), zap.Error(err))
+		return nil, apperrors.Wrap(apperrors.ErrCodeOperationDenied, "failed to fetch oauth user", err)
+	}
+	return user, nil
 }
 
-// ─── GitHub OAuth ───────────────────────────────────────────────────
-
-func (s *OAuthService) fetchGitHubUser(ctx context.Context, code string) (*OAuthUserInfo, *apperrors.AppError) {
-	if s.cfg.GitHub.ClientID == "" || s.cfg.GitHub.ClientSecret == "" {
-		return nil, apperrors.New(apperrors.ErrCodeOperationDenied, "github oauth is not configured")
-	}
-
-	// 步骤 1：用 code 交换 access token
-	accessToken, err := s.exchangeGitHubCode(ctx, code)
+// resolveLoginUser 按 (provider, providerUserID) 绑定关系定位登录用户。
+// 命中绑定 -> 直接登录；未命中 -> 返回 pending 绑定会话。
+func (s *OAuthService) resolveLoginUser(ctx context.Context, oauthUser *OAuthUserInfo) (*model.User, *PendingOAuthBindingResult, *apperrors.AppError) {
+	binding, err := s.bindingRepo.FindByProviderUID(ctx, oauthUser.Provider, oauthUser.ProviderUserID)
 	if err != nil {
-		s.logger.Error("github token exchange failed", zap.Error(err))
-		return nil, apperrors.Wrap(apperrors.ErrCodeOperationDenied, "failed to exchange github code", err)
+		return nil, nil, apperrors.Wrap(apperrors.ErrCodeUserNotFound, "database error", err)
 	}
-
-	// 步骤 2：获取主要的已验证邮箱
-	email, err := s.fetchGitHubEmail(ctx, accessToken)
-	if err != nil {
-		s.logger.Error("github email fetch failed", zap.Error(err))
-		return nil, apperrors.Wrap(apperrors.ErrCodeOperationDenied, "failed to fetch github email", err)
-	}
-
-	// 步骤 3：获取用户资料
-	ghUser, err := s.fetchGitHubProfile(ctx, accessToken)
-	if err != nil {
-		s.logger.Error("github profile fetch failed", zap.Error(err))
-		return nil, apperrors.Wrap(apperrors.ErrCodeOperationDenied, "failed to fetch github profile", err)
-	}
-
-	return &OAuthUserInfo{
-		Provider:       "github",
-		ProviderUserID: fmt.Sprintf("github_%d", ghUser.ID),
-		Email:          email,
-		Username:       ghUser.Login,
-		AvatarURL:      ghUser.AvatarURL,
-	}, nil
-}
-
-type githubAccessTokenResponse struct {
-	AccessToken string `json:"access_token"`
-	Error       string `json:"error"`
-	ErrorDesc   string `json:"error_description"`
-}
-
-type githubUser struct {
-	ID        int64  `json:"id"`
-	Login     string `json:"login"`
-	AvatarURL string `json:"avatar_url"`
-	Name      string `json:"name"`
-}
-
-type githubEmail struct {
-	Email    string `json:"email"`
-	Primary  bool   `json:"primary"`
-	Verified bool   `json:"verified"`
-}
-
-func (s *OAuthService) exchangeGitHubCode(ctx context.Context, code string) (string, error) {
-	data := url.Values{
-		"client_id":     {s.cfg.GitHub.ClientID},
-		"client_secret": {s.cfg.GitHub.ClientSecret},
-		"code":          {code},
-	}
-	if s.cfg.GitHub.RedirectURL != "" {
-		data.Set("redirect_uri", s.cfg.GitHub.RedirectURL)
-	}
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
-		"https://github.com/login/oauth/access_token", strings.NewReader(data.Encode()))
-	if err != nil {
-		return "", err
-	}
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.Header.Set("Accept", "application/json")
-
-	resp, err := s.httpClient.Do(req)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20)) // 1 MB 限制
-	if err != nil {
-		return "", err
-	}
-
-	var tokenResp githubAccessTokenResponse
-	if err := json.Unmarshal(body, &tokenResp); err != nil {
-		return "", fmt.Errorf("parse token response: %w", err)
-	}
-
-	if tokenResp.Error != "" {
-		return "", fmt.Errorf("github token error: %s — %s", tokenResp.Error, tokenResp.ErrorDesc)
-	}
-	if tokenResp.AccessToken == "" {
-		return "", fmt.Errorf("empty access token in github response: %s", string(body))
-	}
-
-	return tokenResp.AccessToken, nil
-}
-
-func (s *OAuthService) fetchGitHubEmail(ctx context.Context, accessToken string) (string, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet,
-		"https://api.github.com/user/emails", nil)
-	if err != nil {
-		return "", err
-	}
-	req.Header.Set("Authorization", "Bearer "+accessToken)
-	req.Header.Set("Accept", "application/vnd.github+json")
-	req.Header.Set("User-Agent", "NetLab-Backend")
-
-	resp, err := s.httpClient.Do(req)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-	if err != nil {
-		return "", err
-	}
-
-	var emails []githubEmail
-	if err := json.Unmarshal(body, &emails); err != nil {
-		return "", fmt.Errorf("parse emails response: %w", err)
-	}
-
-	// 选取主要的已验证邮箱
-	for _, e := range emails {
-		if e.Primary && e.Verified {
-			return e.Email, nil
+	if binding != nil {
+		user, err := s.userRepo.FindByID(ctx, binding.UserID.String())
+		if err != nil || user == nil {
+			return nil, nil, apperrors.ErrUserNotFound
 		}
-	}
-
-	// 兜底：第一个已验证的邮箱
-	for _, e := range emails {
-		if e.Verified {
-			return e.Email, nil
+		if !user.IsActive() {
+			return nil, nil, apperrors.ErrAccountDisabled
 		}
+		return user, nil, nil
 	}
-
-	return "", fmt.Errorf("no verified email found for github user")
+	pending, appErr := s.storePendingBinding(ctx, oauthUser)
+	return nil, pending, appErr
 }
 
-func (s *OAuthService) fetchGitHubProfile(ctx context.Context, accessToken string) (*githubUser, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet,
-		"https://api.github.com/user", nil)
+// createBindingStrict 幂等地为用户建立一条 OAuth 绑定；若该第三方身份
+// 已绑定到其他账号则返回错误。
+func (s *OAuthService) createBindingStrict(ctx context.Context, userID uuid.UUID, oauthUser *OAuthUserInfo) *apperrors.AppError {
+	existing, err := s.bindingRepo.FindByProviderUID(ctx, oauthUser.Provider, oauthUser.ProviderUserID)
 	if err != nil {
-		return nil, err
+		return apperrors.Wrap(apperrors.ErrCodeOperationDenied, "database error", err)
 	}
-	req.Header.Set("Authorization", "Bearer "+accessToken)
-	req.Header.Set("Accept", "application/vnd.github+json")
-	req.Header.Set("User-Agent", "NetLab-Backend")
-
-	resp, err := s.httpClient.Do(req)
-	if err != nil {
-		return nil, err
+	if existing != nil {
+		if existing.UserID != userID {
+			return apperrors.New(apperrors.ErrCodeDuplicateEntry, "this third-party account is already linked to another user")
+		}
+		return nil
 	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-	if err != nil {
-		return nil, err
+	binding := &model.UserOAuthBinding{
+		UserID:         userID,
+		Provider:       oauthUser.Provider,
+		ProviderUserID: oauthUser.ProviderUserID,
+		Email:          oauthUser.Email,
 	}
-
-	var user githubUser
-	if err := json.Unmarshal(body, &user); err != nil {
-		return nil, fmt.Errorf("parse user response: %w", err)
+	if err := s.bindingRepo.Create(ctx, binding); err != nil {
+		return apperrors.Wrap(apperrors.ErrCodeOperationDenied, "failed to bind provider", err)
 	}
-
-	return &user, nil
+	return nil
 }
 
-// ─── Google OAuth ───────────────────────────────────────────────────
-
-func (s *OAuthService) fetchGoogleUser(ctx context.Context, code string) (*OAuthUserInfo, *apperrors.AppError) {
-	if s.cfg.Google.ClientID == "" || s.cfg.Google.ClientSecret == "" {
-		return nil, apperrors.New(apperrors.ErrCodeOperationDenied, "google oauth is not configured")
+// issueOAuthLogin 签发 token 并记录登录成功。
+func (s *OAuthService) issueOAuthLogin(ctx context.Context, user *model.User, provider string) (*LoginServiceResult, *apperrors.AppError) {
+	tokens, appErr := s.tokenService.IssueTokens(ctx, user)
+	if appErr != nil {
+		return nil, appErr
 	}
-
-	token, err := s.exchangeGoogleCode(ctx, code)
-	if err != nil {
-		s.logger.Error("google token exchange failed", zap.Error(err))
-		return nil, apperrors.Wrap(apperrors.ErrCodeOperationDenied, "failed to exchange google code", err)
-	}
-
-	googleUser, err := s.fetchGoogleUserInfo(ctx, token)
-	if err != nil {
-		s.logger.Error("google userinfo fetch failed", zap.Error(err))
-		return nil, apperrors.Wrap(apperrors.ErrCodeOperationDenied, "failed to fetch google userinfo", err)
-	}
-
-	return &OAuthUserInfo{
-		Provider:       "google",
-		ProviderUserID: "google_" + googleUser.Sub,
-		Email:          googleUser.Email,
-		Username:       googleUser.Name,
-		AvatarURL:      googleUser.Picture,
+	_ = s.userRepo.UpdateLoginSuccess(ctx, user.ID.String())
+	return &LoginServiceResult{
+		Tokens:  tokens,
+		User:    userToInfo(user),
+		Actions: computeSecurityActions(ctx, s.configService, user),
 	}, nil
 }
 
-type googleTokenResponse struct {
-	AccessToken string `json:"access_token"`
-	Error       string `json:"error"`
-	ErrorDesc   string `json:"error_description"`
-}
-
-type googleUserInfo struct {
-	Sub           string `json:"sub"`
-	Email         string `json:"email"`
-	EmailVerified bool   `json:"email_verified"`
-	Name          string `json:"name"`
-	Picture       string `json:"picture"`
-}
-
-func (s *OAuthService) exchangeGoogleCode(ctx context.Context, code string) (string, error) {
-	data := url.Values{
-		"client_id":     {s.cfg.Google.ClientID},
-		"client_secret": {s.cfg.Google.ClientSecret},
-		"code":          {code},
-		"grant_type":    {"authorization_code"},
-	}
-	if s.cfg.Google.RedirectURL != "" {
-		data.Set("redirect_uri", s.cfg.Google.RedirectURL)
-	}
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
-		"https://oauth2.googleapis.com/token", strings.NewReader(data.Encode()))
-	if err != nil {
-		return "", err
-	}
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-
-	resp, err := s.httpClient.Do(req)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-	if err != nil {
-		return "", err
-	}
-
-	var tokenResp googleTokenResponse
-	if err := json.Unmarshal(body, &tokenResp); err != nil {
-		return "", fmt.Errorf("parse token response: %w", err)
-	}
-	if tokenResp.Error != "" {
-		return "", fmt.Errorf("google token error: %s — %s", tokenResp.Error, tokenResp.ErrorDesc)
-	}
-	if tokenResp.AccessToken == "" {
-		return "", fmt.Errorf("empty access token in google response")
-	}
-
-	return tokenResp.AccessToken, nil
-}
-
-func (s *OAuthService) fetchGoogleUserInfo(ctx context.Context, accessToken string) (*googleUserInfo, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet,
-		"https://www.googleapis.com/oauth2/v3/userinfo", nil)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Authorization", "Bearer "+accessToken)
-
-	resp, err := s.httpClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-	if err != nil {
-		return nil, err
-	}
-
-	var user googleUserInfo
-	if err := json.Unmarshal(body, &user); err != nil {
-		return nil, fmt.Errorf("parse userinfo response: %w", err)
-	}
-	if user.Email == "" || !user.EmailVerified {
-		return nil, fmt.Errorf("google account has no verified email")
-	}
-
-	return &user, nil
-}
-
-// ─── LinuxDO OAuth（基于 Discourse） ────────────────────────────────
-
-func (s *OAuthService) fetchLinuxDOUser(ctx context.Context, code string) (*OAuthUserInfo, *apperrors.AppError) {
-	if s.cfg.LinuxDO.ClientID == "" || s.cfg.LinuxDO.ClientSecret == "" {
-		return nil, apperrors.New(apperrors.ErrCodeOperationDenied, "linuxdo oauth is not configured")
-	}
-
-	accessToken, err := s.exchangeLinuxDOCode(ctx, code)
-	if err != nil {
-		s.logger.Error("linuxdo token exchange failed", zap.Error(err))
-		return nil, apperrors.Wrap(apperrors.ErrCodeOperationDenied, "failed to exchange linuxdo code", err)
-	}
-
-	ldUser, err := s.fetchLinuxDOUserInfo(ctx, accessToken)
-	if err != nil {
-		s.logger.Error("linuxdo userinfo fetch failed", zap.Error(err))
-		return nil, apperrors.Wrap(apperrors.ErrCodeOperationDenied, "failed to fetch linuxdo userinfo", err)
-	}
-
-	return &OAuthUserInfo{
-		Provider:       "linuxdo",
-		ProviderUserID: "linuxdo_" + ldUser.ID,
-		Email:          ldUser.Email,
-		Username:       ldUser.Username,
-		AvatarURL:      ldUser.AvatarURL,
-	}, nil
-}
-
-type linuxDOTokenResponse struct {
-	AccessToken string `json:"access_token"`
-	Error       string `json:"error"`
-	ErrorDesc   string `json:"error_description"`
-}
-
-type linuxDOUserInfo struct {
-	ID        string `json:"id"`
-	Email     string `json:"email"`
-	Username  string `json:"username"`
-	Name      string `json:"name"`
-	AvatarURL string `json:"avatar_url"`
-}
-
-func (s *OAuthService) exchangeLinuxDOCode(ctx context.Context, code string) (string, error) {
-	data := url.Values{
-		"client_id":     {s.cfg.LinuxDO.ClientID},
-		"client_secret": {s.cfg.LinuxDO.ClientSecret},
-		"code":          {code},
-		"grant_type":    {"authorization_code"},
-	}
-	if s.cfg.LinuxDO.RedirectURL != "" {
-		data.Set("redirect_uri", s.cfg.LinuxDO.RedirectURL)
-	}
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
-		"https://connect.linux.do/oauth2/token", strings.NewReader(data.Encode()))
-	if err != nil {
-		return "", err
-	}
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.Header.Set("Accept", "application/json")
-
-	resp, err := s.httpClient.Do(req)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-	if err != nil {
-		return "", err
-	}
-
-	var tokenResp linuxDOTokenResponse
-	if err := json.Unmarshal(body, &tokenResp); err != nil {
-		return "", fmt.Errorf("parse linuxdo token response: %w", err)
-	}
-	if tokenResp.Error != "" {
-		return "", fmt.Errorf("linuxdo token error: %s — %s", tokenResp.Error, tokenResp.ErrorDesc)
-	}
-	if tokenResp.AccessToken == "" {
-		return "", fmt.Errorf("empty access token in linuxdo response")
-	}
-
-	return tokenResp.AccessToken, nil
-}
-
-func (s *OAuthService) fetchLinuxDOUserInfo(ctx context.Context, accessToken string) (*linuxDOUserInfo, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet,
-		"https://connect.linux.do/oauth2/userinfo", nil)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Authorization", "Bearer "+accessToken)
-	req.Header.Set("Accept", "application/json")
-	req.Header.Set("User-Agent", "NetLab-Backend")
-
-	resp, err := s.httpClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-	if err != nil {
-		return nil, err
-	}
-
-	var user linuxDOUserInfo
-	if err := json.Unmarshal(body, &user); err != nil {
-		return nil, fmt.Errorf("parse userinfo response: %w", err)
-	}
-	if user.Email == "" {
-		return nil, fmt.Errorf("linuxdo account has no email")
-	}
-
-	return &user, nil
-}
-
-// ─── WeChat OAuth（开放平台 —— 扫码登录） ────────────────────────────
-
-func (s *OAuthService) fetchWeChatUser(ctx context.Context, code string) (*OAuthUserInfo, *apperrors.AppError) {
-	if s.cfg.WeChat.ClientID == "" || s.cfg.WeChat.ClientSecret == "" {
-		return nil, apperrors.New(apperrors.ErrCodeOperationDenied, "wechat oauth is not configured")
-	}
-
-	// WeChat 的 token 交换在一次调用中同时返回 access_token 和 openid
-	wxToken, err := s.exchangeWeChatCode(ctx, code)
-	if err != nil {
-		s.logger.Error("wechat token exchange failed", zap.Error(err))
-		return nil, apperrors.Wrap(apperrors.ErrCodeOperationDenied, "failed to exchange wechat code", err)
-	}
-
-	wxUser, err := s.fetchWeChatUserInfo(ctx, wxToken.AccessToken, wxToken.OpenID)
-	if err != nil {
-		s.logger.Error("wechat userinfo fetch failed", zap.Error(err))
-		return nil, apperrors.Wrap(apperrors.ErrCodeOperationDenied, "failed to fetch wechat userinfo", err)
-	}
-
-	return &OAuthUserInfo{
-		Provider:       "wechat",
-		ProviderUserID: "wechat_" + wxToken.OpenID,
-		Email:          wxToken.OpenID + "@wechat.oauth", // WeChat snsapi_login 不暴露 email；使用合成邮箱
-		Username:       wxUser.Nickname,
-		AvatarURL:      wxUser.HeadImgURL,
-	}, nil
-}
-
-type wechatTokenResponse struct {
-	AccessToken  string `json:"access_token"`
-	ExpiresIn    int    `json:"expires_in"`
-	RefreshToken string `json:"refresh_token"`
-	OpenID       string `json:"openid"`
-	UnionID      string `json:"unionid"`
-	ErrCode      int    `json:"errcode"`
-	ErrMsg       string `json:"errmsg"`
-}
-
-type wechatUserInfo struct {
-	OpenID     string `json:"openid"`
-	Nickname   string `json:"nickname"`
-	Sex        int    `json:"sex"`
-	HeadImgURL string `json:"headimgurl"`
-	UnionID    string `json:"unionid"`
-}
-
-func (s *OAuthService) exchangeWeChatCode(ctx context.Context, code string) (*wechatTokenResponse, error) {
-	u := fmt.Sprintf(
-		"https://api.weixin.qq.com/sns/oauth2/access_token?appid=%s&secret=%s&code=%s&grant_type=authorization_code",
-		s.cfg.WeChat.ClientID, s.cfg.WeChat.ClientSecret, code,
-	)
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	resp, err := s.httpClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-	if err != nil {
-		return nil, err
-	}
-
-	var tokenResp wechatTokenResponse
-	if err := json.Unmarshal(body, &tokenResp); err != nil {
-		return nil, fmt.Errorf("parse wechat token response: %w", err)
-	}
-	if tokenResp.ErrCode != 0 {
-		return nil, fmt.Errorf("wechat token error [%d]: %s", tokenResp.ErrCode, tokenResp.ErrMsg)
-	}
-	if tokenResp.AccessToken == "" {
-		return nil, fmt.Errorf("empty access token in wechat response: %s", string(body))
-	}
-
-	return &tokenResp, nil
-}
-
-func (s *OAuthService) fetchWeChatUserInfo(ctx context.Context, accessToken, openID string) (*wechatUserInfo, error) {
-	u := fmt.Sprintf(
-		"https://api.weixin.qq.com/sns/userinfo?access_token=%s&openid=%s",
-		accessToken, openID,
-	)
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	resp, err := s.httpClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-	if err != nil {
-		return nil, err
-	}
-
-	var user wechatUserInfo
-	if err := json.Unmarshal(body, &user); err != nil {
-		return nil, fmt.Errorf("parse wechat userinfo response: %w", err)
-	}
-
-	return &user, nil
-}
-
-// ─── QQ OAuth ───────────────────────────────────────────────────────
-
-func (s *OAuthService) fetchQQUser(ctx context.Context, code string) (*OAuthUserInfo, *apperrors.AppError) {
-	if s.cfg.QQ.ClientID == "" || s.cfg.QQ.ClientSecret == "" {
-		return nil, apperrors.New(apperrors.ErrCodeOperationDenied, "qq oauth is not configured")
-	}
-
-	accessToken, err := s.exchangeQQCode(ctx, code)
-	if err != nil {
-		s.logger.Error("qq token exchange failed", zap.Error(err))
-		return nil, apperrors.Wrap(apperrors.ErrCodeOperationDenied, "failed to exchange qq code", err)
-	}
-
-	openID, err := s.fetchQQOpenID(ctx, accessToken)
-	if err != nil {
-		s.logger.Error("qq openid fetch failed", zap.Error(err))
-		return nil, apperrors.Wrap(apperrors.ErrCodeOperationDenied, "failed to fetch qq openid", err)
-	}
-
-	qqUser, err := s.fetchQQUserInfo(ctx, accessToken, openID)
-	if err != nil {
-		s.logger.Error("qq userinfo fetch failed", zap.Error(err))
-		return nil, apperrors.Wrap(apperrors.ErrCodeOperationDenied, "failed to fetch qq userinfo", err)
-	}
-
-	// 使用基础 scope 时 QQ 可能不返回 email
-	email := qqUser.Email
-	if email == "" {
-		email = openID + "@qq.openid" // 用于账号关联的合成邮箱
-	}
-
-	return &OAuthUserInfo{
-		Provider:       "qq",
-		ProviderUserID: "qq_" + openID,
-		Email:          email,
-		Username:       qqUser.Nickname,
-		AvatarURL:      qqUser.FigureURLQQ,
-	}, nil
-}
-
-type qqUserInfo struct {
-	Nickname     string `json:"nickname"`
-	FigureURLQQ  string `json:"figureurl_qq_2"` // 100x100 头像
-	Gender       string `json:"gender"`
-	Email        string `json:"email"`
-}
-
-func (s *OAuthService) exchangeQQCode(ctx context.Context, code string) (string, error) {
-	u := fmt.Sprintf(
-		"https://graph.qq.com/oauth2.0/token?grant_type=authorization_code&client_id=%s&client_secret=%s&code=%s",
-		s.cfg.QQ.ClientID, s.cfg.QQ.ClientSecret, code,
-	)
-	if s.cfg.QQ.RedirectURL != "" {
-		u += "&redirect_uri=" + s.cfg.QQ.RedirectURL
-	}
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
-	if err != nil {
-		return "", err
-	}
-
-	resp, err := s.httpClient.Do(req)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-	if err != nil {
-		return "", err
-	}
-
-	// QQ 的 token 响应是查询字符串格式：access_token=xxx&expires_in=yyy
-	vals, err := url.ParseQuery(string(body))
-	if err != nil {
-		return "", fmt.Errorf("parse qq token response: %w", err)
-	}
-	if vals.Get("access_token") == "" {
-		return "", fmt.Errorf("qq token error: %s", string(body))
-	}
-
-	return vals.Get("access_token"), nil
-}
-
-func (s *OAuthService) fetchQQOpenID(ctx context.Context, accessToken string) (string, error) {
-	u := fmt.Sprintf("https://graph.qq.com/oauth2.0/me?access_token=%s", accessToken)
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
-	if err != nil {
-		return "", err
-	}
-
-	resp, err := s.httpClient.Do(req)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-	if err != nil {
-		return "", err
-	}
-
-	// QQ 返回格式：callback( {"client_id":"xxx","openid":"yyy"} );
-	bodyStr := string(body)
-	// 去除 callback( 和 );
-	bodyStr = strings.TrimPrefix(bodyStr, "callback(")
-	bodyStr = strings.TrimSuffix(bodyStr, ");")
-	bodyStr = strings.TrimSpace(bodyStr)
-
-	var result struct {
-		OpenID  string `json:"openid"`
-		ErrCode int    `json:"error"`
-		ErrMsg  string `json:"error_description"`
-	}
-	if err := json.Unmarshal([]byte(bodyStr), &result); err != nil {
-		return "", fmt.Errorf("parse qq openid response: %w (body: %s)", err, string(body))
-	}
-	if result.OpenID == "" {
-		return "", fmt.Errorf("qq openid error: %s", string(body))
-	}
-
-	return result.OpenID, nil
-}
-
-func (s *OAuthService) fetchQQUserInfo(ctx context.Context, accessToken, openID string) (*qqUserInfo, error) {
-	u := fmt.Sprintf(
-		"https://graph.qq.com/user/get_user_info?access_token=%s&oauth_consumer_key=%s&openid=%s",
-		accessToken, s.cfg.QQ.ClientID, openID,
-	)
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	resp, err := s.httpClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-	if err != nil {
-		return nil, err
-	}
-
-	var user qqUserInfo
-	if err := json.Unmarshal(body, &user); err != nil {
-		return nil, fmt.Errorf("parse qq userinfo response: %w", err)
-	}
-
-	return &user, nil
-}
-
-// ─── 用户创建 ───────────────────────────────────────────────────────
-
-func (s *OAuthService) findOrCreateUser(ctx context.Context, oauthUser *OAuthUserInfo) (*model.User, *apperrors.AppError) {
-	// 先按 email 查找 —— OAuth 身份与 email 绑定
-	user, err := s.userRepo.FindByEmail(ctx, oauthUser.Email)
+// findUserByIdentifier 按用户名查找，未命中再按邮箱查找。
+func (s *OAuthService) findUserByIdentifier(ctx context.Context, account string) (*model.User, *apperrors.AppError) {
+	user, err := s.userRepo.FindByUsername(ctx, account)
 	if err != nil {
 		return nil, apperrors.Wrap(apperrors.ErrCodeUserNotFound, "database error", err)
 	}
-
-	if user != nil {
-		// 现有用户 —— 如果头像来自同一提供方则更新
-		if !user.IsActive() {
-			return nil, apperrors.ErrAccountDisabled
+	if user == nil {
+		user, err = s.userRepo.FindByEmail(ctx, account)
+		if err != nil {
+			return nil, apperrors.Wrap(apperrors.ErrCodeUserNotFound, "database error", err)
 		}
-		if oauthUser.AvatarURL != "" {
-			_ = s.userRepo.Update(ctx, user) // 如果头像已设置则为空操作
-		}
-		return user, nil
 	}
-
-	// 新用户：根据 OAuth 资料生成唯一用户名
-	username := s.generateUsername(ctx, oauthUser.Username)
-
-	newUser := &model.User{
-		Username:     username,
-		Email:        oauthUser.Email,
-		PasswordHash: "", // OAuth 用户没有本地密码
-		Avatar:       oauthUser.AvatarURL,
-		Roles:        []string{string(model.RoleViewer)},
-		Status:       model.StatusActive,
+	if user == nil {
+		return nil, apperrors.ErrUserNotFound
 	}
-
-	if err := s.userRepo.Create(ctx, newUser); err != nil {
-		s.logger.Error("create oauth user failed", zap.Error(err))
-		return nil, apperrors.Wrap(apperrors.ErrCodeDuplicateEntry, "failed to create user", err)
-	}
-
-	s.logger.Info("oauth user created",
-		zap.String("provider", oauthUser.Provider),
-		zap.String("user_id", newUser.ID.String()),
-		zap.String("email", oauthUser.Email),
-		zap.String("username", username),
-	)
-
-	return newUser, nil
+	return user, nil
 }
 
-// generateUsername 根据 OAuth 提供的名称创建唯一用户名。
-// 名称为空时回退到 "user"，冲突时追加随机数字。
-func (s *OAuthService) generateUsername(ctx context.Context, base string) string {
-	if base == "" {
-		base = "user"
+// verifyEmailCode 校验并一次性消费邮箱验证码。
+func (s *OAuthService) verifyEmailCode(ctx context.Context, email, purpose, code string) *apperrors.AppError {
+	stored, err := s.tokenRepo.GetVerificationCode(ctx, email, purpose)
+	if err != nil {
+		return apperrors.Wrap(apperrors.ErrCodeInvalidCode, "failed to verify code", err)
 	}
-
-	// 清洗：仅保留字母数字、连字符、下划线；转为小写
-	base = sanitizeUsername(base)
-	if len(base) < 3 {
-		base = base + strings.Repeat("0", 3-len(base))
+	if stored == "" || stored != code {
+		return apperrors.ErrInvalidCode
 	}
-
-	// 先尝试基础名称
-	exists, err := s.userRepo.ExistsByUsername(ctx, base)
-	if err == nil && !exists {
-		return base
-	}
-
-	// 追加随机 4 位后缀；最多重试 5 次
-	for i := 0; i < 5; i++ {
-		suffix := fmt.Sprintf("%04d", rand.Intn(10000))
-		candidate := base + suffix
-		if len(candidate) > 64 {
-			candidate = base[:64-len(suffix)] + suffix
-		}
-		exists, err := s.userRepo.ExistsByUsername(ctx, candidate)
-		if err == nil && !exists {
-			return candidate
-		}
-	}
-
-	// 最终兜底
-	return fmt.Sprintf("%s%d", base[:min(len(base), 54)], time.Now().UnixNano()%10000000000)
-}
-
-func sanitizeUsername(s string) string {
-	var b strings.Builder
-	for _, r := range strings.ToLower(s) {
-		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '-' || r == '_' {
-			b.WriteRune(r)
-		}
-	}
-	result := b.String()
-	if result == "" {
-		return "user"
-	}
-	if len(result) > 60 {
-		result = result[:60]
-	}
-	return result
+	return nil
 }

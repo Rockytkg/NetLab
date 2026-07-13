@@ -10,6 +10,7 @@ interface AuthGuardProps {
 export default function AuthGuard({ children }: AuthGuardProps) {
   const location = useLocation()
   const token = useAuthStore((s) => s.accessToken)
+  const securityActions = useAuthStore((s) => s.securityActions)
   const loading = useAuthStore((s) => s.loading)
 
   if (loading) {
@@ -23,6 +24,20 @@ export default function AuthGuard({ children }: AuthGuardProps) {
         replace
       />
     )
+  }
+
+  if (
+    location.pathname !== '/account/security-required' &&
+    (securityActions?.requirePasswordChange || securityActions?.requireEmailChange)
+  ) {
+    return <Navigate to="/account/security-required" replace />
+  }
+
+  if (
+    location.pathname !== '/account/2fa-setup' &&
+    securityActions?.requireTwoFactorSetup
+  ) {
+    return <Navigate to="/account/2fa-setup" replace />
   }
 
   return <>{children}</>

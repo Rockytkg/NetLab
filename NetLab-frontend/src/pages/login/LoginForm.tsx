@@ -2,10 +2,12 @@ import { useState, useCallback, useEffect } from 'react'
 import { Form, Input, Button, Checkbox, App, theme, Image, Typography, Tooltip } from 'antd'
 import { UserOutlined, LockOutlined, SafetyCertificateOutlined, ReloadOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
+import { useNavigate } from 'react-router-dom'
 import { useAuth } from '@/hooks/useAuth'
 import { authApi } from '@/services/auth'
 import { isAuthSecurityError } from '@/services/authSecurity'
 import type { LoginParams, SystemConfig } from '@/types/auth'
+import { navigateAfterLogin } from '@/utils/auth-flow'
 
 const { Text } = Typography
 
@@ -18,6 +20,7 @@ interface LoginFormProps {
 export default function LoginForm({ config, onForgotPassword, onRegister }: LoginFormProps) {
   const { t } = useTranslation('login')
   const { login } = useAuth()
+  const navigate = useNavigate()
   const { message } = App.useApp()
   const { token: themeToken } = theme.useToken()
   const [loading, setLoading] = useState(false)
@@ -29,6 +32,7 @@ export default function LoginForm({ config, onForgotPassword, onRegister }: Logi
 
   const captchaEnabled = config?.captchaEnabled ?? false
   const registrationEnabled = config?.registrationEnabled ?? false
+  const passwordResetEnabled = config?.passwordResetEnabled ?? true
 
   const fetchCaptcha = useCallback(async () => {
     if (!captchaEnabled) return
@@ -37,7 +41,7 @@ export default function LoginForm({ config, onForgotPassword, onRegister }: Logi
       const result = await authApi.getCaptcha()
       setCaptchaId(result.captchaId)
       setCaptchaImage(result.captchaImage)
-    } catch { /* 由拦截器处理 */ }
+    } catch { /* handled by interceptor */ }
     finally { setCaptchaLoading(false) }
   }, [captchaEnabled])
 
@@ -49,13 +53,20 @@ export default function LoginForm({ config, onForgotPassword, onRegister }: Logi
   const onFinish = async (values: LoginParams & { captchaCode?: string }) => {
     setLoading(true)
     try {
-      await login({
+      const result = await login({
         username: values.username,
         password: values.password,
         captchaId: captchaId ?? undefined,
         captchaCode: values.captchaCode,
       })
+      if (result.requiresTwoFactor) {
+        navigate('/login/2fa', {
+          state: { twoFactorToken: result.twoFactorToken, username: result.user?.username },
+        })
+        return
+      }
       message.success(t('loginSuccess'))
+      navigateAfterLogin(result, navigate)
     } catch (error) {
       if (isAuthSecurityError(error)) message.error(error.message)
       if (captchaEnabled) fetchCaptcha()
@@ -137,9 +148,11 @@ export default function LoginForm({ config, onForgotPassword, onRegister }: Logi
           <Form.Item name="remember" valuePropName="checked" noStyle>
             <Checkbox style={{ fontSize: 13 }}>{t('remember')}</Checkbox>
           </Form.Item>
-          <Button type="link" size="small" onClick={onForgotPassword} style={{ fontSize: 13, padding: 0 }}>
-            {t('forgotPassword')}
-          </Button>
+          {passwordResetEnabled && (
+            <Button type="link" size="small" onClick={onForgotPassword} style={{ fontSize: 13, padding: 0 }}>
+              {t('forgotPassword')}
+            </Button>
+          )}
         </div>
       </Form.Item>
 

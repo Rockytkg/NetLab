@@ -1,29 +1,49 @@
 package response
 
-
+import "time"
 
 // UserInfo 是 GET /auth/userinfo 的响应。
 type UserInfo struct {
-	ID       string   `json:"id"`
-	Username string   `json:"username"`
-	Avatar   string   `json:"avatar,omitempty"`
-	Email    string   `json:"email,omitempty"`
-	Roles    []string `json:"roles"`
+	ID                  string `json:"id"`
+	Username            string `json:"username"`
+	Avatar              string `json:"avatar,omitempty"`
+	Email               string `json:"email,omitempty"`
+	Role                string `json:"role"`
+	TwoFactorEnabled    bool   `json:"twoFactorEnabled"`
+	PreferredAuthMethod string `json:"preferredAuthMethod,omitempty"`
+	HasPasskey          bool   `json:"hasPasskey"`
+}
+
+type SecurityActions struct {
+	RequirePasswordChange bool   `json:"requirePasswordChange"`
+	RequireEmailChange    bool   `json:"requireEmailChange"`
+	RequireTwoFactorSetup bool   `json:"requireTwoFactorSetup"`
+	Reason                string `json:"reason,omitempty"`
+}
+
+type PendingOAuthBinding struct {
+	Token    string `json:"token"`
+	Provider string `json:"provider"`
+	Email    string `json:"email,omitempty"`
+	Username string `json:"username,omitempty"`
+	Avatar   string `json:"avatar,omitempty"`
 }
 
 // LoginResult 是 POST /auth/login 及 passkey/OAuth 认证的响应。
 type LoginResult struct {
-	AccessToken  string   `json:"access_token"`
-	RefreshToken string   `json:"refresh_token"`
-	User         UserInfo `json:"user"`
-	SigningKey   string   `json:"signing_key,omitempty"`
+	AccessToken         string               `json:"accessToken,omitempty"`
+	RefreshToken        string               `json:"refreshToken,omitempty"`
+	User                UserInfo             `json:"user,omitempty"`
+	RequiresTwoFactor   bool                 `json:"requiresTwoFactor,omitempty"`
+	TwoFactorToken      string               `json:"twoFactorToken,omitempty"`
+	SecurityActions     SecurityActions      `json:"securityActions"`
+	PendingOAuthBinding *PendingOAuthBinding `json:"pendingOAuthBinding,omitempty"`
 }
 
 // RefreshTokenResult 是 POST /auth/refresh 的响应。
 type RefreshTokenResult struct {
-	AccessToken  string `json:"access_token"`
-	RefreshToken string `json:"refresh_token"`
-	SigningKey   string `json:"signing_key,omitempty"`
+	AccessToken  string `json:"accessToken"`
+	RefreshToken string `json:"refreshToken"`
 }
 
 // RegisterResult 是 POST /auth/register 的响应。
@@ -33,8 +53,8 @@ type RegisterResult struct {
 
 // CaptchaResult 是 GET /auth/captcha 的响应。
 type CaptchaResult struct {
-	CaptchaID    string `json:"captcha_id"`
-	CaptchaImage string `json:"captcha_image"`
+	CaptchaID    string `json:"captchaId"`
+	CaptchaImage string `json:"captchaImage"`
 }
 
 // SendCodeResult 是 POST /auth/send-code 的响应。
@@ -43,71 +63,22 @@ type SendCodeResult struct {
 	Cooldown int    `json:"cooldown"` // 秒
 }
 
-// PasskeyRegisterOptions 是 GET /auth/passkey/register-options 的响应。
-type PasskeyRegisterOptions struct {
-	Challenge              string                   `json:"challenge"`
-	RP                     PasskeyRP                `json:"rp"`
-	User                   PasskeyUser              `json:"user"`
-	PubKeyCredParams       []PasskeyCredParam       `json:"pub_key_cred_params"`
-	Timeout                int                      `json:"timeout"`
-	Attestation            string                   `json:"attestation"`
-	AuthenticatorSelection AuthenticatorSelection   `json:"authenticator_selection"`
-}
-
-// PasskeyRP 表示依赖方（Relying Party）信息。
-type PasskeyRP struct {
-	Name string `json:"name"`
-	ID   string `json:"id"`
-}
-
-// PasskeyUser 表示 WebAuthn 用户实体。
-type PasskeyUser struct {
-	ID          string `json:"id"`
-	Name        string `json:"name"`
-	DisplayName string `json:"display_name"`
-}
-
-// PasskeyCredParam 表示公钥凭据参数。
-type PasskeyCredParam struct {
-	Type string `json:"type"`
-	Alg  int    `json:"alg"`
-}
-
-// AuthenticatorSelection 配置认证器要求。
-type AuthenticatorSelection struct {
-	AuthenticatorAttachment string `json:"authenticator_attachment,omitempty"`
-	ResidentKey             string `json:"resident_key"`
-	UserVerification        string `json:"user_verification"`
-}
-
-// PasskeyAuthOptions 是 GET /auth/passkey/auth-options 的响应。
-type PasskeyAuthOptions struct {
-	Challenge        string              `json:"challenge"`
-	RPID             string              `json:"rp_id"`
-	Timeout          int                 `json:"timeout"`
-	UserVerification string              `json:"user_verification"`
-	AllowCredentials []AllowCredential   `json:"allow_credentials,omitempty"`
-}
-
-// AllowCredential 表示用于认证的允许凭据。
-type AllowCredential struct {
-	ID         string   `json:"id"`
-	Type       string   `json:"type"`
-	Transports []string `json:"transports,omitempty"`
-}
+// Passkey 端点直接透传 go-webauthn 的 protocol 类型。
 
 // SystemConfig 是 GET /auth/config 的响应。
 type SystemConfig struct {
-	RegistrationEnabled bool            `json:"registration_enabled"`
-	CaptchaEnabled      bool            `json:"captcha_enabled"`
-	PasskeyEnabled      bool            `json:"passkey_enabled"`
-	OAuthProviders      []OAuthProvider `json:"oauth_providers"`
+	RegistrationEnabled  bool            `json:"registrationEnabled"`
+	CaptchaEnabled       bool            `json:"captchaEnabled"`
+	PasskeyEnabled       bool            `json:"passkeyEnabled"`
+	PasswordResetEnabled bool            `json:"passwordResetEnabled"`
+	TwoFactorRequired    bool            `json:"twoFactorRequired"`
+	OAuthProviders       []OAuthProvider `json:"oauthProviders"`
 	// ICPBeian 是显示在登录页页脚的 ICP 备案号。
 	// 前端根据固定模板构建链接；不返回 URL。
-	ICPBeian string `json:"icp_beian"`
+	ICPBeian string `json:"icpBeian"`
 	// PoliceBeian 是公安备案号。
 	// 前端根据固定模板构建链接；不返回 URL。
-	PoliceBeian string `json:"police_beian"`
+	PoliceBeian string `json:"policeBeian"`
 }
 
 // OAuthProvider 表示系统配置中已配置的 OAuth 提供商。
@@ -116,12 +87,12 @@ type OAuthProvider struct {
 	Name    string `json:"name"`
 	Icon    string `json:"icon"`
 	Color   string `json:"color"`
-	AuthURL string `json:"auth_url"`
+	AuthURL string `json:"authUrl"`
 }
 
 // OAuthAuthorizeResult 是 GET /auth/oauth/authorize 的响应。
 type OAuthAuthorizeResult struct {
-	AuthURL string `json:"auth_url"`
+	AuthURL string `json:"authUrl"`
 	State   string `json:"state"`
 }
 
@@ -131,7 +102,27 @@ type VerifyCodeResult struct {
 	Message string `json:"message"`
 }
 
+// TwoFactorSetupResult 是 POST /auth/2fa/setup 的响应。
+type TwoFactorSetupResult struct {
+	Secret     string `json:"secret"`
+	OtpauthURL string `json:"otpauthUrl"`
+	QRCode     string `json:"qrCode"` // data:image/png;base64
+}
+
+// TwoFactorEnableResult 是 POST /auth/2fa/enable 的响应。
+// RecoveryCodes 为一次性恢复码明文，仅在此刻返回一次，后端只保存其哈希。
+type TwoFactorEnableResult struct {
+	RecoveryCodes []string `json:"recoveryCodes"`
+}
+
 // MessageResponse 是通用的消息响应。
 type MessageResponse struct {
 	Message string `json:"message"`
+}
+
+// OAuthBinding 是返回给账户中心的单条第三方绑定信息。
+type OAuthBinding struct {
+	Provider  string    `json:"provider"`
+	Email     string    `json:"email,omitempty"`
+	CreatedAt time.Time `json:"createdAt"`
 }

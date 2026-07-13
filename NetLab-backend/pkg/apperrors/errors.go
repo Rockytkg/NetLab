@@ -12,23 +12,26 @@ type ErrorCode int
 // 每个错误码关联的 message 作为英文兜底文案；
 // 服务端 i18n 通过 go-i18n 使用键 "error.{code}" 解析本地化文案。
 const (
-	ErrCodeInvalidCredentials  ErrorCode = 1001
-	ErrCodeAccountLocked       ErrorCode = 1002
-	ErrCodeAccountDisabled     ErrorCode = 1003
-	ErrCodeTokenExpired        ErrorCode = 1004
-	ErrCodeInvalidRefreshToken ErrorCode = 1005
-	ErrCodeUserNotFound        ErrorCode = 1006
-	ErrCodeEmailExists         ErrorCode = 1007
-	ErrCodeUsernameExists      ErrorCode = 1008
-	ErrCodeInvalidCode         ErrorCode = 1009
-	ErrCodeWeakPassword        ErrorCode = 1010
-	ErrCodeRateLimited         ErrorCode = 1011
-	ErrCodeSessionExpired      ErrorCode = 1012
-	ErrCodeDuplicateEntry      ErrorCode = 1013
-	ErrCodeOperationDenied     ErrorCode = 1014
-	ErrCodeResourceInUse       ErrorCode = 1015
-	ErrCodeEmailNotConfigured  ErrorCode = 1016
-	ErrCodeEmailSendFailed     ErrorCode = 1017
+	ErrCodeInvalidCredentials     ErrorCode = 1001
+	ErrCodeAccountLocked          ErrorCode = 1002
+	ErrCodeAccountDisabled        ErrorCode = 1003
+	ErrCodeTokenExpired           ErrorCode = 1004
+	ErrCodeInvalidRefreshToken    ErrorCode = 1005
+	ErrCodeUserNotFound           ErrorCode = 1006
+	ErrCodeEmailExists            ErrorCode = 1007
+	ErrCodeUsernameExists         ErrorCode = 1008
+	ErrCodeInvalidCode            ErrorCode = 1009
+	ErrCodeWeakPassword           ErrorCode = 1010
+	ErrCodeRateLimited            ErrorCode = 1011
+	ErrCodeSessionExpired         ErrorCode = 1012
+	ErrCodeDuplicateEntry         ErrorCode = 1013
+	ErrCodeOperationDenied        ErrorCode = 1014
+	ErrCodeResourceInUse          ErrorCode = 1015
+	ErrCodeEmailNotConfigured     ErrorCode = 1016
+	ErrCodeEmailSendFailed        ErrorCode = 1017
+	ErrCodePasswordResetClosed    ErrorCode = 1018
+	ErrCodeInvalidTwoFactorCode   ErrorCode = 1020
+	ErrCodeTwoFactorNotConfigured ErrorCode = 1021
 )
 
 // HTTPStatus 将错误码映射为对应的 HTTP 状态码。
@@ -48,8 +51,10 @@ func (c ErrorCode) HTTPStatus() int {
 		return http.StatusBadRequest
 	case ErrCodeRateLimited:
 		return http.StatusTooManyRequests
-	case ErrCodeOperationDenied:
+	case ErrCodeOperationDenied, ErrCodePasswordResetClosed:
 		return http.StatusForbidden
+	case ErrCodeInvalidTwoFactorCode, ErrCodeTwoFactorNotConfigured:
+		return http.StatusBadRequest
 	case ErrCodeResourceInUse:
 		return http.StatusConflict
 	case ErrCodeEmailNotConfigured, ErrCodeEmailSendFailed:
@@ -92,23 +97,26 @@ func Wrap(code ErrorCode, message string, err error) *AppError {
 // 常见场景的预定义错误。
 // 它们携带英文兜底消息；response.go 在写入响应时对其进行本地化。
 var (
-	ErrInvalidCredentials  = New(ErrCodeInvalidCredentials, "invalid credentials")
-	ErrAccountLocked       = New(ErrCodeAccountLocked, "account locked")
-	ErrAccountDisabled     = New(ErrCodeAccountDisabled, "account disabled")
-	ErrTokenExpired        = New(ErrCodeTokenExpired, "token expired")
-	ErrInvalidRefreshToken = New(ErrCodeInvalidRefreshToken, "invalid refresh token")
-	ErrUserNotFound        = New(ErrCodeUserNotFound, "user not found")
-	ErrEmailExists         = New(ErrCodeEmailExists, "email already exists")
-	ErrUsernameExists      = New(ErrCodeUsernameExists, "username already exists")
-	ErrInvalidCode         = New(ErrCodeInvalidCode, "invalid verification code")
-	ErrWeakPassword        = New(ErrCodeWeakPassword, "password does not meet strength requirements")
-	ErrRateLimited         = New(ErrCodeRateLimited, "too many requests, please try again later")
-	ErrSessionExpired      = New(ErrCodeSessionExpired, "session expired")
-	ErrDuplicateEntry      = New(ErrCodeDuplicateEntry, "duplicate entry")
-	ErrOperationDenied     = New(ErrCodeOperationDenied, "operation denied")
-	ErrResourceInUse       = New(ErrCodeResourceInUse, "resource in use")
-	ErrEmailNotConfigured  = New(ErrCodeEmailNotConfigured, "email service is not configured")
-	ErrEmailSendFailed     = New(ErrCodeEmailSendFailed, "failed to send verification email")
+	ErrInvalidCredentials     = New(ErrCodeInvalidCredentials, "invalid credentials")
+	ErrAccountLocked          = New(ErrCodeAccountLocked, "account locked")
+	ErrAccountDisabled        = New(ErrCodeAccountDisabled, "account disabled")
+	ErrTokenExpired           = New(ErrCodeTokenExpired, "token expired")
+	ErrInvalidRefreshToken    = New(ErrCodeInvalidRefreshToken, "invalid refresh token")
+	ErrUserNotFound           = New(ErrCodeUserNotFound, "user not found")
+	ErrEmailExists            = New(ErrCodeEmailExists, "email already exists")
+	ErrUsernameExists         = New(ErrCodeUsernameExists, "username already exists")
+	ErrInvalidCode            = New(ErrCodeInvalidCode, "invalid verification code")
+	ErrWeakPassword           = New(ErrCodeWeakPassword, "password does not meet strength requirements")
+	ErrRateLimited            = New(ErrCodeRateLimited, "too many requests, please try again later")
+	ErrSessionExpired         = New(ErrCodeSessionExpired, "session expired")
+	ErrDuplicateEntry         = New(ErrCodeDuplicateEntry, "duplicate entry")
+	ErrOperationDenied        = New(ErrCodeOperationDenied, "operation denied")
+	ErrResourceInUse          = New(ErrCodeResourceInUse, "resource in use")
+	ErrEmailNotConfigured     = New(ErrCodeEmailNotConfigured, "email service is not configured")
+	ErrEmailSendFailed        = New(ErrCodeEmailSendFailed, "failed to send verification email")
+	ErrPasswordResetClosed    = New(ErrCodePasswordResetClosed, "password reset is disabled")
+	ErrInvalidTwoFactorCode   = New(ErrCodeInvalidTwoFactorCode, "invalid two-factor authentication code")
+	ErrTwoFactorNotConfigured = New(ErrCodeTwoFactorNotConfigured, "two-factor authentication is not configured")
 )
 
 // ValidationError 用于请求校验失败。

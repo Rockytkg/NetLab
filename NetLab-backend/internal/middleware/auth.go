@@ -2,8 +2,8 @@ package middleware
 
 import (
 	"strings"
-	"time"
 
+	"github.com/casbin/casbin/v3"
 	"github.com/gin-gonic/gin"
 
 	"netlab-backend/pkg/apperrors"
@@ -16,12 +16,10 @@ const (
 	ContextKeyUserID = "user_id"
 	// ContextKeyUsername 存储已认证用户的用户名。
 	ContextKeyUsername = "username"
-	// ContextKeyUserRoles 存储已认证用户的角色。
-	ContextKeyUserRoles = "user_roles"
-	// ContextKeyJTI 存储当前 token 的 JWT ID。
-	ContextKeyJTI = "jti"
-	// ContextKeyTokenExp 存储 token 的过期时间。
-	ContextKeyTokenExp = "token_exp"
+	// ContextKeyUserRole 存储已认证用户的角色。
+	ContextKeyUserRole = "user_role"
+	// ContextKeySessionID 存储当前登录会话 ID。
+	ContextKeySessionID = "session_id"
 )
 
 // AuthConfig 配置认证中间件的行为。
@@ -30,8 +28,8 @@ type AuthConfig struct {
 }
 
 // Auth 创建一个 JWT 认证中间件。
-// 它会校验 Bearer token，检查 Redis 黑名单，并将用户信息注入到 context 中。
-func Auth(jwtManager *pkgjwt.Manager, blacklist pkgjwt.BlacklistManager, cfg AuthConfig) gin.HandlerFunc {
+// 它会校验 Bearer token，检查 Redis 会话，并将用户信息注入到 context 中。
+func Auth(jwtManager *pkgjwt.Manager, tokenStore pkgjwt.SessionValidator, cfg AuthConfig) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		tokenString := extractBearerToken(c)
 
@@ -54,13 +52,15 @@ func Auth(jwtManager *pkgjwt.Manager, blacklist pkgjwt.BlacklistManager, cfg Aut
 			return
 		}
 
-		// 检查黑名单
-		if blacklist != nil {
-			blacklisted, err := blacklist.IsBlacklisted(c.Request.Context(), claims.ID)
-			if err != nil {
-				// 发生 Redis 错误时，放行请求（黑名单检查采用失败放行策略）
-				// 在生产环境中，你可能希望采用失败拒绝策略
-			} else if blacklisted {
+		// Redis-backed session state is part of authentication. Fail closed on
+		// Redis errors so revoked or replaced sessions cannot slip through.
+		if tokenStore != nil {
+			active, err := tokenStore.IsSessionActive(c.Request.Context(), claims.UserID, claims.SessionID)
+			if err != nil || !active {
+				if !cfg.Required {
+					c.Next()
+					return
+				}
 				response.Error(c, apperrors.ErrTokenExpired)
 				return
 			}
@@ -69,54 +69,37 @@ func Auth(jwtManager *pkgjwt.Manager, blacklist pkgjwt.BlacklistManager, cfg Aut
 		// 将用户信息注入到 context 中
 		c.Set(ContextKeyUserID, claims.UserID)
 		c.Set(ContextKeyUsername, claims.Username)
-		c.Set(ContextKeyUserRoles, claims.Roles)
-		c.Set(ContextKeyJTI, claims.ID)
-		if claims.ExpiresAt != nil {
-			c.Set(ContextKeyTokenExp, claims.ExpiresAt.Time)
-		}
+		c.Set(ContextKeyUserRole, claims.Role)
+		c.Set(ContextKeySessionID, claims.SessionID)
 
 		c.Next()
 	}
 }
 
 // RequireAuth 是要求提供有效 token 的认证中间件的简写形式。
-func RequireAuth(jwtManager *pkgjwt.Manager, blacklist pkgjwt.BlacklistManager) gin.HandlerFunc {
-	return Auth(jwtManager, blacklist, AuthConfig{Required: true})
+func RequireAuth(jwtManager *pkgjwt.Manager, tokenStore pkgjwt.SessionValidator) gin.HandlerFunc {
+	return Auth(jwtManager, tokenStore, AuthConfig{Required: true})
 }
 
 // OptionalAuth 是当存在 token 时附加用户信息的认证中间件的简写形式。
-func OptionalAuth(jwtManager *pkgjwt.Manager, blacklist pkgjwt.BlacklistManager) gin.HandlerFunc {
-	return Auth(jwtManager, blacklist, AuthConfig{Required: false})
+func OptionalAuth(jwtManager *pkgjwt.Manager, tokenStore pkgjwt.SessionValidator) gin.HandlerFunc {
+	return Auth(jwtManager, tokenStore, AuthConfig{Required: false})
 }
 
-// RequireRoles 创建一个中间件，检查已认证用户是否至少拥有所需角色之一。
-// 必须在 RequireAuth 之后使用。
-func RequireRoles(roles ...string) gin.HandlerFunc {
+// Authorize uses Casbin to enforce RBAC decisions for authenticated routes.
+func Authorize(enforcer *casbin.Enforcer) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		userRoles, exists := c.Get(ContextKeyUserRoles)
-		if !exists {
+		if enforcer == nil {
 			response.Error(c, apperrors.ErrOperationDenied)
 			return
 		}
 
-		allowedRoles := make(map[string]bool, len(roles))
-		for _, r := range roles {
-			allowedRoles[r] = true
-		}
-
-		roleList, ok := userRoles.([]string)
-		if !ok {
-			response.Error(c, apperrors.ErrOperationDenied)
+		role := GetUserRole(c)
+		allowed, err := enforcer.Enforce(role, c.Request.URL.Path, c.Request.Method)
+		if err == nil && allowed {
+			c.Next()
 			return
 		}
-
-		for _, r := range roleList {
-			if allowedRoles[r] {
-				c.Next()
-				return
-			}
-		}
-
 		response.Error(c, apperrors.ErrOperationDenied)
 	}
 }
@@ -141,34 +124,24 @@ func GetUsername(c *gin.Context) string {
 	return ""
 }
 
-// GetUserRoles 从 context 中获取已认证用户的角色。
-func GetUserRoles(c *gin.Context) []string {
-	if roles, exists := c.Get(ContextKeyUserRoles); exists {
-		if r, ok := roles.([]string); ok {
+// GetUserRole 从 context 中获取已认证用户的角色。
+func GetUserRole(c *gin.Context) string {
+	if role, exists := c.Get(ContextKeyUserRole); exists {
+		if r, ok := role.(string); ok {
 			return r
-		}
-	}
-	return nil
-}
-
-// GetJTI 从 context 中获取 JWT ID。
-func GetJTI(c *gin.Context) string {
-	if jti, exists := c.Get(ContextKeyJTI); exists {
-		if s, ok := jti.(string); ok {
-			return s
 		}
 	}
 	return ""
 }
 
-// GetTokenExp 从 context 中获取 token 的过期时间。
-func GetTokenExp(c *gin.Context) time.Time {
-	if exp, exists := c.Get(ContextKeyTokenExp); exists {
-		if t, ok := exp.(time.Time); ok {
-			return t
+// GetSessionID 从 context 中获取当前登录会话 ID。
+func GetSessionID(c *gin.Context) string {
+	if sid, exists := c.Get(ContextKeySessionID); exists {
+		if s, ok := sid.(string); ok {
+			return s
 		}
 	}
-	return time.Time{}
+	return ""
 }
 
 func extractBearerToken(c *gin.Context) string {

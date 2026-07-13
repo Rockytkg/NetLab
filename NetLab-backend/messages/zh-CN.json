@@ -20,6 +20,9 @@
   { "id": "error.1015", "translation": "资源正在使用中，无法操作" },
   { "id": "error.1016", "translation": "邮件服务未配置，请联系管理员" },
   { "id": "error.1017", "translation": "验证码邮件发送失败，请稍后重试" },
+  { "id": "error.1018", "translation": "重置密码功能已关闭" },
+  { "id": "error.1020", "translation": "动态验证码错误或已过期" },
+  { "id": "error.1021", "translation": "两步验证尚未配置" },
 
   { "id": "error.crypto.read_body", "translation": "读取请求体失败" },
   { "id": "error.crypto.decrypt", "translation": "请求解密失败，请检查加密配置" },

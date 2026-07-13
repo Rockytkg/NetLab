@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/google/uuid"
 )
 
 // Manager 负责 JWT 的创建、解析和校验。
@@ -14,104 +13,100 @@ type Manager struct {
 	accessSecret  []byte
 	refreshSecret []byte
 	accessExpiry  time.Duration
-	refreshExpiry time.Duration
 	issuer        string
 }
 
 // Claims 表示 access token 的 JWT claims。
 type Claims struct {
 	jwt.RegisteredClaims
-	UserID   string   `json:"uid"`
-	Username string   `json:"uname"`
-	Roles    []string `json:"roles"`
-	TokenType string  `json:"typ"` // "access" 或 "refresh"
+	UserID    string `json:"uid"`
+	Username  string `json:"uname"`
+	Role      string `json:"role"`
+	SessionID string `json:"sid"`
+	TokenType string `json:"typ"` // "access" 或 "refresh"
 }
 
 // NewManager 创建一个新的 JWT Manager。
-func NewManager(accessSecret, refreshSecret string, accessExpiry, refreshExpiry time.Duration, issuer string) *Manager {
+func NewManager(accessSecret, refreshSecret string, accessExpiry time.Duration, issuer string) *Manager {
 	return &Manager{
 		accessSecret:  []byte(accessSecret),
 		refreshSecret: []byte(refreshSecret),
 		accessExpiry:  accessExpiry,
-		refreshExpiry: refreshExpiry,
 		issuer:        issuer,
 	}
 }
 
 // TokenPair 包含一个 access token 和一个 refresh token。
 type TokenPair struct {
-	AccessToken   string    `json:"access_token"`
-	RefreshToken  string    `json:"refresh_token"`
-	AccessExpiry  time.Time `json:"access_expiry"`
-	RefreshExpiry time.Time `json:"refresh_expiry"`
+	AccessToken   string    `json:"accessToken"`
+	RefreshToken  string    `json:"refreshToken"`
+	AccessExpiry  time.Time `json:"accessExpiry"`
+	RefreshExpiry time.Time `json:"refreshExpiry"`
 }
 
 // IssueAccessToken 为给定用户创建一个新的 access JWT。
-func (m *Manager) IssueAccessToken(userID, username string, roles []string) (string, string, time.Time, error) { //nolint:unparam
+func (m *Manager) IssueAccessToken(userID, username, role, sessionID string) (string, time.Time, error) {
 	now := time.Now()
 	expiresAt := now.Add(m.accessExpiry)
-	jti := uuid.New().String()
 
 	claims := &Claims{
 		RegisteredClaims: jwt.RegisteredClaims{
 			Issuer:    m.issuer,
 			Subject:   userID,
-			ID:        jti,
 			IssuedAt:  jwt.NewNumericDate(now),
 			ExpiresAt: jwt.NewNumericDate(expiresAt),
 			NotBefore: jwt.NewNumericDate(now),
 		},
 		UserID:    userID,
 		Username:  username,
-		Roles:     roles,
+		Role:      role,
+		SessionID: sessionID,
 		TokenType: "access",
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	signed, err := token.SignedString(m.accessSecret)
 	if err != nil {
-		return "", "", time.Time{}, fmt.Errorf("sign access token: %w", err)
+		return "", time.Time{}, fmt.Errorf("sign access token: %w", err)
 	}
 
-	return signed, jti, expiresAt, nil
+	return signed, expiresAt, nil
 }
 
-// IssueRefreshToken 创建一个新的 refresh JWT。
-func (m *Manager) IssueRefreshToken(userID string) (string, string, time.Time, error) {
+// IssueRefreshTokenUntil 创建一个在指定时间点过期的 refresh JWT。
+func (m *Manager) IssueRefreshTokenUntil(userID, sessionID string, expiresAt time.Time) (string, time.Time, error) {
 	now := time.Now()
-	expiresAt := now.Add(m.refreshExpiry)
-	jti := uuid.New().String()
 
 	claims := &Claims{
 		RegisteredClaims: jwt.RegisteredClaims{
 			Issuer:    m.issuer,
 			Subject:   userID,
-			ID:        jti,
 			IssuedAt:  jwt.NewNumericDate(now),
 			ExpiresAt: jwt.NewNumericDate(expiresAt),
 			NotBefore: jwt.NewNumericDate(now),
 		},
 		UserID:    userID,
+		SessionID: sessionID,
 		TokenType: "refresh",
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	signed, err := token.SignedString(m.refreshSecret)
 	if err != nil {
-		return "", "", time.Time{}, fmt.Errorf("sign refresh token: %w", err)
+		return "", time.Time{}, fmt.Errorf("sign refresh token: %w", err)
 	}
 
-	return signed, jti, expiresAt, nil
+	return signed, expiresAt, nil
 }
 
-// IssueTokenPair 同时创建 access 和 refresh token。
-func (m *Manager) IssueTokenPair(userID, username string, roles []string) (*TokenPair, error) {
-	accessToken, _, accessExp, err := m.IssueAccessToken(userID, username, roles)
+// IssueTokenPairUntil 同时创建 access token 和指定过期点的 refresh token。
+func (m *Manager) IssueTokenPairUntil(userID, username, role, sessionID string, refreshExpiresAt time.Time) (*TokenPair, error) {
+	accessToken, accessExp, err := m.IssueAccessToken(userID, username, role, sessionID)
 	if err != nil {
 		return nil, err
 	}
 
-	refreshToken, _, refreshExp, err := m.IssueRefreshToken(userID)
+	refreshToken, refreshExp, err := m.IssueRefreshTokenUntil(userID, sessionID, refreshExpiresAt)
 	if err != nil {
 		return nil, err
 	}
@@ -126,12 +121,32 @@ func (m *Manager) IssueTokenPair(userID, username string, roles []string) (*Toke
 
 // ParseAccessToken 解析并校验一个 access JWT。
 func (m *Manager) ParseAccessToken(tokenString string) (*Claims, error) {
-	return m.parseToken(tokenString, m.accessSecret)
+	claims, err := m.parseToken(tokenString, m.accessSecret)
+	if err != nil {
+		return nil, err
+	}
+	if claims.TokenType != "access" {
+		return nil, fmt.Errorf("unexpected token type: %s", claims.TokenType)
+	}
+	if claims.SessionID == "" {
+		return nil, fmt.Errorf("missing session id")
+	}
+	return claims, nil
 }
 
 // ParseRefreshToken 解析并校验一个 refresh JWT。
 func (m *Manager) ParseRefreshToken(tokenString string) (*Claims, error) {
-	return m.parseToken(tokenString, m.refreshSecret)
+	claims, err := m.parseToken(tokenString, m.refreshSecret)
+	if err != nil {
+		return nil, err
+	}
+	if claims.TokenType != "refresh" {
+		return nil, fmt.Errorf("unexpected token type: %s", claims.TokenType)
+	}
+	if claims.SessionID == "" {
+		return nil, fmt.Errorf("missing session id")
+	}
+	return claims, nil
 }
 
 func (m *Manager) parseToken(tokenString string, secret []byte) (*Claims, error) {
@@ -158,11 +173,8 @@ func (m *Manager) parseToken(tokenString string, secret []byte) (*Claims, error)
 	return claims, nil
 }
 
-// BlacklistManager 通过 Redis 处理 JWT 黑名单。
-type BlacklistManager interface {
-	// AddToBlacklist 将一个 JTI 加入黑名单，其 TTL 与令牌的剩余生命周期一致。
-	AddToBlacklist(ctx context.Context, jti string, expiresAt time.Time) error
-	// IsBlacklisted 检查某个 JTI 是否在黑名单中。
-	IsBlacklisted(ctx context.Context, jti string) (bool, error)
+// SessionValidator validates the Redis-backed single active login session.
+type SessionValidator interface {
+	// IsSessionActive returns true only when sid is the user's current session.
+	IsSessionActive(ctx context.Context, userID, sessionID string) (bool, error)
 }
-

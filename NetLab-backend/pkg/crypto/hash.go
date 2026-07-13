@@ -2,6 +2,7 @@ package crypto
 
 import (
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 
 	"golang.org/x/crypto/bcrypt"
@@ -28,4 +29,10 @@ func VerifyPassword(hash, password string) bool {
 func SHA256Hex(input string) string {
 	h := sha256.Sum256([]byte(input))
 	return hex.EncodeToString(h[:])
+}
+
+// SHA256Base64URL returns a compact URL-safe SHA-256 digest without padding.
+func SHA256Base64URL(input string) string {
+	h := sha256.Sum256([]byte(input))
+	return base64.RawURLEncoding.EncodeToString(h[:])
 }

@@ -9,6 +9,10 @@ import (
 )
 
 // Config 保存应用程序的所有配置。
+//
+// SMTP 与 OAuth 等第三方集成配置不再来自环境变量，而是持久化在数据库中
+// 并通过「系统设置」管理（见 internal/service/config）。此处仅保留进程
+// 启动所必需的基础设施配置。
 type Config struct {
 	Server    ServerConfig
 	DB        DatabaseConfig
@@ -19,8 +23,6 @@ type Config struct {
 	CORS      CORSConfig
 	Captcha   CaptchaConfig
 	Log       LogConfig
-	OAuth     OAuthConfig
-	SMTP      SMTPConfig
 }
 
 // ServerConfig 保存服务器相关配置。
@@ -68,17 +70,32 @@ func (r RedisConfig) Addr() string {
 
 // JWTConfig 保存 JWT 相关配置。
 type JWTConfig struct {
-	AccessSecret  string
-	RefreshSecret string
-	AccessExpiry  time.Duration
-	RefreshExpiry time.Duration
-	Issuer        string
+	AccessSecret          string
+	RefreshSecret         string
+	AccessExpiry          time.Duration
+	RefreshExpiry         time.Duration
+	SessionAbsoluteExpiry time.Duration
+	Issuer                string
 }
 
-// AuthConfig 保存用于保护公开认证端点的预共享签名 key/salt。
+// AuthConfig 保存用于保护公开认证端点的预共享签名 key/salt，
+// 以及用于加密数据库中敏感配置（SMTP 密码、OAuth 密钥）的主密钥。
 type AuthConfig struct {
 	SignatureKey  string
 	SignatureSalt string
+	// EncryptionKey 是 AES-256-GCM 主密钥，用于加密存储在
+	// system_configs 表中的敏感字段。未显式配置时回退到 SignatureKey。
+	EncryptionKey string
+}
+
+// EffectiveEncryptionKey 返回用于加密敏感配置的主密钥。
+// 优先使用显式配置的 CONFIG_ENCRYPTION_KEY；未设置时回退到
+// 签名 key，以保证在未额外配置的部署中加密功能仍可用。
+func (a AuthConfig) EffectiveEncryptionKey() string {
+	if a.EncryptionKey != "" {
+		return a.EncryptionKey
+	}
+	return a.SignatureKey
 }
 
 // RateLimitConfig 保存限流配置。
@@ -105,84 +122,6 @@ type CaptchaConfig struct {
 type LogConfig struct {
 	Level  string
 	Format string
-}
-
-// SMTPConfig 保存 SMTP 邮件服务器配置。
-type SMTPConfig struct {
-	Host     string
-	Port     int
-	Username string
-	Password string
-	From     string
-	UseTLS   bool
-}
-
-// IsConfigured 在已提供 SMTP 设置时返回 true。
-func (s SMTPConfig) IsConfigured() bool {
-	return s.Host != "" && s.Port > 0 && s.Username != "" && s.From != ""
-}
-
-// OAuthProviderConfig 保存单个 OAuth 提供商的配置。
-type OAuthProviderConfig struct {
-	ClientID     string
-	ClientSecret string
-	RedirectURL  string
-}
-
-// OAuthConfig 保存 OAuth 第三方登录配置。
-type OAuthConfig struct {
-	GitHub  OAuthProviderConfig
-	Google  OAuthProviderConfig
-	LinuxDO OAuthProviderConfig
-	WeChat  OAuthProviderConfig
-	QQ      OAuthProviderConfig
-}
-
-// OAuthProviderEntry 是已配置 OAuth 提供商的公开元数据。
-type OAuthProviderEntry struct {
-	ID           string
-	Name         string
-	Icon         string
-	Color        string
-	ClientID     string
-	ClientSecret string
-	RedirectURL  string
-}
-
-// HasAnyEnabled 在至少配置了一个 OAuth 提供商时返回 true。
-func (o OAuthConfig) HasAnyEnabled() bool {
-	return o.GitHub.ClientID != "" ||
-		o.Google.ClientID != "" ||
-		o.LinuxDO.ClientID != "" ||
-		o.WeChat.ClientID != "" ||
-		o.QQ.ClientID != ""
-}
-
-// EnabledProviders 返回已配置 OAuth 提供商及其元数据的列表。
-func (o OAuthConfig) EnabledProviders() []OAuthProviderEntry {
-	var providers []OAuthProviderEntry
-
-	add := func(id, name, icon, color string, cfg OAuthProviderConfig) {
-		if cfg.ClientID != "" && cfg.ClientSecret != "" {
-			providers = append(providers, OAuthProviderEntry{
-				ID:           id,
-				Name:         name,
-				Icon:         icon,
-				Color:        color,
-				ClientID:     cfg.ClientID,
-				ClientSecret: cfg.ClientSecret,
-				RedirectURL:  cfg.RedirectURL,
-			})
-		}
-	}
-
-	add("github", "GitHub", "github", "#24292f", o.GitHub)
-	add("google", "Google", "google", "#4285f4", o.Google)
-	add("linuxdo", "LinuxDO", "linuxdo", "#4a90d9", o.LinuxDO)
-	add("wechat", "WeChat", "wechat", "#07c160", o.WeChat)
-	add("qq", "QQ", "qq", "#12b7f5", o.QQ)
-
-	return providers
 }
 
 // Load 从 .env 文件和环境变量中读取配置。
@@ -215,10 +154,12 @@ func Load() (*Config, error) {
 	v.SetDefault("JWT_REFRESH_SECRET", "")
 	v.SetDefault("JWT_ACCESS_EXPIRY", "15m")
 	v.SetDefault("JWT_REFRESH_EXPIRY", "168h")
+	v.SetDefault("JWT_SESSION_ABSOLUTE_EXPIRY", "720h")
 	v.SetDefault("JWT_ISSUER", "netlab")
 
 	v.SetDefault("AUTH_SIGNATURE_KEY", "")
 	v.SetDefault("AUTH_SIGNATURE_SALT", "")
+	v.SetDefault("CONFIG_ENCRYPTION_KEY", "")
 
 	v.SetDefault("RATE_LIMIT_ENABLED", true)
 	v.SetDefault("RATE_LIMIT_GLOBAL", 100)
@@ -237,31 +178,6 @@ func Load() (*Config, error) {
 	v.SetDefault("LOG_LEVEL", "info")
 	v.SetDefault("LOG_FORMAT", "json")
 
-	// OAuth 默认值
-	v.SetDefault("OAUTH_GITHUB_CLIENT_ID", "")
-	v.SetDefault("OAUTH_GITHUB_CLIENT_SECRET", "")
-	v.SetDefault("OAUTH_GITHUB_REDIRECT_URL", "")
-	v.SetDefault("OAUTH_GOOGLE_CLIENT_ID", "")
-	v.SetDefault("OAUTH_GOOGLE_CLIENT_SECRET", "")
-	v.SetDefault("OAUTH_GOOGLE_REDIRECT_URL", "")
-	v.SetDefault("OAUTH_LINUXDO_CLIENT_ID", "")
-	v.SetDefault("OAUTH_LINUXDO_CLIENT_SECRET", "")
-	v.SetDefault("OAUTH_LINUXDO_REDIRECT_URL", "")
-	v.SetDefault("OAUTH_WECHAT_CLIENT_ID", "")
-	v.SetDefault("OAUTH_WECHAT_CLIENT_SECRET", "")
-	v.SetDefault("OAUTH_WECHAT_REDIRECT_URL", "")
-	v.SetDefault("OAUTH_QQ_CLIENT_ID", "")
-	v.SetDefault("OAUTH_QQ_CLIENT_SECRET", "")
-	v.SetDefault("OAUTH_QQ_REDIRECT_URL", "")
-
-	// SMTP 默认值
-	v.SetDefault("SMTP_HOST", "")
-	v.SetDefault("SMTP_PORT", 587)
-	v.SetDefault("SMTP_USERNAME", "")
-	v.SetDefault("SMTP_PASSWORD", "")
-	v.SetDefault("SMTP_FROM", "")
-	v.SetDefault("SMTP_USE_TLS", true)
-
 	// 从 .env 读取
 	v.SetConfigFile(".env")
 	v.SetConfigType("env")
@@ -270,11 +186,12 @@ func Load() (*Config, error) {
 	_ = v.ReadInConfig() // 如果 .env 不存在则忽略错误
 
 	// 解析时长
-	readTimeout, _ := time.ParseDuration(v.GetString("SERVER_READ_TIMEOUT"))
-	writeTimeout, _ := time.ParseDuration(v.GetString("SERVER_WRITE_TIMEOUT"))
-	accessExpiry, _ := time.ParseDuration(v.GetString("JWT_ACCESS_EXPIRY"))
-	refreshExpiry, _ := time.ParseDuration(v.GetString("JWT_REFRESH_EXPIRY"))
-	connMaxLifetime, _ := time.ParseDuration(v.GetString("DB_CONN_MAX_LIFETIME"))
+	readTimeout := durationOrDefault(v.GetString("SERVER_READ_TIMEOUT"), 30*time.Second)
+	writeTimeout := durationOrDefault(v.GetString("SERVER_WRITE_TIMEOUT"), 30*time.Second)
+	accessExpiry := durationOrDefault(v.GetString("JWT_ACCESS_EXPIRY"), 15*time.Minute)
+	refreshExpiry := durationOrDefault(v.GetString("JWT_REFRESH_EXPIRY"), 7*24*time.Hour)
+	sessionAbsoluteExpiry := durationOrDefault(v.GetString("JWT_SESSION_ABSOLUTE_EXPIRY"), 30*24*time.Hour)
+	connMaxLifetime := durationOrDefault(v.GetString("DB_CONN_MAX_LIFETIME"), 5*time.Minute)
 
 	cfg := &Config{
 		Server: ServerConfig{
@@ -302,15 +219,17 @@ func Load() (*Config, error) {
 			PoolSize: v.GetInt("REDIS_POOL_SIZE"),
 		},
 		JWT: JWTConfig{
-			AccessSecret:  v.GetString("JWT_ACCESS_SECRET"),
-			RefreshSecret: v.GetString("JWT_REFRESH_SECRET"),
-			AccessExpiry:  accessExpiry,
-			RefreshExpiry: refreshExpiry,
-			Issuer:        v.GetString("JWT_ISSUER"),
+			AccessSecret:          v.GetString("JWT_ACCESS_SECRET"),
+			RefreshSecret:         v.GetString("JWT_REFRESH_SECRET"),
+			AccessExpiry:          accessExpiry,
+			RefreshExpiry:         refreshExpiry,
+			SessionAbsoluteExpiry: sessionAbsoluteExpiry,
+			Issuer:                v.GetString("JWT_ISSUER"),
 		},
 		Auth: AuthConfig{
 			SignatureKey:  v.GetString("AUTH_SIGNATURE_KEY"),
 			SignatureSalt: v.GetString("AUTH_SIGNATURE_SALT"),
+			EncryptionKey: v.GetString("CONFIG_ENCRYPTION_KEY"),
 		},
 		RateLimit: RateLimitConfig{
 			Enabled: v.GetBool("RATE_LIMIT_ENABLED"),
@@ -329,41 +248,6 @@ func Load() (*Config, error) {
 		Log: LogConfig{
 			Level:  v.GetString("LOG_LEVEL"),
 			Format: v.GetString("LOG_FORMAT"),
-		},
-		OAuth: OAuthConfig{
-			GitHub: OAuthProviderConfig{
-				ClientID:     v.GetString("OAUTH_GITHUB_CLIENT_ID"),
-				ClientSecret: v.GetString("OAUTH_GITHUB_CLIENT_SECRET"),
-				RedirectURL:  v.GetString("OAUTH_GITHUB_REDIRECT_URL"),
-			},
-			Google: OAuthProviderConfig{
-				ClientID:     v.GetString("OAUTH_GOOGLE_CLIENT_ID"),
-				ClientSecret: v.GetString("OAUTH_GOOGLE_CLIENT_SECRET"),
-				RedirectURL:  v.GetString("OAUTH_GOOGLE_REDIRECT_URL"),
-			},
-			LinuxDO: OAuthProviderConfig{
-				ClientID:     v.GetString("OAUTH_LINUXDO_CLIENT_ID"),
-				ClientSecret: v.GetString("OAUTH_LINUXDO_CLIENT_SECRET"),
-				RedirectURL:  v.GetString("OAUTH_LINUXDO_REDIRECT_URL"),
-			},
-			WeChat: OAuthProviderConfig{
-				ClientID:     v.GetString("OAUTH_WECHAT_CLIENT_ID"),
-				ClientSecret: v.GetString("OAUTH_WECHAT_CLIENT_SECRET"),
-				RedirectURL:  v.GetString("OAUTH_WECHAT_REDIRECT_URL"),
-			},
-			QQ: OAuthProviderConfig{
-				ClientID:     v.GetString("OAUTH_QQ_CLIENT_ID"),
-				ClientSecret: v.GetString("OAUTH_QQ_CLIENT_SECRET"),
-				RedirectURL:  v.GetString("OAUTH_QQ_REDIRECT_URL"),
-			},
-		},
-		SMTP: SMTPConfig{
-			Host:     v.GetString("SMTP_HOST"),
-			Port:     v.GetInt("SMTP_PORT"),
-			Username: v.GetString("SMTP_USERNAME"),
-			Password: v.GetString("SMTP_PASSWORD"),
-			From:     v.GetString("SMTP_FROM"),
-			UseTLS:   v.GetBool("SMTP_USE_TLS"),
 		},
 	}
 
@@ -386,4 +270,12 @@ func splitAndTrim(s string) []string {
 		}
 	}
 	return result
+}
+
+func durationOrDefault(value string, fallback time.Duration) time.Duration {
+	d, err := time.ParseDuration(value)
+	if err != nil || d <= 0 {
+		return fallback
+	}
+	return d
 }

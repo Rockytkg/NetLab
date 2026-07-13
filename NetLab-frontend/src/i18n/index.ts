@@ -18,6 +18,7 @@ import zhLogin from './locales/zh-CN/login.json'
 import zhMenu from './locales/zh-CN/menu.json'
 import zhLab from './locales/zh-CN/lab.json'
 import zhTopology from './locales/zh-CN/topology.json'
+import zhSettings from './locales/zh-CN/settings.json'
 
 // 英文翻译资源
 import enCommon from './locales/en-US/common.json'
@@ -25,6 +26,7 @@ import enLogin from './locales/en-US/login.json'
 import enMenu from './locales/en-US/menu.json'
 import enLab from './locales/en-US/lab.json'
 import enTopology from './locales/en-US/topology.json'
+import enSettings from './locales/en-US/settings.json'
 
 /** 翻译资源 */
 const resources = {
@@ -34,6 +36,7 @@ const resources = {
     menu: zhMenu,
     lab: zhLab,
     topology: zhTopology,
+    settings: zhSettings,
   },
   'en-US': {
     common: enCommon,
@@ -41,6 +44,7 @@ const resources = {
     menu: enMenu,
     lab: enLab,
     topology: enTopology,
+    settings: enSettings,
   },
 } as const
 

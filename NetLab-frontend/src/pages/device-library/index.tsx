@@ -20,12 +20,6 @@ export default function DeviceLibraryPage() {
 
   return (
     <div style={{ width: '100%' }}>
-      <div className="netlab-page-header">
-        <div>
-          <Title level={3}>{t('deviceLibrary')}</Title>
-          <Text type="secondary">Drag-and-drop devices to the topology canvas</Text>
-        </div>
-      </div>
       <Row gutter={[16, 16]}>
         {deviceCategories.map((cat) => (
           <Col xs={12} sm={8} md={6} key={cat.label}>

@@ -25,7 +25,7 @@ export default function MainLayout() {
   const isTablet = !!screens.md  // ≥ 768px
   const isDark = resolvedTheme === 'dark'
 
-  // 内容内边距 —— 响应式
+  // 内容内边距 —— 响应式。滚动仍由页面内部容器承接。
   const contentPadding = screens.xxl ? 32 : screens.xl ? 24 : 16
 
   // 共享的品牌标识区块（桌面端 Sider 和移动端 Drawer 均使用）
@@ -123,9 +123,10 @@ export default function MainLayout() {
         <Content
           className="netlab-main-content"
           style={{
+            flex: 1,
+            minHeight: 0,
+            overflow: 'hidden',
             padding: contentPadding,
-            minHeight: 280,
-            overflow: 'auto',
             background: token.colorBgLayout,
           }}
         >

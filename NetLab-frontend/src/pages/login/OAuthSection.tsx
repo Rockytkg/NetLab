@@ -1,17 +1,19 @@
-import { useCallback } from 'react'
-import { Button, Divider, Flex, Typography, Tooltip, App, theme } from 'antd'
+import { useCallback, useState } from 'react'
+import { Button, Divider, Flex, Typography, Tooltip, App, theme, Modal, Tabs, Form, Input, Space } from 'antd'
 import {
   GithubOutlined,
   GoogleOutlined,
   QqOutlined,
   WechatOutlined,
+  MailOutlined,
+  UserOutlined,
+  LockOutlined,
 } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
-import type { OAuthProvider } from '@/types/auth'
+import type { LoginResult, OAuthProvider, PendingOAuthBinding } from '@/types/auth'
 import { authApi } from '@/services/auth'
-import { useAuthStore } from '@/stores/authStore'
-import { tokenStorage } from '@/utils/token'
+import { completeLogin } from '@/utils/auth-flow'
 import PasskeyButton from './PasskeyButton'
 import LinuxDoIcon from '@/components/common/icons/LinuxDoIcon'
 
@@ -38,6 +40,24 @@ export default function OAuthSection({ providers, passkeyEnabled = false }: OAut
   const { message } = App.useApp()
   const { token } = theme.useToken()
   const navigate = useNavigate()
+  const [pending, setPending] = useState<PendingOAuthBinding | null>(null)
+  const [submitting, setSubmitting] = useState(false)
+  const [codeCooldown, setCodeCooldown] = useState(0)
+  const [activeTab, setActiveTab] = useState('existing')
+  const [existingForm] = Form.useForm()
+  const [createForm] = Form.useForm()
+
+  const handleLoginResult = useCallback((result: LoginResult) => {
+    if (result.pendingOAuthBinding) {
+      setPending(result.pendingOAuthBinding)
+      setActiveTab('existing')
+      message.info(t('oauthBindingRequired'))
+      return
+    }
+    if (completeLogin(result, navigate)) {
+      message.success(t('loginSuccess'))
+    }
+  }, [message, navigate, t])
 
   const handleOAuthLogin = useCallback((provider: OAuthProvider) => {
     const width = 600; const height = 700
@@ -66,15 +86,7 @@ export default function OAuthSection({ providers, passkeyEnabled = false }: OAut
           code: event.data.code,
           state: event.data.state,
         })
-        tokenStorage.setAccessToken(result.accessToken)
-        tokenStorage.setRefreshToken(result.refreshToken)
-        useAuthStore.setState({
-          accessToken: result.accessToken,
-          refreshToken: result.refreshToken,
-          userInfo: result.user,
-        })
-        message.success(t('loginSuccess'))
-        navigate('/dashboard', { replace: true })
+        handleLoginResult(result)
       } catch {
         message.error(t('loginFailed'))
       }
@@ -84,7 +96,69 @@ export default function OAuthSection({ providers, passkeyEnabled = false }: OAut
     const checkClosed = setInterval(() => {
       if (popup.closed) { clearInterval(checkClosed); window.removeEventListener('message', handleMessage) }
     }, 500)
-  }, [t, message, navigate])
+  }, [handleLoginResult, t, message])
+
+  const requestEmailCode = async (purpose: 'register' | 'change-email') => {
+    const form = purpose === 'register' ? createForm : existingForm
+    const email = form.getFieldValue('email')
+    if (!email) {
+      message.warning(t('emailRequired'))
+      return
+    }
+    try {
+      const result = await authApi.sendCode({ email, purpose })
+      setCodeCooldown(result.cooldown || 60)
+      message.success(t('sendCodeSuccess'))
+      const timer = window.setInterval(() => {
+        setCodeCooldown((value) => {
+          if (value <= 1) {
+            window.clearInterval(timer)
+            return 0
+          }
+          return value - 1
+        })
+      }, 1000)
+    } catch {
+      /* handled by interceptor */
+    }
+  }
+
+  const bindExisting = async (values: { account: string; verifyCode: string }) => {
+    if (!pending) return
+    setSubmitting(true)
+    try {
+      const result = await authApi.oauthBindExisting({
+        pendingToken: pending.token,
+        account: values.account,
+        verifyCode: values.verifyCode,
+      })
+      setPending(null)
+      handleLoginResult(result)
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const createAccount = async (values: {
+    username: string
+    email: string
+    password: string
+    confirmPassword: string
+    verifyCode: string
+  }) => {
+    if (!pending) return
+    setSubmitting(true)
+    try {
+      const result = await authApi.oauthCreateAccount({
+        pendingToken: pending.token,
+        ...values,
+      })
+      setPending(null)
+      handleLoginResult(result)
+    } finally {
+      setSubmitting(false)
+    }
+  }
 
   const hasPasskey = passkeyEnabled
   const hasOAuth = providers.length > 0
@@ -112,6 +186,93 @@ export default function OAuthSection({ providers, passkeyEnabled = false }: OAut
           </Tooltip>
         ))}
       </Flex>
+
+      <Modal
+        title={t('oauthBindingTitle')}
+        open={!!pending}
+        onCancel={() => setPending(null)}
+        footer={null}
+        destroyOnHidden
+      >
+        <Typography.Paragraph type="secondary" style={{ marginBottom: token.margin }}>
+          {t('oauthBindingSubtitle', { provider: pending?.provider ?? '' })}
+        </Typography.Paragraph>
+        <Tabs
+          activeKey={activeTab}
+          onChange={setActiveTab}
+          items={[
+            {
+              key: 'existing',
+              label: t('oauthBindExisting'),
+              children: (
+                <Form form={existingForm} layout="vertical" requiredMark={false} onFinish={bindExisting}>
+                  <Form.Item name="account" label={t('oauthAccount')} rules={[{ required: true, message: t('oauthAccountRequired') }]}>
+                    <Input prefix={<UserOutlined />} autoComplete="username" />
+                  </Form.Item>
+                  <Form.Item name="email" label={t('email')} rules={[{ required: true, type: 'email', message: t('emailInvalid') }]}>
+                    <Input prefix={<MailOutlined />} autoComplete="email" />
+                  </Form.Item>
+                  <Form.Item name="verifyCode" label={t('verifyCode')} rules={[{ required: true, message: t('verifyCodeRequired') }]}>
+                    <Space.Compact style={{ width: '100%' }}>
+                      <Input maxLength={6} autoComplete="one-time-code" />
+                      <Button disabled={codeCooldown > 0} onClick={() => requestEmailCode('change-email')}>
+                        {codeCooldown > 0 ? t('sendCodeRetry', { seconds: codeCooldown }) : t('sendCode')}
+                      </Button>
+                    </Space.Compact>
+                  </Form.Item>
+                  <Button type="primary" htmlType="submit" block loading={submitting}>
+                    {t('oauthBindAndLogin')}
+                  </Button>
+                </Form>
+              ),
+            },
+            {
+              key: 'create',
+              label: t('oauthCreateAccount'),
+              children: (
+                <Form form={createForm} layout="vertical" requiredMark={false} onFinish={createAccount}>
+                  <Form.Item name="username" label={t('username')} rules={[{ required: true, message: t('usernameRequired') }]}>
+                    <Input prefix={<UserOutlined />} autoComplete="username" />
+                  </Form.Item>
+                  <Form.Item name="email" label={t('email')} rules={[{ required: true, type: 'email', message: t('emailInvalid') }]}>
+                    <Input prefix={<MailOutlined />} autoComplete="email" />
+                  </Form.Item>
+                  <Form.Item name="password" label={t('password')} rules={[{ required: true, message: t('passwordRequired') }, { min: 8, message: t('passwordMinLength') }]}>
+                    <Input.Password prefix={<LockOutlined />} autoComplete="new-password" />
+                  </Form.Item>
+                  <Form.Item
+                    name="confirmPassword"
+                    label={t('confirmPassword')}
+                    dependencies={['password']}
+                    rules={[
+                      { required: true, message: t('confirmPasswordRequired') },
+                      ({ getFieldValue }) => ({
+                        validator(_, value) {
+                          if (!value || getFieldValue('password') === value) return Promise.resolve()
+                          return Promise.reject(new Error(t('passwordMismatch')))
+                        },
+                      }),
+                    ]}
+                  >
+                    <Input.Password prefix={<LockOutlined />} autoComplete="new-password" />
+                  </Form.Item>
+                  <Form.Item name="verifyCode" label={t('verifyCode')} rules={[{ required: true, message: t('verifyCodeRequired') }]}>
+                    <Space.Compact style={{ width: '100%' }}>
+                      <Input maxLength={6} autoComplete="one-time-code" />
+                      <Button disabled={codeCooldown > 0} onClick={() => requestEmailCode('register')}>
+                        {codeCooldown > 0 ? t('sendCodeRetry', { seconds: codeCooldown }) : t('sendCode')}
+                      </Button>
+                    </Space.Compact>
+                  </Form.Item>
+                  <Button type="primary" htmlType="submit" block loading={submitting}>
+                    {t('oauthCreateAndLogin')}
+                  </Button>
+                </Form>
+              ),
+            },
+          ]}
+        />
+      </Modal>
     </>
   )
 }

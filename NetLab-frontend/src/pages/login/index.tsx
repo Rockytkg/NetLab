@@ -238,12 +238,15 @@ export default function LoginPage() {
     authApi.getSystemConfig()
       .then(setConfig)
       .catch(() => {
-        setConfig({ registrationEnabled: true, captchaEnabled: false, passkeyEnabled: false, oauthProviders: [] })
+        setConfig({ registrationEnabled: true, captchaEnabled: false, passkeyEnabled: false, passwordResetEnabled: true, oauthProviders: [] })
       })
       .finally(() => setConfigLoading(false))
   }, [])
 
-  const handleForgotPassword = useCallback(() => setForgotOpen(true), [])
+  const handleForgotPassword = useCallback(() => {
+    if (config?.passwordResetEnabled === false) return
+    setForgotOpen(true)
+  }, [config?.passwordResetEnabled])
   const handleRegister = useCallback(() => setFlow('register'), [])
   const handleBackToLogin = useCallback(() => setFlow('login'), [])
 
@@ -461,7 +464,9 @@ export default function LoginPage() {
         </div>
       </Layout>
 
-      <ForgotPasswordModal open={forgotOpen} onClose={() => setForgotOpen(false)} />
+      {config?.passwordResetEnabled !== false && (
+        <ForgotPasswordModal open={forgotOpen} onClose={() => setForgotOpen(false)} />
+      )}
     </>
   )
 }
