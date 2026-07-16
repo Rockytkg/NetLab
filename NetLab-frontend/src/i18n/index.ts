@@ -16,16 +16,14 @@ import { setI18nT } from '@/utils/i18n-bridge'
 import zhCommon from './locales/zh-CN/common.json'
 import zhLogin from './locales/zh-CN/login.json'
 import zhMenu from './locales/zh-CN/menu.json'
-import zhLab from './locales/zh-CN/lab.json'
-import zhTopology from './locales/zh-CN/topology.json'
+import zhOperations from './locales/zh-CN/operations.json'
 import zhSettings from './locales/zh-CN/settings.json'
 
 // 英文翻译资源
 import enCommon from './locales/en-US/common.json'
 import enLogin from './locales/en-US/login.json'
 import enMenu from './locales/en-US/menu.json'
-import enLab from './locales/en-US/lab.json'
-import enTopology from './locales/en-US/topology.json'
+import enOperations from './locales/en-US/operations.json'
 import enSettings from './locales/en-US/settings.json'
 
 /** 翻译资源 */
@@ -34,16 +32,14 @@ const resources = {
     common: zhCommon,
     login: zhLogin,
     menu: zhMenu,
-    lab: zhLab,
-    topology: zhTopology,
+    operations: zhOperations,
     settings: zhSettings,
   },
   'en-US': {
     common: enCommon,
     login: enLogin,
     menu: enMenu,
-    lab: enLab,
-    topology: enTopology,
+    operations: enOperations,
     settings: enSettings,
   },
 } as const

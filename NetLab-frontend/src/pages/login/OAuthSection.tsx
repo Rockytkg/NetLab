@@ -167,11 +167,11 @@ export default function OAuthSection({ providers, passkeyEnabled = false }: OAut
 
   return (
     <>
-      <Divider plain style={{ marginBlock: token.marginLG, marginBottom: token.margin }}>
+      <Divider plain className="netlab-login-oauth-divider" style={{ marginBlock: token.marginLG, marginBottom: token.margin }}>
         <Text type="secondary" style={{ fontSize: token.fontSizeSM }}>{t('orSignInWith')}</Text>
       </Divider>
 
-      <Flex justify="center" gap={token.padding}>
+      <Flex justify="center" gap={token.padding} className="netlab-login-oauth-buttons">
         {hasPasskey && <PasskeyButton variant="circle" />}
         {providers.map((provider) => (
           <Tooltip key={provider.id} title={t(`oauth_${provider.id}`, provider.name)}>

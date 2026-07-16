@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-NetLab is an EVE-NG-like network simulator with a React frontend and Go backend. It provides a web-based platform for creating, editing, and monitoring virtual network topologies.
+NetLab is a Network Management Center for real network operations. It uses a React frontend and Go backend to manage real routers, switches, firewalls, load balancers, and other infrastructure devices. The product direction is a comprehensive operations platform with device inventory, SNMP monitoring, Syslog aggregation, RADIUS authentication/auditing, alert policies, and operational dashboards.
 
 | Layer | Stack | Directory |
 |-------|-------|-----------|
@@ -50,12 +50,12 @@ NetLab/
 │   ├── CLAUDE.md                # Frontend development constitution (READ FIRST)
 │   ├── src/
 │   │   ├── components/          # layout/, auth/, common/
-│   │   ├── pages/               # login/, dashboard/, lab/, labs/, settings/, etc.
+│   │   ├── pages/               # login/, dashboard/, device-groups/, devices/, observability/, settings/, etc.
 │   │   ├── router/              # Single-file route config
-│   │   ├── stores/              # Zustand: appStore, authStore, labStore
+│   │   ├── stores/              # Zustand: appStore, authStore, operationsStore
 │   │   ├── services/            # Axios instance + API service objects
 │   │   ├── hooks/               # useAuth, usePasskey, useI18n, useResolvedTheme
-│   │   ├── i18n/                # i18next init + zh-CN/en-US locale JSONs (5 namespaces)
+│   │   ├── i18n/                # i18next init + zh-CN/en-US locale JSONs
 │   │   ├── types/               # TypeScript DTOs
 │   │   └── utils/               # crypto.ts, token.ts, constants.ts, i18n-bridge.ts
 │   └── docs/                    # api-for-ai-agents.md, ui-redesign-proposal.md
@@ -162,7 +162,7 @@ PostgreSQL runs on port 5432 (user: `netlab`, db: `netlab`). Redis runs on port 
 
 | Phase | Status | Scope |
 |-------|--------|-------|
-| Phase 1 | ✅ Complete | Layout shell, theme, routing, i18n, auth (login/register/passkey/OAuth/captcha/forgot-password), dashboard lab list, placeholder pages |
-| Phase 2 | 🔲 Planned | AntV X6 topology editor, device panel, device config drawer, lab editor |
-| Phase 3 | 🔲 Planned | Lab monitoring (G6), device console (xterm.js + WebSocket), real-time updates |
-| Phase 4 | 🔲 Planned | Dark mode, responsive polish, keyboard shortcuts, collaborative editing (Yjs), WASM |
+| Phase 1 | ✅ Complete | Layout shell, theme, routing, i18n, auth, dashboard device-group list, placeholder pages |
+| Phase 2 | 🔲 Planned | Device inventory, site/group management, device details, real network topology view |
+| Phase 3 | 🔲 Planned | SNMP polling, metric trends, interface monitoring, Syslog ingestion and search |
+| Phase 4 | 🔲 Planned | RADIUS authentication/auditing, alert policies, notification workflows, responsive operations workspace |

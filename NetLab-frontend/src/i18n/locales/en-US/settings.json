@@ -4,6 +4,10 @@
   "saveFailed": "Failed to save",
   "save": "Save",
   "saving": "Saving…",
+  "title": "System Settings",
+  "retry": "Retry",
+  "loadFailedTitle": "Failed to load system settings",
+  "loadFailedDescription": "Check the backend service or network connection, then try again.",
   "pageDescription": "Manage filing info, security policies, email delivery, third-party login, and passkeys.",
   "tabs": {
     "beian": "Filing Info",

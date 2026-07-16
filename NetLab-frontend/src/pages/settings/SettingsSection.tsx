@@ -17,11 +17,9 @@ export default function SettingsSection({
       vertical
       className="netlab-settings-section"
       style={{
-        height: '100%',
         minWidth: 0,
-        paddingBlock: token.padding,
+        padding: token.padding,
         width: '100%',
-        overflow: 'hidden',
       }}
     >
       {extra && (

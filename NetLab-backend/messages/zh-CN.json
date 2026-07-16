@@ -41,7 +41,7 @@
   { "id": "email.verification.default_action", "translation": "当前操作" },
   { "id": "email.verification.expiry", "translation": "此验证码10分钟内有效。如非本人操作，请忽略此邮件。" },
   { "id": "email.footer", "translation": "此邮件由系统自动发送，请勿回复。" },
-  { "id": "email.brand", "translation": "NetLab — 企业网络模拟平台" },
+  { "id": "email.brand", "translation": "NetLab — 网络管理中心" },
 
   { "id": "email.register.subject", "translation": "NetLab - 注册验证码" },
   { "id": "email.register.title", "translation": "完成您的注册" },

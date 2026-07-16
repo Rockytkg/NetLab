@@ -6,6 +6,12 @@ import {
   theme,
   Spin,
   Space,
+  Flex,
+  Grid,
+  Card,
+  Row,
+  Col,
+  Tag,
 } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '@/stores/authStore'
@@ -14,6 +20,10 @@ import {
   CopyrightOutlined,
   SafetyCertificateOutlined,
   SafetyOutlined,
+  ClusterOutlined,
+  RadarChartOutlined,
+  DeploymentUnitOutlined,
+  ControlOutlined,
 } from '@ant-design/icons'
 import { authApi } from '@/services/auth'
 import type { SystemConfig } from '@/types/auth'
@@ -23,10 +33,12 @@ import ForgotPasswordModal from './ForgotPasswordModal'
 import OAuthSection from './OAuthSection'
 import ThemeSwitcher from '@/components/common/ThemeSwitcher'
 import LanguageSwitcher from '@/components/common/LanguageSwitcher'
+import '@/assets/css/login.css'
 
-const { Title, Text } = Typography
+const { Title, Text, Paragraph } = Typography
+const { Content } = Layout
+const { useBreakpoint } = Grid
 
-/* ── 动画网络拓扑画布（左侧面板装饰） ── */
 function TopologyDecoration() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
 
@@ -48,7 +60,6 @@ function TopologyDecoration() {
     resize()
     window.addEventListener('resize', resize)
 
-    // 初始化节点
     for (let i = 0; i < NODE_COUNT; i++) {
       nodes.push({
         x: Math.random() * canvas.width,
@@ -66,8 +77,6 @@ function TopologyDecoration() {
       ctx!.clearRect(0, 0, w, h)
 
       const t = Date.now() / 1000
-
-      // 更新并绘制节点
       for (const n of nodes) {
         n.x += n.vx
         n.y += n.vy
@@ -85,7 +94,6 @@ function TopologyDecoration() {
         ctx!.fill()
       }
 
-      // 在邻近节点之间绘制连线
       for (let i = 0; i < nodes.length; i++) {
         for (let j = i + 1; j < nodes.length; j++) {
           const dx = nodes[i].x - nodes[j].x
@@ -103,7 +111,6 @@ function TopologyDecoration() {
         }
       }
 
-      // 中心处缓慢脉动的光晕
       const glowAlpha = 0.03 + Math.sin(t * 0.5) * 0.015
       const glow = ctx!.createRadialGradient(w * 0.4, h * 0.4, 0, w * 0.4, h * 0.4, Math.max(w, h) * 0.6)
       glow.addColorStop(0, `rgba(96,165,250,${glowAlpha * 3})`)
@@ -121,41 +128,29 @@ function TopologyDecoration() {
     }
   }, [])
 
-  return (
-    <canvas
-      ref={canvasRef}
-      style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }}
-    />
-  )
+  return <canvas ref={canvasRef} className="netlab-auth-canvas" />
 }
 
 type AuthFlow = 'login' | 'register'
 
-/* 固定的跳转链接模板 —— 现在后端只返回备案号。 */
 const ICP_BEIAN_URL = 'https://beian.miit.gov.cn/#/Integrated/index'
 const POLICE_BEIAN_URL = 'https://beian.mps.gov.cn/'
 
-/* ── 单行版权 + 备案页脚 ──
-   将版权、ICP、公安备案渲染在同一水平行中，每项前
-   带一个 Ant Design 图标并以中点分隔。在较窄宽度下
-   优雅换行（Growing）。 */
 function BeianFooter({ config, inverted = false }: { config: SystemConfig | null; inverted?: boolean }) {
   const { t } = useTranslation(['login', 'common'])
-  const { token: themeToken } = theme.useToken()
+  const { token } = theme.useToken()
 
   const icp = config?.icpBeian?.trim()
   const police = config?.policeBeian?.trim()
-
-  // 在深色画面上我们保持柔和的石板色调；其他情况下回退到
-  // 主题的 on-surface-variant token（浅色主题解析为约 #595959）。
-  const textColor = inverted ? 'rgba(148,163,184,0.7)' : themeToken.colorTextTertiary
-  const linkColor = inverted ? 'rgba(148,163,184,0.9)' : themeToken.colorTextSecondary
+  const textColor = inverted ? 'rgba(148,163,184,0.72)' : token.colorTextTertiary
+  const linkColor = inverted ? 'rgba(203,213,225,0.9)' : token.colorTextSecondary
 
   const itemStyle: React.CSSProperties = {
     display: 'inline-flex',
     alignItems: 'center',
-    gap: themeToken.marginXXS, // 4px —— 间距单位
-    fontSize: themeToken.fontSizeSM, // body-sm：12px
+    gap: token.marginXXS,
+    color: textColor,
+    fontSize: token.fontSizeSM,
     lineHeight: '20px',
     whiteSpace: 'nowrap',
   }
@@ -170,13 +165,14 @@ function BeianFooter({ config, inverted = false }: { config: SystemConfig | null
     {
       key: 'copyright',
       node: (
-        <span style={{ ...itemStyle, color: textColor }}>
+        <Text style={itemStyle}>
           <CopyrightOutlined />
           {new Date().getFullYear()} {t('common:appName')}
-        </span>
+        </Text>
       ),
     },
   ]
+
   if (icp) {
     items.push({
       key: 'icp',
@@ -188,6 +184,7 @@ function BeianFooter({ config, inverted = false }: { config: SystemConfig | null
       ),
     })
   }
+
   if (police) {
     items.push({
       key: 'police',
@@ -201,36 +198,27 @@ function BeianFooter({ config, inverted = false }: { config: SystemConfig | null
   }
 
   return (
-    <div
-      style={{
-        display: 'flex',
-        flexWrap: 'wrap',
-        alignItems: 'center',
-        columnGap: themeToken.marginXS, // 各项之间 8px
-        rowGap: themeToken.marginXXS,
-        color: textColor,
-      }}
-    >
-      {items.map((item, idx) => (
+    <Flex wrap align="center" gap={token.marginXS}>
+      {items.map((item, index) => (
         <Fragment key={item.key}>
-          {idx > 0 && (
-            <span aria-hidden style={{ color: textColor, opacity: 0.5, fontSize: themeToken.fontSizeSM }}>·</span>
-          )}
+          {index > 0 && <Text style={{ color: textColor, opacity: 0.5 }}>·</Text>}
           {item.node}
         </Fragment>
       ))}
-    </div>
+    </Flex>
   )
 }
 
 export default function LoginPage() {
-  const { t } = useTranslation(['login', 'common'])
-  const token = useAuthStore((s) => s.accessToken)
-  const { token: themeToken } = theme.useToken()
+  const { t } = useTranslation(['login', 'common', 'operations'])
+  const accessToken = useAuthStore((s) => s.accessToken)
+  const { token } = theme.useToken()
+  const screens = useBreakpoint()
+  const isDesktop = Boolean(screens.lg)
+  const isCompact = !screens.md
 
   const [flow, setFlow] = useState<AuthFlow>('login')
   const [forgotOpen, setForgotOpen] = useState(false)
-
   const [config, setConfig] = useState<SystemConfig | null>(null)
   const [configLoading, setConfigLoading] = useState(true)
 
@@ -247,221 +235,238 @@ export default function LoginPage() {
     if (config?.passwordResetEnabled === false) return
     setForgotOpen(true)
   }, [config?.passwordResetEnabled])
+
   const handleRegister = useCallback(() => setFlow('register'), [])
   const handleBackToLogin = useCallback(() => setFlow('login'), [])
 
-  if (token) {
+  if (accessToken) {
     return <Navigate to="/dashboard" replace />
   }
 
+  const capabilityDomains: Array<{ label: string; desc: string; icon: React.ReactNode; color: string }> = [
+    { label: t('vpTopologyTitle'), desc: t('vpTopologyDesc'), icon: <ClusterOutlined />, color: '#22d3ee' },
+    { label: t('vpDevicesTitle'), desc: t('vpDevicesDesc'), icon: <RadarChartOutlined />, color: '#60a5fa' },
+    { label: t('vpRealtimeTitle'), desc: t('vpRealtimeDesc'), icon: <DeploymentUnitOutlined />, color: '#34d399' },
+  ]
+
+  const capabilityTags = ['SNMP', 'Syslog', 'RADIUS', 'NETCONF', 'Telemetry', 'RoCE', 'Flow', 'gNMI']
+
+  const header = flow === 'register'
+    ? { title: t('registerTitle'), subtitle: t('registerSubtitle') }
+    : { title: t('welcome'), subtitle: t('subtitle') }
+
   return (
     <>
-      {/* ── 全屏布局 ── */}
-      <Layout style={{ minHeight: '100vh' }}>
-        <div style={{ display: 'flex', minHeight: '100vh' }}>
+      <Layout className="netlab-auth-layout">
+        <Flex className="netlab-auth-shell" align="stretch">
+          {isDesktop && (
+            <Content className="netlab-auth-visual">
+              <TopologyDecoration />
+              <Flex
+                vertical
+                justify="space-between"
+                className="netlab-auth-visual-inner"
+                style={{ padding: 'clamp(40px, 6vh, 80px) clamp(40px, 5vw, 72px)' }}
+              >
+                <Flex vertical justify="center" flex="1 1 auto" gap={token.marginXL}>
+                  <Row gutter={[token.marginXL, token.marginLG]} align="middle">
+                    <Col span={screens.xxl ? 11 : 24}>
+                      <Space orientation="vertical" size={token.margin}>
+                        <Flex align="center" gap={token.margin} wrap="nowrap">
+                          <img
+                            src="/logo-mark.svg"
+                            alt="NetLab"
+                            width={48}
+                            height={48}
+                            style={{
+                              display: 'block',
+                              flex: '0 0 auto',
+                              borderRadius: token.borderRadiusLG,
+                              boxShadow: '0 0 32px rgba(20, 184, 166, 0.26)',
+                            }}
+                          />
+                          <Title level={1} style={{ margin: 0, color: '#f1f5f9', fontSize: screens.xxl ? 40 : 34, lineHeight: 1.2 }}>
+                            {t('brandTitle')}
+                          </Title>
+                        </Flex>
+                        <Paragraph style={{ maxWidth: 560, margin: 0, color: 'rgba(203,213,225,0.88)', fontSize: 15, lineHeight: 1.75 }}>
+                          {t('brandSubtitle')}
+                        </Paragraph>
+                      </Space>
+                    </Col>
 
-          {/* ═══════════════════════════════════════
-              左侧面板 —— 品牌 + 拓扑动画
-              ═══════════════════════════════════════ */}
-          <div
+                    <Col span={screens.xxl ? 13 : 24}>
+                      <Row gutter={[token.marginSM, token.marginSM]} className="netlab-auth-feature-stack">
+                        {capabilityDomains.map((item) => (
+                          <Col span={screens.xl ? 8 : 24} key={item.label}>
+                            <Card
+                              size="small"
+                              variant="borderless"
+                              styles={{ body: { height: '100%', padding: `${token.padding}px ${token.paddingLG}px` } }}
+                              style={{
+                                height: '100%',
+                                background: 'rgba(15, 23, 42, 0.34)',
+                                backdropFilter: 'blur(8px)',
+                                border: '1px solid rgba(148, 163, 184, 0.16)',
+                              }}
+                            >
+                              <Space orientation="vertical" size={token.marginXS}>
+                                <span style={{ color: item.color, fontSize: 22, lineHeight: 1 }}>
+                                  {item.icon}
+                                </span>
+                                <Text strong style={{ color: '#e2e8f0' }}>{item.label}</Text>
+                                <Text style={{ color: 'rgba(148,163,184,0.86)', fontSize: token.fontSizeSM, lineHeight: 1.6 }}>
+                                  {item.desc}
+                                </Text>
+                              </Space>
+                            </Card>
+                          </Col>
+                        ))}
+                      </Row>
+                    </Col>
+                  </Row>
+
+                  <Card
+                    size="small"
+                    variant="borderless"
+                    className="netlab-auth-protocol-card"
+                    styles={{ body: { padding: `${token.paddingSM}px ${token.paddingLG}px` } }}
+                    style={{
+                      background: 'rgba(15, 23, 42, 0.28)',
+                      border: '1px solid rgba(148, 163, 184, 0.14)',
+                    }}
+                  >
+                    <Flex justify="space-between" align="center" gap={token.margin} wrap>
+                      <Space align="center" size={token.marginSM}>
+                        <ControlOutlined style={{ color: '#93c5fd', fontSize: token.fontSizeLG }} />
+                        <Text style={{ color: 'rgba(226,232,240,0.9)', fontSize: token.fontSizeSM }}>
+                          {t('protocolEcosystem')}
+                        </Text>
+                      </Space>
+                      <Space size={[token.marginXS, token.marginXS]} wrap>
+                        {capabilityTags.map((item) => (
+                          <Tag key={item} variant="filled" style={{ marginInlineEnd: 0, color: '#cbd5e1', background: 'rgba(148, 163, 184, 0.14)' }}>
+                            {item}
+                          </Tag>
+                        ))}
+                      </Space>
+                    </Flex>
+                  </Card>
+                </Flex>
+
+                <Space orientation="vertical" size={token.marginXS}>
+                  <Space size={4} align="center" wrap>
+                    <ThemeSwitcher inverted showLabel />
+                    <LanguageSwitcher inverted showLabel />
+                  </Space>
+                  <BeianFooter config={config} inverted />
+                </Space>
+              </Flex>
+            </Content>
+          )}
+
+          <Content
             style={{
-              flex: '1 1 48%',
-              position: 'relative',
-              overflow: 'hidden',
-              background: 'linear-gradient(160deg, #0B1A33 0%, #132347 30%, #0F2348 60%, #0A1628 100%)',
-              display: 'flex',
-              flexDirection: 'column',
-              justifyContent: 'center',
-              padding: '80px 64px',
+              flex: isDesktop ? '0 0 min(500px, 46vw)' : '1 1 auto',
+              minWidth: 0,
+              background: token.colorBgContainer,
             }}
           >
-            {/* 动画画布图层 */}
-            <TopologyDecoration />
-
-            {/* 微妙的网格叠加层 */}
-            <div
-              aria-hidden="true"
+            <Flex
+              vertical
+              justify="center"
+              align="center"
+              className="netlab-auth-panel"
               style={{
-                position: 'absolute', inset: 0, opacity: 0.03,
-                backgroundImage: 'linear-gradient(rgba(255,255,255,0.8) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.8) 1px, transparent 1px)',
-                backgroundSize: '60px 60px',
+                height: '100%',
+                padding: isCompact ? token.padding : `${token.paddingXL * 2}px ${token.paddingXL + token.padding}px`,
               }}
-            />
+            >
+              {!isDesktop && (
+                <Flex justify="space-between" align="center" gap={token.marginSM} style={{ width: '100%', maxWidth: 420, marginBottom: token.marginLG }}>
+                  <Space size={token.marginSM} align="center">
+                    <img src="/logo-mark.svg" alt="" aria-hidden width={24} height={24} style={{ display: 'block', borderRadius: token.borderRadius }} />
+                    <Space orientation="vertical" size={0}>
+                      <Text strong>{t('common:appName')}</Text>
+                      <Text type="secondary" style={{ fontSize: token.fontSizeSM }}>{t('brandShortSubtitle')}</Text>
+                    </Space>
+                  </Space>
+                  <Space size={0}>
+                    <ThemeSwitcher />
+                    <LanguageSwitcher />
+                  </Space>
+                </Flex>
+              )}
 
-            {/* 内容 */}
-            <div style={{ position: 'relative', zIndex: 2, maxWidth: 520 }}>
-              {/* Logo 标识 */}
-              <div style={{ marginBottom: 40 }}>
-                <img
-                  src="/logo-mark.svg"
-                  alt="NetLab"
-                  width={44}
-                  height={44}
-                  style={{
-                    display: 'block',
-                    borderRadius: 12,
-                    boxShadow: '0 0 32px rgba(59,130,246,0.35)',
-                    marginBottom: 20,
-                  }}
-                />
-                <h1
-                  style={{
-                    fontSize: 32,
-                    fontWeight: 700,
-                    lineHeight: 1.25,
-                    margin: 0,
-                    color: '#F1F5F9',
-                    letterSpacing: 0,
-                  }}
-                >
-                  {t('brandTitle')}
-                </h1>
-              </div>
-
-              <p
+              <Card
+                variant="borderless"
+                className="netlab-auth-form-card"
+                styles={{
+                  body: {
+                    padding: isCompact ? token.paddingLG : token.paddingXL,
+                  },
+                }}
                 style={{
-                  fontSize: 15,
-                  lineHeight: 1.7,
-                  color: 'rgba(203,213,225,0.85)',
-                  margin: '0 0 48px',
-                  maxWidth: 420,
+                  width: '100%',
+                  maxWidth: isCompact ? 420 : 404,
+                  background: isDesktop ? 'transparent' : token.colorBgElevated,
+                  boxShadow: isDesktop ? 'none' : token.boxShadowTertiary,
                 }}
               >
-                {t('brandSubtitle')}
-              </p>
-
-              {/* 功能标签 */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-                {[
-                  { label: t('vpTopologyTitle'), desc: t('vpTopologyDesc') },
-                  { label: t('vpDevicesTitle'), desc: t('vpDevicesDesc') },
-                  { label: t('vpRealtimeTitle'), desc: t('vpRealtimeDesc') },
-                ].map((item) => (
-                  <div key={item.label} style={{ display: 'flex', gap: 14, alignItems: 'flex-start' }}>
-                    <div
-                      style={{
-                        width: 8, height: 8,
-                        borderRadius: 9999,
-                        background: '#3B82F6',
-                        boxShadow: '0 0 8px rgba(59,130,246,0.5)',
-                        flexShrink: 0,
-                        marginTop: 6,
-                      }}
-                    />
-                    <div>
-                      <div style={{ fontSize: 14, fontWeight: 600, color: '#E2E8F0', marginBottom: 2 }}>
-                        {item.label}
-                      </div>
-                      <div style={{ fontSize: 12, color: 'rgba(148,163,184,0.8)', lineHeight: 1.5 }}>
-                        {item.desc}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* 设置 + 版权/备案 —— 底部 */}
-            <div style={{ position: 'relative', zIndex: 2, marginTop: 'auto', paddingTop: 48 }}>
-              <Space size={4} align="center" wrap>
-                <ThemeSwitcher inverted showLabel />
-                <LanguageSwitcher inverted showLabel />
-              </Space>
-              <div style={{ marginTop: 12 }}>
-                <BeianFooter config={config} inverted />
-              </div>
-            </div>
-          </div>
-
-          {/* ═════════════════════════════
-              右侧面板 —— 表单
-              ═════════════════════════════ */}
-          <div
-            style={{
-              flex: '0 0 500px',
-              display: 'flex',
-              flexDirection: 'column',
-              justifyContent: 'center',
-              alignItems: 'center',
-              padding: '64px 56px',
-              background: themeToken.colorBgContainer,
-            }}
-          >
-            <div style={{ width: '100%', maxWidth: 380 }}>
-              {/* 依赖流程的头部 */}
-              {flow === 'register' ? (
-                <div style={{ marginBottom: 28 }}>
-                  <Title level={3} style={{ marginBottom: 4, fontWeight: 700, fontSize: 24 }}>
-                    {t('registerTitle')}
-                  </Title>
-                  <Text type="secondary" style={{ fontSize: 14 }}>{t('registerSubtitle')}</Text>
-                </div>
-              ) : (
-                <div style={{ marginBottom: 28 }}>
-                  <Space size={8} align="center">
-                    <img
-                      src="/logo-mark.svg"
-                      alt=""
-                      aria-hidden
-                      width={20}
-                      height={20}
-                      style={{ display: 'block', borderRadius: themeToken.borderRadiusSM }}
-                    />
-                    <span style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                      <Text style={{ fontSize: 13, fontWeight: 600, color: themeToken.colorText, lineHeight: '18px', letterSpacing: 0 }}>
-                        {t('common:appName')}
-                      </Text>
-                      <Text style={{ fontSize: 11, color: themeToken.colorTextTertiary, lineHeight: '16px', letterSpacing: 0 }}>
-                        {t('brandShortSubtitle')}
-                      </Text>
-                    </span>
+                <Space orientation="vertical" size={isCompact ? token.margin : token.marginLG} style={{ width: '100%' }}>
+                  <Space orientation="vertical" size={token.marginXXS} style={{ width: '100%' }}>
+                    <Flex align="center" gap={token.marginXS}>
+                      <img
+                        src="/logo-mark.svg"
+                        alt=""
+                        aria-hidden
+                        width={isCompact ? 24 : 28}
+                        height={isCompact ? 24 : 28}
+                        style={{ display: 'block', flex: '0 0 auto', borderRadius: token.borderRadiusSM }}
+                      />
+                      <Title level={3} style={{ margin: 0, fontSize: isCompact ? 22 : 24, lineHeight: 1.3 }}>
+                        {header.title}
+                      </Title>
+                    </Flex>
+                    <Text type="secondary">{header.subtitle}</Text>
                   </Space>
-                  <Title level={3} style={{ marginTop: 4, marginBottom: 4, fontWeight: 700, fontSize: 24 }}>
-                    {t('welcome')}
-                  </Title>
-                  <Text type="secondary" style={{ fontSize: 14 }}>{t('subtitle')}</Text>
-                </div>
-              )}
 
-              {configLoading ? (
-                <div style={{ padding: 48, textAlign: 'center' }}>
-                  <Spin size="small" />
-                </div>
-              ) : (
-                <>
-                  {/* 主表单 */}
-                  {flow === 'register' ? (
-                    <RegisterForm onBack={handleBackToLogin} />
+                  {configLoading ? (
+                    <Flex justify="center" align="center" style={{ minHeight: 220 }}>
+                      <Spin size="small" />
+                    </Flex>
                   ) : (
-                    <LoginForm
-                      config={config}
-                      onForgotPassword={handleForgotPassword}
-                      onRegister={handleRegister}
-                    />
-                  )}
+                    <Space orientation="vertical" size={0} style={{ width: '100%' }}>
+                      {flow === 'register' ? (
+                        <RegisterForm onBack={handleBackToLogin} />
+                      ) : (
+                        <LoginForm
+                          config={config}
+                          onForgotPassword={handleForgotPassword}
+                          onRegister={handleRegister}
+                        />
+                      )}
 
-                  {/* 备用认证方式 —— Passkey + OAuth 同排显示 */}
-                  {flow === 'login' && (
-                    <OAuthSection
-                      providers={config?.oauthProviders ?? []}
-                      passkeyEnabled={config?.passkeyEnabled ?? false}
-                    />
-                  )}
+                      {flow === 'login' && (
+                        <OAuthSection
+                          providers={config?.oauthProviders ?? []}
+                          passkeyEnabled={config?.passkeyEnabled ?? false}
+                        />
+                      )}
 
-                  {/* 安全页脚 */}
-                  {flow === 'login' && (
-                    <div style={{ marginTop: 28, textAlign: 'center' }}>
-                      <Space size={4}>
-                        <LockOutlined style={{ color: themeToken.colorTextQuaternary, fontSize: 11 }} />
-                        <Text type="secondary" style={{ fontSize: 11 }}>{t('secureTip')}</Text>
-                      </Space>
-                    </div>
+                      {flow === 'login' && (
+                        <Flex justify="center" align="center" gap={token.marginXXS} className="netlab-auth-secure-tip">
+                          <LockOutlined style={{ color: token.colorTextQuaternary, fontSize: 11 }} />
+                          <Text type="secondary" style={{ fontSize: 11 }}>{t('secureTip')}</Text>
+                        </Flex>
+                      )}
+                    </Space>
                   )}
-                </>
-              )}
-            </div>
-          </div>
-        </div>
+                </Space>
+              </Card>
+            </Flex>
+          </Content>
+        </Flex>
       </Layout>
 
       {config?.passwordResetEnabled !== false && (

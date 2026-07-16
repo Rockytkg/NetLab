@@ -41,19 +41,19 @@ interface HeaderBarProps {
 /** 路由 → i18n 页面标题映射 */
 const PAGE_TITLES: Record<string, { titleNs: string; titleKey: string }> = {
   '/dashboard': { titleNs: 'menu', titleKey: 'dashboard' },
-  '/labs': { titleNs: 'menu', titleKey: 'myLabs' },
-  '/lab': { titleNs: 'topology', titleKey: 'title' },
+  '/device-groups': { titleNs: 'operations', titleKey: 'deviceGroups' },
+  '/devices': { titleNs: 'operations', titleKey: 'deviceTopology' },
   '/device-library': { titleNs: 'menu', titleKey: 'deviceLibrary' },
-  '/templates': { titleNs: 'menu', titleKey: 'templateMarket' },
+  '/operations-templates': { titleNs: 'operations', titleKey: 'operationsTemplates' },
   '/settings/users': { titleNs: 'menu', titleKey: 'userManagement' },
   '/settings/profile': { titleNs: 'menu', titleKey: 'profile' },
   '/settings': { titleNs: 'menu', titleKey: 'settings' },
   '/help': { titleNs: 'menu', titleKey: 'help' },
-  '/monitor': { titleNs: 'menu', titleKey: 'runMonitor' },
+  '/observability': { titleNs: 'operations', titleKey: 'observability' },
 }
 
 export default function HeaderBar({ onOpenMobileMenu }: HeaderBarProps) {
-  const { t } = useTranslation(['common', 'menu', 'topology'])
+  const { t } = useTranslation(['common', 'menu', 'operations'])
   const { switchLanguage } = useI18n()
   const sidebarCollapsed = useAppStore((s) => s.sidebarCollapsed)
   const toggleSidebar = useAppStore((s) => s.toggleSidebar)
@@ -156,9 +156,9 @@ export default function HeaderBar({ onOpenMobileMenu }: HeaderBarProps) {
   // 全局搜索选项（占位 —— 将在第三阶段接入真实数据）
   const searchOptions = useMemo(
     () => [
-      { value: 'search-labs', label: t('menu:myLabs'), category: t('menu:labs') },
-      { value: 'search-devices', label: t('menu:deviceLibrary'), category: t('menu:labs') },
-      { value: 'search-templates', label: t('menu:templateMarket'), category: t('menu:templateMarket') },
+      { value: 'search-groups', label: t('operations:deviceGroups'), category: t('menu:workspace') },
+      { value: 'search-devices', label: t('menu:deviceLibrary'), category: t('menu:infrastructure') },
+      { value: 'search-observability', label: t('operations:observability'), category: t('operations:observability') },
     ],
     [t]
   )
@@ -210,9 +210,9 @@ export default function HeaderBar({ onOpenMobileMenu }: HeaderBarProps) {
           options={searchOptions}
           placeholder={t('common:search')}
           onSelect={(value) => {
-            if (value === 'search-labs') navigate('/labs')
+            if (value === 'search-groups') navigate('/device-groups')
             else if (value === 'search-devices') navigate('/device-library')
-            else if (value === 'search-templates') navigate('/templates')
+            else if (value === 'search-observability') navigate('/observability')
           }}
         >
           <Input prefix={<SearchOutlined />} allowClear />

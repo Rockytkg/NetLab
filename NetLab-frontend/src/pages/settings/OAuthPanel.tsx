@@ -72,6 +72,7 @@ function ProviderCard({ provider, onSaved }: ProviderCardProps) {
   return (
     <Form form={form} layout="vertical" onFinish={handleSave} style={{ height: '100%' }}>
       <Card
+        className="netlab-settings-panel-card"
         size="small"
         variant="outlined"
         style={{ height: '100%' }}
@@ -108,7 +109,7 @@ function ProviderCard({ provider, onSaved }: ProviderCardProps) {
         </Form.Item>
         <Divider style={{ marginBlock: token.margin }} />
         <Form.Item style={{ marginBottom: 0 }}>
-          <Button block type="primary" htmlType="submit" loading={saving} icon={<SaveOutlined />}>
+          <Button size="middle" type="primary" htmlType="submit" loading={saving} icon={<SaveOutlined />}>
             {saving ? t('settings:saving') : t('settings:oauth.save', { provider: provider.name })}
           </Button>
         </Form.Item>
@@ -127,6 +128,7 @@ export default function OAuthPanel({ value, onSaved }: OAuthPanelProps) {
   return (
     <SettingsSection>
       <Tabs
+        className="netlab-settings-provider-tabs"
         destroyOnHidden={false}
         items={value.map((provider) => ({
           key: provider.id,

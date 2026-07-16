@@ -11,9 +11,9 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.svg', 'logo-mark.svg', 'logo.svg'],
       manifest: {
-        name: 'NetLab - 网络模拟器',
+        name: 'NetLab - 网络管理中心',
         short_name: 'NetLab',
-        description: 'NetLab 网络模拟器',
+        description: 'NetLab 网络管理中心',
         theme_color: '#1677FF',
         background_color: '#F5F5F5',
         display: 'standalone',

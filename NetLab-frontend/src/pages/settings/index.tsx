@@ -1,15 +1,29 @@
 import { useEffect, useState } from 'react'
-import { Card, ConfigProvider, Result, Skeleton, Tabs, theme } from 'antd'
+import {
+  Button,
+  ConfigProvider,
+  Flex,
+  Grid,
+  Layout,
+  Menu,
+  Result,
+  Skeleton,
+  Tabs,
+  theme,
+  Typography,
+} from 'antd'
 import {
   SafetyOutlined,
   MailOutlined,
   ApiOutlined,
   IdcardOutlined,
   EllipsisOutlined,
+  ReloadOutlined,
 } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import { adminApi } from '@/services/admin'
 import { useAuthStore } from '@/stores/authStore'
+import type { MenuProps, TabsProps } from 'antd'
 import type {
   AdminSettings,
   SecuritySettings,
@@ -21,16 +35,36 @@ import BeianPanel from './BeianPanel'
 import SecurityPanel from './SecurityPanel'
 import SMTPPanel from './SMTPPanel'
 import OAuthPanel from './OAuthPanel'
+import '@/assets/css/settings.css'
+
+const { useBreakpoint } = Grid
+const { Sider, Content } = Layout
+const { Text, Title } = Typography
 
 export default function SettingsPage() {
   const { t } = useTranslation('settings')
   const { token } = theme.useToken()
+  const screens = useBreakpoint()
   const role = useAuthStore((s) => s.userInfo?.role)
   const isAdmin = role === 'admin' || role === 'super_admin'
 
   const [settings, setSettings] = useState<AdminSettings | null>(null)
   const [loading, setLoading] = useState(true)
+  const [loadFailed, setLoadFailed] = useState(false)
   const [activeKey, setActiveKey] = useState('beian')
+
+  const fetchSettings = async () => {
+    setLoading(true)
+    setLoadFailed(false)
+    try {
+      const data = await adminApi.getSettings()
+      setSettings(data)
+    } catch {
+      setLoadFailed(true)
+    } finally {
+      setLoading(false)
+    }
+  }
 
   useEffect(() => {
     if (!isAdmin) {
@@ -39,11 +73,13 @@ export default function SettingsPage() {
     }
     let alive = true
     ;(async () => {
+      setLoading(true)
+      setLoadFailed(false)
       try {
         const data = await adminApi.getSettings()
         if (alive) setSettings(data)
       } catch {
-        // 拦截器已提示错误
+        if (alive) setLoadFailed(true)
       } finally {
         if (alive) setLoading(false)
       }
@@ -63,15 +99,15 @@ export default function SettingsPage() {
     )
 
   if (!isAdmin) {
-    return <Result status="403" title="403" subTitle={t('settings:adminOnly')} />
+    return <Result status="403" title="403" subTitle={t('adminOnly')} />
   }
 
-  const tabItems =
+  const settingsItems =
     settings &&
     [
       {
         key: 'beian',
-        label: t('settings:tabs.beian'),
+        label: t('tabs.beian'),
         icon: <IdcardOutlined />,
         children: (
           <BeianPanel value={settings.beian} onSaved={(beian: BeianSettings) => patch({ beian })} />
@@ -79,7 +115,7 @@ export default function SettingsPage() {
       },
       {
         key: 'security',
-        label: t('settings:tabs.security'),
+        label: t('tabs.security'),
         icon: <SafetyOutlined />,
         children: (
           <SecurityPanel
@@ -90,17 +126,32 @@ export default function SettingsPage() {
       },
       {
         key: 'smtp',
-        label: t('settings:tabs.smtp'),
+        label: t('tabs.smtp'),
         icon: <MailOutlined />,
         children: <SMTPPanel value={settings.smtp} onSaved={(smtp: SMTPSettings) => patch({ smtp })} />,
       },
       {
         key: 'oauth',
-        label: t('settings:tabs.oauth'),
+        label: t('tabs.oauth'),
         icon: <ApiOutlined />,
         children: <OAuthPanel value={settings.oauth} onSaved={patchOAuthProvider} />,
       },
     ]
+  const activeItem = settingsItems?.find((item) => item.key === activeKey)
+  const navigationItems: MenuProps['items'] | undefined = settingsItems?.map(
+    ({ key, label, icon }) => ({
+      key,
+      label,
+      icon,
+    }),
+  )
+  const tabItems: TabsProps['items'] | undefined = settingsItems?.map(
+    ({ key, label, icon }) => ({
+      key,
+      label,
+      icon,
+    }),
+  )
 
   return (
     <ConfigProvider
@@ -108,56 +159,86 @@ export default function SettingsPage() {
         components: {
           Card: {
             bodyPadding: token.paddingLG,
-            headerHeight: 48,
           },
-          List: {
-            itemPadding: `${token.padding}px ${token.paddingLG}px`,
+          Button: {
+            controlHeight: 32,
+          },
+          Form: {
+            itemMarginBottom: 12,
           },
           Tabs: {
             horizontalItemGutter: token.marginLG,
             horizontalItemPadding: `${token.paddingSM}px 0`,
+            verticalItemPadding: `${token.paddingSM}px ${token.paddingLG}px`,
           },
         },
       }}
     >
-      <Card
-        className="netlab-settings-shell"
-        style={{ height: '100%', minHeight: 0, overflow: 'hidden' }}
-        styles={{
-          body: {
-            display: 'flex',
-            flexDirection: 'column',
-            height: '100%',
-            minHeight: 0,
-            minWidth: 0,
-            overflow: 'hidden',
-          },
-        }}
-      >
-        {loading || !tabItems ? (
-          <Skeleton active paragraph={{ rows: 8 }} />
-        ) : (
-          <Tabs
-            activeKey={activeKey}
-            onChange={setActiveKey}
-            items={tabItems}
-            className="netlab-settings-tabs"
-            more={{ icon: <EllipsisOutlined />, trigger: 'click' }}
-            tabBarGutter={token.marginLG}
-            tabBarStyle={{ flexShrink: 0, marginBottom: 0, minWidth: 0 }}
-            animated={{ inkBar: true, tabPane: false }}
-            destroyOnHidden={false}
-            style={{
-              display: 'flex',
-              flex: 1,
-              flexDirection: 'column',
-              minHeight: 0,
-              minWidth: 0,
-              overflow: 'hidden',
-            }}
+      <div className="netlab-settings-shell">
+        {loading ? (
+          <Skeleton active paragraph={{ rows: 8 }} style={{ padding: token.paddingLG }} />
+        ) : loadFailed || !settingsItems || !activeItem ? (
+          <Result
+            status="warning"
+            title={t('loadFailedTitle')}
+            subTitle={t('loadFailedDescription')}
+            extra={
+              <Button type="primary" icon={<ReloadOutlined />} onClick={fetchSettings}>
+                {t('retry')}
+              </Button>
+            }
           />
+        ) : screens.lg ? (
+          <Layout className="netlab-settings-layout">
+            <Sider
+              width={260}
+              theme="light"
+              className="netlab-settings-sider"
+              style={{ background: token.colorBgContainer }}
+            >
+              <Flex vertical gap={token.marginXXS} className="netlab-settings-nav-header">
+                <Title level={5} style={{ margin: 0 }}>
+                  {t('title')}
+                </Title>
+                <Text type="secondary">{t('pageDescription')}</Text>
+              </Flex>
+              <Menu
+                mode="inline"
+                selectedKeys={[activeKey]}
+                items={navigationItems}
+                onClick={({ key }) => setActiveKey(key)}
+                style={{ borderInlineEnd: 'none' }}
+              />
+            </Sider>
+            <Content className="netlab-settings-content">{activeItem?.children}</Content>
+          </Layout>
+        ) : (
+          <div className="netlab-settings-mobile">
+            <Flex vertical gap={token.marginXXS} className="netlab-settings-mobile-header">
+              <Title level={5} style={{ margin: 0 }}>
+                {t('title')}
+              </Title>
+              <Text type="secondary">{t('pageDescription')}</Text>
+            </Flex>
+            <Tabs
+              activeKey={activeKey}
+              onChange={setActiveKey}
+              items={tabItems}
+              className="netlab-settings-mobile-tabs"
+              more={{ icon: <EllipsisOutlined />, trigger: 'click' }}
+              tabBarGutter={token.marginLG}
+              tabBarStyle={{
+                flexShrink: 0,
+                marginBottom: 0,
+                paddingInline: token.paddingLG,
+                paddingBlockStart: token.paddingSM,
+              }}
+              animated={{ inkBar: true, tabPane: false }}
+            />
+            <div className="netlab-settings-content">{activeItem?.children}</div>
+          </div>
         )}
-      </Card>
+      </div>
     </ConfigProvider>
   )
 }

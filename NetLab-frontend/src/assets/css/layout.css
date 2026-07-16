@@ -1,0 +1,69 @@
+/* Layout shell and shared responsive layout utilities */
+.netlab-shell-sider {
+  transition: width 0.2s ease;
+}
+
+.netlab-main-content {
+  min-width: 0;
+}
+
+.netlab-layout-footer {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: space-between;
+  height: 48px;
+  padding: 0 24px;
+  font-size: 12px;
+  color: var(--ant-color-text-secondary, #595959);
+  background: var(--ant-color-bg-container, #fafafa);
+  border-top: 1px solid var(--ant-color-border-secondary, #f0f0f0);
+}
+
+.netlab-icon-button {
+  width: 32px;
+  height: 32px;
+}
+
+.netlab-mobile-only {
+  display: none;
+}
+
+.netlab-desktop-only {
+  display: inline-flex;
+}
+
+@media (max-width: 1199px) {
+  .netlab-header-search {
+    width: 160px;
+  }
+}
+
+@media (max-width: 991px) {
+  .netlab-shell-sider {
+    display: none;
+  }
+
+  .netlab-mobile-only {
+    display: inline-flex;
+  }
+
+  .netlab-desktop-only {
+    display: none;
+  }
+
+  .netlab-header-search {
+    display: none;
+  }
+
+  .netlab-layout-footer {
+    padding: 0 16px;
+    font-size: 11px;
+  }
+}
+
+@media (max-width: 575px) {
+  .netlab-layout-footer {
+    display: none;
+  }
+}

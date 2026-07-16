@@ -70,7 +70,7 @@ export default function SMTPPanel({ value, onSaved }: SMTPPanelProps) {
 
   const actions = (
     <Space wrap>
-      <Button type="primary" htmlType="submit" loading={saving} icon={<SaveOutlined />}>
+      <Button size="middle" type="primary" htmlType="submit" loading={saving} icon={<SaveOutlined />}>
         {saving ? t('settings:saving') : t('settings:save')}
       </Button>
     </Space>
@@ -87,6 +87,7 @@ export default function SMTPPanel({ value, onSaved }: SMTPPanelProps) {
           style={{ height: '100%', minHeight: 0 }}
         >
           <Card
+            className="netlab-settings-panel-card"
             size="small"
             variant="outlined"
             title={
@@ -167,6 +168,7 @@ export default function SMTPPanel({ value, onSaved }: SMTPPanelProps) {
                           allowClear
                         />
                         <Button
+                          size="middle"
                           icon={<SendOutlined />}
                           loading={testing}
                           disabled={!testTo}

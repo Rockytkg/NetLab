@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from 'react'
-import { Form, Input, Button, Checkbox, App, theme, Image, Typography, Tooltip } from 'antd'
+import { Form, Input, Button, Checkbox, App, theme, Image, Typography, Tooltip, Flex } from 'antd'
 import { UserOutlined, LockOutlined, SafetyCertificateOutlined, ReloadOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
@@ -83,6 +83,7 @@ export default function LoginForm({ config, onForgotPassword, onRegister }: Logi
       requiredMark={false}
       onFinish={onFinish}
       initialValues={{ remember: true }}
+      className="netlab-login-form"
       style={{ width: '100%' }}
     >
       <Form.Item
@@ -144,7 +145,7 @@ export default function LoginForm({ config, onForgotPassword, onRegister }: Logi
       )}
 
       <Form.Item style={{ marginBottom: 8 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+        <Flex className="netlab-login-form-options">
           <Form.Item name="remember" valuePropName="checked" noStyle>
             <Checkbox style={{ fontSize: 13 }}>{t('remember')}</Checkbox>
           </Form.Item>
@@ -153,7 +154,7 @@ export default function LoginForm({ config, onForgotPassword, onRegister }: Logi
               {t('forgotPassword')}
             </Button>
           )}
-        </div>
+        </Flex>
       </Form.Item>
 
       <Form.Item style={{ marginBottom: registrationEnabled ? 4 : 0 }}>

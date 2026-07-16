@@ -63,8 +63,8 @@ export default function RegisterForm({ onBack }: RegisterFormProps) {
   const iconStyle = { color: themeToken.colorTextQuaternary }
 
   return (
-    <div>
-      <Form form={form} name="register" size="large" layout="vertical" requiredMark={false} onFinish={onFinish}>
+    <>
+      <Form form={form} name="register" size="large" layout="vertical" requiredMark={false} onFinish={onFinish} className="netlab-login-form netlab-login-form-register">
         <Form.Item name="username" rules={[{ required: true, message: t('usernameRequired') }]}>
           <Input prefix={<UserOutlined style={iconStyle} />} placeholder={t('usernamePlaceholder')} autoComplete="username" />
         </Form.Item>
@@ -120,6 +120,6 @@ export default function RegisterForm({ onBack }: RegisterFormProps) {
           </Text>
         </div>
       </Form>
-    </div>
+    </>
   )
 }

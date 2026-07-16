@@ -67,7 +67,7 @@ export default function BeianPanel({ value, onSaved }: BeianPanelProps) {
         <Divider style={{ marginBlock: token.marginLG }} />
         <Form.Item style={{ marginBottom: 0 }}>
           <Space>
-            <Button type="primary" htmlType="submit" loading={saving} icon={<SaveOutlined />}>
+            <Button size="middle" type="primary" htmlType="submit" loading={saving} icon={<SaveOutlined />}>
               {saving ? t('settings:saving') : t('settings:save')}
             </Button>
           </Space>

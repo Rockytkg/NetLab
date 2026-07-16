@@ -7,6 +7,7 @@ import SideMenu from './SideMenu'
 import HeaderBar from './HeaderBar'
 import Loading from '@/components/common/Loading'
 import { useResolvedTheme } from '@/hooks/useResolvedTheme'
+import '@/assets/css/layout.css'
 
 const { Sider, Content, Footer } = Layout
 const { useBreakpoint } = Grid

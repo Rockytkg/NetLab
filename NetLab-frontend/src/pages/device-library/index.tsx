@@ -4,19 +4,22 @@ import {
   WifiOutlined,
   SafetyOutlined,
   CloudServerOutlined,
+  ApartmentOutlined,
+  ApiOutlined,
 } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 const { Title, Text } = Typography
 
-const deviceCategories = [
-  { icon: <WifiOutlined />, label: 'Routers', count: 12, color: '#1677FF' },
-  { icon: <DesktopOutlined />, label: 'Switches', count: 8, color: '#13C2C2' },
-  { icon: <SafetyOutlined />, label: 'Firewalls', count: 6, color: '#F5222D' },
-  { icon: <CloudServerOutlined />, label: 'Servers', count: 10, color: '#722ED1' },
-]
-
 export default function DeviceLibraryPage() {
-  const { t } = useTranslation(['menu', 'common'])
+  const { t } = useTranslation(['operations', 'common'])
+  const deviceCategories = [
+    { icon: <WifiOutlined />, label: t('operations:managedRouters'), count: 12, color: '#1677FF' },
+    { icon: <DesktopOutlined />, label: t('operations:managedSwitches'), count: 8, color: '#13C2C2' },
+    { icon: <SafetyOutlined />, label: t('operations:managedFirewalls'), count: 6, color: '#F5222D' },
+    { icon: <CloudServerOutlined />, label: t('operations:managedServers'), count: 10, color: '#722ED1' },
+    { icon: <ApartmentOutlined />, label: t('operations:managedLoadBalancers'), count: 4, color: '#FA8C16' },
+    { icon: <ApiOutlined />, label: t('operations:managedWireless'), count: 9, color: '#52C41A' },
+  ]
 
   return (
     <div style={{ width: '100%' }}>
@@ -32,15 +35,15 @@ export default function DeviceLibraryPage() {
                 {cat.icon}
               </div>
               <Title level={5} style={{ margin: 0 }}>{cat.label}</Title>
-              <Text type="secondary">{cat.count} devices</Text>
+              <Text type="secondary">{t('operations:devicesUnit', { count: cat.count })}</Text>
             </Card>
           </Col>
         ))}
       </Row>
       <Card style={{ marginTop: 24 }}>
         <Result
-          title={t('common:comingSoon')}
-          subTitle={t('common:underDevelopment')}
+          title={t('operations:onboardingComingSoon')}
+          subTitle={t('operations:snmpMonitoringDesc')}
         />
       </Card>
     </div>

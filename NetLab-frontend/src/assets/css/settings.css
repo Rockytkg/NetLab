@@ -1,0 +1,142 @@
+/* System settings page */
+.netlab-settings-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+  background: var(--ant-color-bg-container);
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: var(--ant-border-radius-lg);
+}
+
+.netlab-settings-layout {
+  height: 100%;
+  min-height: 0;
+  min-width: 0;
+  background: transparent;
+}
+
+.netlab-settings-sider {
+  min-height: 0;
+  overflow: hidden;
+  border-inline-end: 1px solid var(--ant-color-border-secondary);
+}
+
+.netlab-settings-nav-header {
+  padding: 18px 18px 12px;
+  border-bottom: 1px solid var(--ant-color-border-secondary);
+}
+
+.netlab-settings-sider .ant-menu {
+  padding: 10px;
+}
+
+.netlab-settings-content {
+  flex: 1;
+  height: 100%;
+  min-height: 0;
+  min-width: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  background: var(--ant-color-bg-container);
+  scrollbar-color: var(--ant-color-border) transparent;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+}
+
+.netlab-settings-content::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.netlab-settings-content::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.netlab-settings-content::-webkit-scrollbar-thumb {
+  background: var(--ant-color-border);
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background-clip: content-box;
+}
+
+.netlab-settings-content::-webkit-scrollbar-thumb:hover {
+  background: var(--ant-color-text-quaternary);
+  background-clip: content-box;
+}
+
+.netlab-settings-mobile {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  min-width: 0;
+}
+
+.netlab-settings-mobile-header {
+  padding: 16px 20px 12px;
+  border-bottom: 1px solid var(--ant-color-border-secondary);
+}
+
+.netlab-settings-mobile-tabs {
+  flex-shrink: 0;
+  min-width: 0;
+  border-bottom: 1px solid var(--ant-color-border-secondary);
+}
+
+.netlab-settings-mobile-tabs .ant-tabs-nav {
+  margin-bottom: 0;
+}
+
+.netlab-settings-mobile-tabs .ant-tabs-content-holder {
+  display: none;
+}
+
+.netlab-settings-section {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  max-width: 1120px;
+  margin-inline: auto;
+}
+
+.netlab-settings-section .ant-form {
+  min-height: 0;
+}
+
+.netlab-settings-section .ant-form-item {
+  margin-bottom: 12px;
+}
+
+.netlab-settings-section .ant-divider {
+  margin-block: 12px !important;
+}
+
+.netlab-settings-panel-card {
+  height: 100%;
+  min-height: 0;
+}
+
+.netlab-settings-panel-card > .ant-card-body {
+  min-height: 0;
+}
+
+.netlab-settings-provider-tabs {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.netlab-settings-provider-tabs > .ant-tabs-content-holder {
+  flex: 1;
+  min-height: 0;
+}
+
+.netlab-settings-provider-tabs .ant-tabs-content,
+.netlab-settings-provider-tabs .ant-tabs-tabpane {
+  height: 100%;
+  min-height: 0;
+}

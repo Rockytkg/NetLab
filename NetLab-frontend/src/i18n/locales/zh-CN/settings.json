@@ -4,6 +4,10 @@
   "saveFailed": "保存失败",
   "save": "保存",
   "saving": "保存中…",
+  "title": "系统设置",
+  "retry": "重试",
+  "loadFailedTitle": "系统设置加载失败",
+  "loadFailedDescription": "请检查后端服务或网络连接后重试。",
   "pageDescription": "集中管理站点备案、安全策略、邮件服务、第三方登录与通行密钥。",
   "tabs": {
     "beian": "备案信息",

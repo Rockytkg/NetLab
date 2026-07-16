@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Button, Divider, Form, InputNumber, List, Switch, Typography, App, theme } from 'antd'
+import { App, Button, Card, Divider, Flex, Form, InputNumber, Switch, Typography, theme } from 'antd'
 import { SaveOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import { adminApi } from '@/services/admin'
@@ -49,30 +49,27 @@ export default function SecurityPanel({ value, onSaved }: SecurityPanelProps) {
   return (
     <SettingsSection>
       <Form form={form} layout="vertical" onFinish={handleSave}>
-        <List
-          bordered
-          itemLayout="horizontal"
-          dataSource={switches}
-          renderItem={(s) => (
-            <List.Item
-              actions={[
-                <Form.Item
-                  key={s.name}
-                  name={s.name}
-                  valuePropName="checked"
-                  style={{ marginBottom: 0 }}
-                >
+        <Card size="small" variant="outlined" styles={{ body: { padding: 0 } }}>
+          {switches.map((s, index) => (
+            <div key={s.name}>
+              <Flex
+                align="center"
+                justify="space-between"
+                gap={token.marginLG}
+                style={{ padding: `${token.paddingSM}px ${token.padding}px` }}
+              >
+                <Flex vertical gap={token.marginXXS} style={{ minWidth: 0 }}>
+                  <Text strong>{s.label}</Text>
+                  <Text type="secondary">{s.help}</Text>
+                </Flex>
+                <Form.Item name={s.name} valuePropName="checked" style={{ marginBottom: 0 }}>
                   <Switch checkedChildren="ON" unCheckedChildren="OFF" />
-                </Form.Item>,
-              ]}
-            >
-              <List.Item.Meta
-                title={<Text strong>{s.label}</Text>}
-                description={<Text type="secondary">{s.help}</Text>}
-              />
-            </List.Item>
-          )}
-        />
+                </Form.Item>
+              </Flex>
+              {index < switches.length - 1 && <Divider style={{ margin: 0 }} />}
+            </div>
+          ))}
+        </Card>
         <Divider style={{ marginBlock: token.marginLG }} />
         <Form.Item
           name="passwordMaxAgeDays"
@@ -84,7 +81,7 @@ export default function SecurityPanel({ value, onSaved }: SecurityPanelProps) {
         </Form.Item>
         <Divider style={{ marginBlock: token.marginLG }} />
         <Form.Item style={{ marginBottom: 0 }}>
-          <Button type="primary" htmlType="submit" loading={saving} icon={<SaveOutlined />}>
+          <Button size="middle" type="primary" htmlType="submit" loading={saving} icon={<SaveOutlined />}>
             {saving ? t('settings:saving') : t('settings:save')}
           </Button>
         </Form.Item>

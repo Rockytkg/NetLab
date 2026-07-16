@@ -1,0 +1,122 @@
+/* Login and auth pages */
+.netlab-auth-layout,
+.netlab-auth-shell {
+  height: 100vh;
+  height: 100dvh;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.netlab-auth-visual {
+  position: relative;
+  min-width: 0;
+  overflow: hidden;
+  background:
+    linear-gradient(155deg, rgba(20, 184, 166, 0.2) 0%, rgba(11, 26, 51, 0) 34%),
+    linear-gradient(160deg, #0b1a33 0%, #142347 38%, #102845 68%, #081522 100%);
+}
+
+.netlab-auth-visual::after {
+  position: absolute;
+  inset: 0;
+  content: '';
+  opacity: 0.045;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.75) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.75) 1px, transparent 1px);
+  background-size: 56px 56px;
+}
+
+.netlab-auth-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.netlab-auth-visual-inner {
+  position: relative;
+  z-index: 1;
+  height: 100%;
+}
+
+.netlab-auth-panel {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.netlab-login-form .ant-form-item {
+  margin-bottom: 16px;
+}
+
+.netlab-login-form-options {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  gap: 12px;
+}
+
+.netlab-auth-secure-tip {
+  margin-top: 28px;
+}
+
+.netlab-login-oauth-buttons {
+  min-height: 44px;
+}
+
+.netlab-login-captcha-input.ant-input-affix-wrapper {
+  height: 40px;
+  padding-block: 3px;
+}
+
+.netlab-login-captcha-input .ant-image {
+  display: flex;
+  align-items: center;
+}
+
+.netlab-inverted-control.ant-btn {
+  color: rgba(255, 255, 255, 0.72);
+  transition:
+    color var(--ant-motion-duration-mid, 0.2s) ease,
+    background-color var(--ant-motion-duration-mid, 0.2s) ease;
+}
+
+.netlab-inverted-control.ant-btn:hover,
+.netlab-inverted-control.ant-btn:focus-visible {
+  color: #fff !important;
+  background-color: rgba(255, 255, 255, 0.12) !important;
+}
+
+@media (max-height: 760px) {
+  .netlab-login-form .ant-form-item {
+    margin-bottom: 12px;
+  }
+
+  .netlab-login-oauth-divider.ant-divider {
+    margin-top: 16px !important;
+    margin-bottom: 12px !important;
+  }
+
+  .netlab-auth-secure-tip {
+    margin-top: 18px;
+  }
+}
+
+@media (max-height: 680px) {
+  .netlab-login-form .ant-form-item {
+    margin-bottom: 8px;
+  }
+
+  .netlab-login-form .ant-btn-primary {
+    height: 40px !important;
+  }
+
+  .netlab-auth-feature-stack {
+    display: none !important;
+  }
+
+  .netlab-auth-secure-tip {
+    display: none;
+  }
+}
