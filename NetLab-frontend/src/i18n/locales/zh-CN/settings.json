@@ -158,6 +158,7 @@
       "email": "邮箱",
       "role": "角色",
       "status": "状态",
+      "twoFactor": "两步验证",
       "createdAt": "创建时间",
       "actions": "操作"
     },
@@ -171,7 +172,7 @@
     "editUser": "编辑用户",
     "resetPassword": "重置密码",
     "importUsers": "导入用户",
-    "importUsersFormat": "请按模板填写用户信息：首行为表头（用户名、昵称、手机号、邮箱、角色、密码），每行填写一名用户；角色留空时默认为访客。",
+    "importUsersFormat": "请填写模板中的全部字段：首行为表头（用户名、昵称、手机号、邮箱、角色、密码），每行必须填写完整的一名用户。",
     "export": "导出用户",
     "exportSuccess": "导出成功",
     "invalidImportFile": "请上传有效的用户导入文件",
@@ -203,6 +204,10 @@
     "generatePassword": "生成强密码",
     "passwordComplexity": "密码需同时包含字母和数字",
     "passwordReset": "密码重置成功",
+    "twoFactorEnabled": "已开启",
+    "twoFactorDisabled": "未开启",
+    "disableTwoFactor": "关闭两步验证",
+    "disableTwoFactorHint": "关闭后将清空该用户的两步验证密钥和恢复码，之后只能由用户自行重新绑定。",
     "importDone": "成功导入 {{created}} 个用户",
     "importResult": "导入完成：成功 {{created}} 个，跳过 {{skipped}} 个"
   },

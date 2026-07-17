@@ -969,14 +969,12 @@ func (h *AuthHandler) UnbindOAuth(c *gin.Context) {
 // @Success      200  {object}  response.ApiResponse{data=dtoresponse.SystemConfig}
 // @Router       /api/auth/config [get]
 func (h *AuthHandler) GetSystemConfig(c *gin.Context) {
+	// 安全策略是运行时动态配置，禁止浏览器、代理和 Service Worker 复用旧响应。
+	c.Header("Cache-Control", "no-store")
 	config, err := h.authService.GetSystemConfig(c.Request.Context())
 	if err != nil {
 		h.logger.Error("get system config failed", zap.Error(err))
-		response.SuccessOK(c, dtoresponse.SystemConfig{
-			RegistrationEnabled: true,
-			PasskeyEnabled:      true,
-			OAuthProviders:      []dtoresponse.OAuthProvider{},
-		})
+		response.Error(c, err)
 		return
 	}
 

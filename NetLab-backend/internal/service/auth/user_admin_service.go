@@ -27,12 +27,24 @@ func NewUserAdminService(userRepo *repository.UserRepository, logger *zap.Logger
 
 // AdminUserView 是返回给用户资源接口的安全视图。
 type AdminUserView struct {
+	ID               string `json:"id"`
+	Username         string `json:"username"`
+	Nickname         string `json:"nickname"`
+	Phone            string `json:"phone"`
+	Email            string `json:"email"`
+	Role             string `json:"role"`
+	Status           string `json:"status"`
+	TwoFactorEnabled bool   `json:"twoFactorEnabled"`
+	CreatedAt        string `json:"createdAt"`
+}
+
+// AdminUserExportView 是导出接口专用视图，不包含两步验证状态。
+type AdminUserExportView struct {
 	ID        string `json:"id"`
 	Username  string `json:"username"`
 	Nickname  string `json:"nickname"`
 	Phone     string `json:"phone"`
 	Email     string `json:"email"`
-	Avatar    string `json:"avatar"`
 	Role      string `json:"role"`
 	Status    string `json:"status"`
 	CreatedAt string `json:"createdAt"`
@@ -76,6 +88,28 @@ func (s *UserAdminService) ListUsers(ctx context.Context, page, size int, keywor
 		page = 1
 	}
 	return &UserListResult{Items: items, Total: total, Page: page, Size: size}, nil
+}
+
+// ExportUsersData 返回指定用户的 JSON 数据，由前端负责生成导出文件。
+func (s *UserAdminService) ExportUsersData(ctx context.Context, ids []string) ([]AdminUserExportView, *apperrors.AppError) {
+	if len(ids) == 0 {
+		return nil, apperrors.New(apperrors.ErrCodeInvalidRequest, "no users selected")
+	}
+	users, err := s.userRepo.FindByIDs(ctx, ids)
+	if err != nil {
+		return nil, apperrors.Wrap(apperrors.ErrCodeOperationDenied, "failed to load users for export", err)
+	}
+	byID := make(map[string]model.User, len(users))
+	for _, user := range users {
+		byID[strconv.FormatUint(user.ID, 10)] = user
+	}
+	items := make([]AdminUserExportView, 0, len(ids))
+	for _, id := range ids {
+		if user, ok := byID[strings.TrimSpace(id)]; ok {
+			items = append(items, AdminUserExportView{ID: strconv.FormatUint(user.ID, 10), Username: user.Username, Nickname: user.Nickname, Phone: user.Phone, Email: user.Email, Role: string(user.Role), Status: string(user.Status), CreatedAt: user.CreatedAt.Format("2006-01-02T15:04:05Z07:00")})
+		}
+	}
+	return items, nil
 }
 
 func (s *UserAdminService) CreateUser(ctx context.Context, username, nickname, phone, email, role, password string) (*AdminUserView, *apperrors.AppError) {
@@ -134,7 +168,7 @@ func (s *UserAdminService) CreateUser(ctx context.Context, username, nickname, p
 	return &view, nil
 }
 
-func (s *UserAdminService) UpdateUser(ctx context.Context, id, nickname, phone, email, role, status string) *apperrors.AppError {
+func (s *UserAdminService) UpdateUser(ctx context.Context, id, nickname, phone, email, role, status string, disableTwoFactor bool) *apperrors.AppError {
 	users, err := s.userRepo.FindByIDs(ctx, []string{id})
 	if err != nil {
 		return apperrors.Wrap(apperrors.ErrCodeOperationDenied, "database error", err)
@@ -174,6 +208,12 @@ func (s *UserAdminService) UpdateUser(ctx context.Context, id, nickname, phone, 
 	}
 	if err := s.userRepo.UpdateManagedFields(ctx, id, normalizedNickname, normalizedPhone, normalizedEmail, normalizedRole, normalizedStatus); err != nil {
 		return apperrors.Wrap(apperrors.ErrCodeOperationDenied, "failed to update user", err)
+	}
+	if disableTwoFactor && users[0].TwoFactorEnabled {
+		if err := s.userRepo.ResetTwoFactor(ctx, id); err != nil {
+			return apperrors.Wrap(apperrors.ErrCodeOperationDenied, "failed to disable two-factor", err)
+		}
+		s.logger.Info("administrator disabled user two-factor", zap.String("userID", id))
 	}
 	return nil
 }
@@ -223,5 +263,5 @@ func (s *UserAdminService) BatchResetPassword(ctx context.Context, ids []string,
 }
 
 func toAdminUserView(u *model.User) AdminUserView {
-	return AdminUserView{ID: strconv.FormatUint(u.ID, 10), Username: u.Username, Nickname: u.Nickname, Phone: u.Phone, Email: u.Email, Avatar: u.Avatar, Role: string(u.Role), Status: string(u.Status), CreatedAt: u.CreatedAt.Format("2006-01-02T15:04:05Z07:00")}
+	return AdminUserView{ID: strconv.FormatUint(u.ID, 10), Username: u.Username, Nickname: u.Nickname, Phone: u.Phone, Email: u.Email, Role: string(u.Role), Status: string(u.Status), TwoFactorEnabled: u.TwoFactorEnabled, CreatedAt: u.CreatedAt.Format("2006-01-02T15:04:05Z07:00")}
 }

@@ -50,11 +50,12 @@ type BatchUpdateRoleParams struct {
 
 // UpdateUserParams 是 PUT /api/users/:id 的请求体。
 type UpdateUserParams struct {
-	Nickname string `json:"nickname" binding:"required,max=64"`
-	Phone    string `json:"phone" binding:"required"`
-	Email    string `json:"email" binding:"required,email,max=255"`
-	Role     string `json:"role" binding:"required,oneof=admin editor viewer"`
-	Status   string `json:"status" binding:"required,oneof=active disabled locked"`
+	Nickname         string `json:"nickname" binding:"required,max=64"`
+	Phone            string `json:"phone" binding:"required"`
+	Email            string `json:"email" binding:"required,email,max=255"`
+	Role             string `json:"role" binding:"required,oneof=admin editor viewer"`
+	Status           string `json:"status" binding:"required,oneof=active disabled locked"`
+	DisableTwoFactor bool   `json:"disableTwoFactor"`
 }
 
 // CreateUserParams 是 POST /api/users 的请求体。
@@ -91,10 +92,10 @@ type ImportUsersParams struct {
 
 // ImportUserParams 是单条待导入用户数据。表格文件由前端解析后传入。
 type ImportUserParams struct {
-	Username string `json:"username" binding:"max=64"`
-	Nickname string `json:"nickname" binding:"max=64"`
-	Phone    string `json:"phone" binding:"max=20"`
-	Email    string `json:"email" binding:"max=255"`
-	Role     string `json:"role" binding:"max=64"`
-	Password string `json:"password" binding:"max=72"`
+	Username string `json:"username" binding:"required,max=64"`
+	Nickname string `json:"nickname" binding:"required,max=64"`
+	Phone    string `json:"phone" binding:"required,max=20"`
+	Email    string `json:"email" binding:"required,max=255"`
+	Role     string `json:"role" binding:"required,max=64"`
+	Password string `json:"password" binding:"required,max=72"`
 }

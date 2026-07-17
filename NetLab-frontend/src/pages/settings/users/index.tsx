@@ -182,6 +182,16 @@ export default function UsersPage() {
       ),
     },
     {
+      title: t('settings:users.columns.twoFactor'),
+      dataIndex: 'twoFactorEnabled',
+      key: 'twoFactorEnabled',
+      render: (enabled: boolean) => (
+        <Tag color={enabled ? 'success' : 'default'}>
+          {enabled ? t('settings:users.twoFactorEnabled') : t('settings:users.twoFactorDisabled')}
+        </Tag>
+      ),
+    },
+    {
       title: t('settings:users.columns.createdAt'),
       dataIndex: 'createdAt',
       key: 'createdAt',
@@ -269,6 +279,7 @@ export default function UsersPage() {
       email: user.email,
       role: (ASSIGNABLE_ROLES.includes(user.role as UserRoleValue) ? user.role : 'viewer') as UserRoleValue,
       status: user.status,
+      disableTwoFactor: undefined,
     })
     setEditOpen(true)
   }
@@ -284,6 +295,7 @@ export default function UsersPage() {
         email: values.email,
         role: values.role,
         status: values.status,
+        disableTwoFactor: values.disableTwoFactor === true,
       })
       message.success(t('settings:users.userUpdated'))
       setEditOpen(false)
@@ -632,6 +644,22 @@ export default function UsersPage() {
               }))}
             />
           </Form.Item>
+          {editingUser?.twoFactorEnabled && (
+            <Form.Item
+              name="disableTwoFactor"
+              label={t('settings:users.disableTwoFactor')}
+              extra={t('settings:users.disableTwoFactorHint')}
+            >
+              <Select
+                allowClear
+                placeholder={t('settings:users.twoFactorEnabled')}
+                options={[{
+                  value: true,
+                  label: t('settings:users.twoFactorDisabled'),
+                }]}
+              />
+            </Form.Item>
+          )}
         </Form>
       </Modal>
 

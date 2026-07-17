@@ -22,26 +22,33 @@ export default function SettingsProfilePage() {
   const { t } = useTranslation(['settings', 'menu', 'common'])
   const { token } = theme.useToken()
   const userInfo = useAuthStore((s) => s.userInfo)
+  const setUserInfo = useAuthStore((s) => s.setUserInfo)
   const [config, setConfig] = useState<SystemConfig | null>(null)
   const screens = Grid.useBreakpoint()
 
   useEffect(() => {
     let alive = true
-    ;(async () => {
-      try {
-        const data = await authApi.getSystemConfig()
+    authApi.getSystemConfig()
+      .then((data) => {
         if (alive) setConfig(data)
-      } catch {
+      })
+      .catch(() => {
         // 拦截器已提示错误
-      }
-    })()
+      })
+    authApi.getUserInfo()
+      .then((user) => {
+        if (alive) setUserInfo(user)
+      })
+      .catch(() => {
+        // 拦截器已提示错误
+      })
     return () => {
       alive = false
     }
-  }, [])
+  }, [setUserInfo])
 
   const oauthEnabled = (config?.oauthProviders?.length ?? 0) > 0
-  const passkeyEnabled = !!config?.passkeyEnabled
+  const passkeyEnabled = config?.passkeyEnabled
   const twoFactorRequired = !!config?.twoFactorRequired
   const securityTabs = [
     {

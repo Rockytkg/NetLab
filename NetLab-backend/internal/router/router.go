@@ -402,11 +402,6 @@ func Setup(cfg RouterConfig) *gin.Engine {
 						middleware.RequireRBAC(cfg.Enforcer, "user", "import"),
 						cfg.AdminHandler.ImportUsers,
 					)
-					usersGroup.GET("/import-template",
-						cfg.limitStandard("admin-users-template"),
-						middleware.RequireRBAC(cfg.Enforcer, "user", "import"),
-						cfg.AdminHandler.DownloadImportTemplate,
-					)
 					usersGroup.POST("/export",
 						cfg.limitStandard("admin-users-export"),
 						middleware.RequireRBAC(cfg.Enforcer, "user", "read"),

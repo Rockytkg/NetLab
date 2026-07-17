@@ -1,11 +1,57 @@
 package model
 
 import (
+	"database/sql/driver"
+	"encoding/json"
+	"fmt"
 	"strconv"
 	"time"
 
 	"gorm.io/gorm"
 )
+
+// RecoveryCodes is the JSONB representation of a user's hashed recovery codes.
+// PostgreSQL drivers return JSONB values as []byte, so the type must explicitly
+// implement sql.Scanner instead of relying on GORM's default slice mapping.
+type RecoveryCodes []string
+
+func (r *RecoveryCodes) Scan(value any) error {
+	if value == nil {
+		*r = RecoveryCodes{}
+		return nil
+	}
+
+	var data []byte
+	switch v := value.(type) {
+	case []byte:
+		data = v
+	case string:
+		data = []byte(v)
+	default:
+		return fmt.Errorf("cannot scan recovery codes from %T", value)
+	}
+
+	if len(data) == 0 {
+		*r = RecoveryCodes{}
+		return nil
+	}
+	var codes []string
+	if err := json.Unmarshal(data, &codes); err != nil {
+		return fmt.Errorf("decode recovery codes: %w", err)
+	}
+	if codes == nil {
+		codes = []string{}
+	}
+	*r = RecoveryCodes(codes)
+	return nil
+}
+
+func (r RecoveryCodes) Value() (driver.Value, error) {
+	if r == nil {
+		return []byte("[]"), nil
+	}
+	return json.Marshal([]string(r))
+}
 
 // UserRole 表示用户在系统中的角色。
 type UserRole string
@@ -44,10 +90,10 @@ type User struct {
 	PreferredAuthMethod string     `gorm:"type:varchar(16);not null;default:'totp'" json:"preferredAuthMethod"`
 
 	// ── 恢复码 ──
-	RecoveryCodes     []string   `gorm:"type:jsonb;default:'[]'" json:"-"`
-	PasswordChangedAt *time.Time `gorm:"type:timestamptz" json:"passwordChangedAt"`
-	CreatedAt         time.Time  `gorm:"type:timestamptz;not null;default:now()" json:"createdAt"`
-	UpdatedAt         time.Time  `gorm:"type:timestamptz;not null;default:now()" json:"updatedAt"`
+	RecoveryCodes     RecoveryCodes `gorm:"type:jsonb;default:'[]'" json:"-"`
+	PasswordChangedAt *time.Time    `gorm:"type:timestamptz" json:"passwordChangedAt"`
+	CreatedAt         time.Time     `gorm:"type:timestamptz;not null;default:now()" json:"createdAt"`
+	UpdatedAt         time.Time     `gorm:"type:timestamptz;not null;default:now()" json:"updatedAt"`
 }
 
 func (User) TableName() string { return "nb_users" }
@@ -61,7 +107,7 @@ func (u *User) BeforeCreate(tx *gorm.DB) error {
 		u.Status = StatusActive
 	}
 	if u.RecoveryCodes == nil {
-		u.RecoveryCodes = []string{}
+		u.RecoveryCodes = RecoveryCodes{}
 	}
 	return nil
 }

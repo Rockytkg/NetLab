@@ -163,6 +163,9 @@ func (s *PasskeyService) BeginRegistration(ctx context.Context, userID string) (
 // rawResponse 为前端提交的原始 WebAuthn JSON。
 // verifyCode 为发送到用户邮箱的一次性验证码，用于二次校验。
 func (s *PasskeyService) FinishRegistration(ctx context.Context, userID, name, verifyCode string, rawResponse []byte) *apperrors.AppError {
+	if err := s.ensureEnabled(ctx); err != nil {
+		return err
+	}
 	if s.wa == nil {
 		return apperrors.New(apperrors.ErrCodeOperationDenied, "webauthn not configured")
 	}

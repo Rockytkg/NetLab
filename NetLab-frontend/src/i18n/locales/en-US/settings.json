@@ -158,6 +158,7 @@
       "email": "Email",
       "role": "Role",
       "status": "Status",
+      "twoFactor": "Two-Factor",
       "createdAt": "Created At",
       "actions": "Actions"
     },
@@ -171,7 +172,7 @@
     "editUser": "Edit User",
     "resetPassword": "Reset Password",
     "importUsers": "Import Users",
-    "importUsersFormat": "Fill in the user information according to the template. The first row must contain username, nickname, phone, email, role, and password headers; enter one user per row. Role defaults to viewer when empty.",
+    "importUsersFormat": "Fill in every field in the template. The first row must contain username, nickname, phone, email, role, and password headers; enter one complete user per row.",
     "export": "Export Users",
     "exportSuccess": "Export successful",
     "invalidImportFile": "Please upload a valid user import file",
@@ -203,6 +204,10 @@
     "generatePassword": "Generate Strong Password",
     "passwordComplexity": "Password must contain both letters and numbers",
     "passwordReset": "Passwords reset successfully",
+    "twoFactorEnabled": "Enabled",
+    "twoFactorDisabled": "Disabled",
+    "disableTwoFactor": "Disable two-factor authentication",
+    "disableTwoFactorHint": "Disabling clears the user's two-factor secret and recovery codes. The user can bind two-factor authentication again themselves.",
     "importDone": "Imported {{created}} users successfully",
     "importResult": "Import finished: {{created}} created, {{skipped}} skipped"
   },

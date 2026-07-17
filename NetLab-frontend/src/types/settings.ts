@@ -74,9 +74,9 @@ export interface AdminUserView {
   id: string
   username: string
   email: string
-  avatar: string
   role: string
   status: string
+	 twoFactorEnabled: boolean
 	createdAt: string
 }
 
@@ -104,6 +104,7 @@ export interface UpdateUserParams {
 	email: string
   role: string
   status: string
+	disableTwoFactor?: boolean
 }
 
 /** 单用户创建字段 */
@@ -127,8 +128,8 @@ export interface ImportUserParams {
 	nickname: string
 	phone: string
   email: string
-  role?: string
-  password?: string
+  role: string
+  password: string
 }
 
 /** 导入结果汇总 */

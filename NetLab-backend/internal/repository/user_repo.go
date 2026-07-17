@@ -258,6 +258,19 @@ func (r *UserRepository) DisableTwoFactor(ctx context.Context, userID string) er
 		}).Error
 }
 
+// ResetTwoFactor 关闭两步验证并清空密钥、恢复码及首选认证方式。
+func (r *UserRepository) ResetTwoFactor(ctx context.Context, userID string) error {
+	return r.db.WithContext(ctx).Model(&model.User{}).
+		Where("id = ?", userID).
+		Updates(map[string]interface{}{
+			"two_factor_secret":     "",
+			"two_factor_enabled":    false,
+			"recovery_codes":        model.RecoveryCodes{},
+			"preferred_auth_method": "totp",
+			"updated_at":            time.Now(),
+		}).Error
+}
+
 // SetPreferredAuthMethod 更新用户的两步验证首选方式（totp / passkey）。
 func (r *UserRepository) SetPreferredAuthMethod(ctx context.Context, userID, method string) error {
 	return r.db.WithContext(ctx).Model(&model.User{}).
@@ -271,13 +284,13 @@ func (r *UserRepository) SetPreferredAuthMethod(ctx context.Context, userID, met
 // DeleteRecoveryCodes 清空用户恢复码（关闭 2FA 或重新生成时调用）。
 func (r *UserRepository) DeleteRecoveryCodes(ctx context.Context, userID uint64) error {
 	return r.db.WithContext(ctx).Model(&model.User{}).Where("id = ?", userID).
-		Update("recovery_codes", "[]").Error
+		Update("recovery_codes", model.RecoveryCodes{}).Error
 }
 
 // StoreRecoveryCodes 替换式写入一批恢复码哈希到 User JSONB。
 func (r *UserRepository) StoreRecoveryCodes(ctx context.Context, userID uint64, hashes []string) error {
 	return r.db.WithContext(ctx).Model(&model.User{}).Where("id = ?", userID).
-		Update("recovery_codes", hashes).Error
+		Update("recovery_codes", model.RecoveryCodes(hashes)).Error
 }
 
 // ConsumeRecoveryCode 在 User JSONB 中消费一个恢复码。

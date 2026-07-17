@@ -10,8 +10,8 @@ import EmailCodeField from './EmailCodeField'
 const { Text } = Typography
 
 interface PasskeyPanelProps {
-  /** 系统安全策略是否启用 Passkey */
-  enabled: boolean
+  /** 系统安全策略状态；undefined 表示配置仍在加载。 */
+  enabled?: boolean
 }
 
 /**
@@ -53,7 +53,7 @@ export default function PasskeyPanel({ enabled }: PasskeyPanelProps) {
   }, [load])
 
   const supported = isSupported()
-  const canOperate = enabled && supported
+  const canOperate = enabled === true && supported
 
   const openAdd = () => {
     setName('')
@@ -116,7 +116,7 @@ export default function PasskeyPanel({ enabled }: PasskeyPanelProps) {
     >
       <Text type="secondary">{t('settings:passkey.description')}</Text>
 
-      {!enabled && (
+      {enabled === false && (
         <Alert
           type="warning"
           showIcon
@@ -124,7 +124,7 @@ export default function PasskeyPanel({ enabled }: PasskeyPanelProps) {
           style={{ marginTop: token.margin }}
         />
       )}
-      {enabled && !supported && (
+      {enabled === true && !supported && (
         <Alert
           type="warning"
           showIcon
