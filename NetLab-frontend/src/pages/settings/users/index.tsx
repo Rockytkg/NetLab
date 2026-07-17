@@ -20,7 +20,6 @@ import {
 import type { ColumnsType } from 'antd/es/table'
 import type { UploadProps } from 'antd'
 import {
-  SafetyCertificateOutlined,
   KeyOutlined,
   UploadOutlined,
   SearchOutlined,
@@ -33,8 +32,10 @@ import {
 } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import { adminApi } from '@/services/admin'
-import { useAuthStore } from '@/stores/authStore'
-import type { AdminUserView, CreateUserParams, ImportSummary, UpdateUserParams } from '@/types/settings'
+import { usePermission } from '@/hooks/usePermission'
+import Can from '@/components/auth/Can'
+import { createPasswordStrengthRule } from '@/utils/password-strength'
+import type { AdminUserView, CreateUserParams, ExportUsersParams, ImportSummary, UpdateUserParams } from '@/types/settings'
 
 const { Text } = Typography
 
@@ -67,13 +68,13 @@ function randomIndex(max: number) {
   return bytes[0] % max
 }
 
-/** 用户管理页（仅 admin）：分页列表 + 批量改角色/重置密码/CSV 导入。 */
+/** 用户管理页：分页列表 + 批量改角色/重置密码/Excel 导入导出。 */
 export default function UsersPage() {
   const { t } = useTranslation(['settings', 'common'])
   const { token } = theme.useToken()
   const { message, modal } = App.useApp()
-  const currentRole = useAuthStore((s) => s.userInfo?.role)
-  const isAdmin = currentRole === 'admin' || currentRole === 'super_admin'
+  const { can } = usePermission()
+  const canReadUsers = can('user', 'read')
 
   const [data, setData] = useState<AdminUserView[]>([])
   const [total, setTotal] = useState(0)
@@ -91,11 +92,6 @@ export default function UsersPage() {
   const [createForm] = Form.useForm<CreateUserFormValues>()
   const [createSaving, setCreateSaving] = useState(false)
 
-  // 角色弹窗
-  const [roleOpen, setRoleOpen] = useState(false)
-  const [roleValue, setRoleValue] = useState<UserRoleValue>('viewer')
-  const [roleSaving, setRoleSaving] = useState(false)
-
   // 重置密码弹窗
   const [pwOpen, setPwOpen] = useState(false)
   const [pwForm] = Form.useForm<{ newPassword: string }>()
@@ -111,10 +107,11 @@ export default function UsersPage() {
   const [importOpen, setImportOpen] = useState(false)
   const [importing, setImporting] = useState(false)
   const [importResult, setImportResult] = useState<ImportSummary | null>(null)
-  const [importPreview, setImportPreview] = useState<string[][]>([])
+  const [exporting, setExporting] = useState(false)
+  const [templateDownloading, setTemplateDownloading] = useState(false)
 
   const load = useCallback(async () => {
-    if (!isAdmin) return
+    if (!canReadUsers) return
     setLoading(true)
     try {
       const res = await adminApi.listUsers({ page, size, keyword, status: statusFilter, role: roleFilter })
@@ -125,27 +122,27 @@ export default function UsersPage() {
     } finally {
       setLoading(false)
     }
-  }, [isAdmin, page, size, keyword, statusFilter, roleFilter])
+  }, [canReadUsers, page, size, keyword, statusFilter, roleFilter])
 
   useEffect(() => {
     load()
   }, [load])
 
+  // 数据范围由后端 RBAC 资源权限控制。
   const selectedUsers = useMemo(
     () => data.filter((u) => selectedRowKeys.includes(u.id)),
     [data, selectedRowKeys],
   )
-  const hasSelection = selectedRowKeys.length > 0
+  const hasSelection = selectedUsers.length > 0
 
   const columns: ColumnsType<AdminUserView> = [
     {
       title: t('settings:users.columns.username'),
       dataIndex: 'username',
       key: 'username',
-      render: (val: string, record) => (
+      render: (val: string) => (
         <Space>
           <Text strong>{val}</Text>
-          {record.isAdmin && <Tag color="gold">{t('settings:users.adminTag')}</Tag>}
         </Space>
       ),
     },
@@ -159,8 +156,8 @@ export default function UsersPage() {
       dataIndex: 'role',
       key: 'role',
       render: (val: string) => (
-        <Tag color={val === 'admin' ? 'gold' : 'blue'}>
-          {t(`settings:profile.role.${val}`, val)}
+        <Tag color="blue">
+          {t(`settings:users.roles.${val}`, val)}
         </Tag>
       ),
     },
@@ -186,14 +183,16 @@ export default function UsersPage() {
       fixed: 'right',
       render: (_, record) => (
         <Space size={token.marginXXS}>
-          <Button
-            type="text"
-            size="small"
-            icon={<EditOutlined />}
-            onClick={() => openEdit(record)}
-          >
-            {t('common:edit')}
-          </Button>
+          <Can resource="user" action="update">
+            <Button
+              type="text"
+              size="small"
+              icon={<EditOutlined />}
+              onClick={() => openEdit(record)}
+            >
+              {t('common:edit')}
+            </Button>
+          </Can>
         </Space>
       ),
     },
@@ -202,6 +201,20 @@ export default function UsersPage() {
   const handleSearch = () => {
     setPage(1)
     setKeyword(search.trim())
+  }
+
+  const handleExport = async () => {
+    if (!hasSelection) return
+    setExporting(true)
+    try {
+      const params: ExportUsersParams = { userIds: selectedUsers.map((u) => u.id) }
+      await adminApi.exportUsers(params)
+      message.success(t('settings:users.exportSuccess'))
+    } catch {
+      // 拦截器已提示错误
+    } finally {
+      setExporting(false)
+    }
   }
 
   const openCreate = () => {
@@ -267,11 +280,6 @@ export default function UsersPage() {
     }
   }
 
-  const openRoleModal = () => {
-    setRoleValue('viewer')
-    setRoleOpen(true)
-  }
-
   const handleBatchDelete = () => {
     modal.confirm({
       title: t('settings:users.deleteConfirmTitle'),
@@ -286,28 +294,6 @@ export default function UsersPage() {
         await load()
       },
     })
-  }
-
-  const handleRoleSave = async () => {
-    if (!roleValue) {
-      message.warning(t('settings:users.roleRequired'))
-      return
-    }
-    setRoleSaving(true)
-    try {
-      await adminApi.batchUpdateRole(
-        selectedUsers.map((u) => u.id),
-        roleValue,
-      )
-      message.success(t('settings:users.roleUpdated'))
-      setRoleOpen(false)
-      setSelectedRowKeys([])
-      await load()
-    } catch {
-      // 拦截器已提示错误
-    } finally {
-      setRoleSaving(false)
-    }
   }
 
   const handleResetSave = async () => {
@@ -330,52 +316,40 @@ export default function UsersPage() {
     }
   }
 
-  const downloadTemplate = () => {
-    const csv = [
-      'username(required),email(required),role(viewer|editor optional),password(optional min 8 with letters and numbers)',
-      'alice,alice@example.com,viewer,Password123',
-      'bob,bob@example.com,editor,Password123',
-    ].join('\n')
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = 'netlab-users-template.csv'
-    a.click()
-    URL.revokeObjectURL(url)
-  }
-
-  const parsePreview = async (file: File) => {
-    const text = await file.text()
-    const rows = text
-      .split(/\r?\n/)
-      .map((line) => line.split(',').map((cell) => cell.trim()))
-      .filter((row) => row.some(Boolean))
-      .slice(0, 6)
-    setImportPreview(rows)
+  const downloadTemplate = async () => {
+    setTemplateDownloading(true)
+    try {
+      await adminApi.downloadImportTemplate()
+    } catch {
+      // 拦截器已提示错误
+    } finally {
+      setTemplateDownloading(false)
+    }
   }
 
   const uploadProps: UploadProps = {
-    accept: '.csv',
+    accept: '.xlsx,.xls,.csv',
     maxCount: 1,
     showUploadList: false,
     beforeUpload: async (file) => {
-      if (!file.name.toLowerCase().endsWith('.csv')) {
-        message.warning(t('settings:users.invalidFile'))
+      const ext = file.name.toLowerCase()
+      if (!ext.endsWith('.xlsx') && !ext.endsWith('.xls') && !ext.endsWith('.csv')) {
+        message.warning(t('settings:users.invalidExcelFile'))
         return false
       }
       setImporting(true)
       setImportResult(null)
       try {
-        await parsePreview(file)
         const summary = await adminApi.importUsers(file)
         setImportResult(summary)
         if (summary.created > 0) {
           message.success(t('settings:users.importDone', { created: summary.created }))
           await load()
         }
-      } catch {
-        // 拦截器已提示错误
+      } catch (error) {
+        if (error instanceof Error && error.message !== 'canceled') {
+          message.error(t('settings:users.invalidImportData'))
+        }
       } finally {
         setImporting(false)
       }
@@ -383,8 +357,8 @@ export default function UsersPage() {
     },
   }
 
-  if (!isAdmin) {
-    return <Result status="403" title="403" subTitle={t('settings:adminOnly')} />
+  if (!canReadUsers) {
+    return <Result status="403" title="403" subTitle={t('settings:permissionDenied')} />
   }
 
   return (
@@ -395,37 +369,38 @@ export default function UsersPage() {
           wrap
         >
           <Space wrap>
-            <Button type="primary" icon={<UserAddOutlined />} onClick={openCreate}>
+            <Can resource="user" action="create"><Button type="primary" icon={<UserAddOutlined />} onClick={openCreate}>
               {t('settings:users.addUser')}
-            </Button>
-            <Button
-              icon={<SafetyCertificateOutlined />}
-              disabled={!hasSelection}
-              onClick={openRoleModal}
-            >
-              {t('settings:users.changeRole')}
-            </Button>
-            <Button icon={<KeyOutlined />} disabled={!hasSelection} onClick={() => setPwOpen(true)}>
+            </Button></Can>
+            <Can resource="user" action="update"><Button icon={<KeyOutlined />} disabled={!hasSelection} onClick={() => setPwOpen(true)}>
               {t('settings:users.resetPassword')}
-            </Button>
-            <Button
+            </Button></Can>
+            <Can resource="user" action="read"><Button
+              icon={<DownloadOutlined />}
+              disabled={!hasSelection}
+              loading={exporting}
+              onClick={handleExport}
+            >
+              {t('settings:users.export')}
+            </Button></Can>
+            <Can resource="user" action="delete"><Button
               danger
               icon={<DeleteOutlined />}
               disabled={!hasSelection}
               onClick={handleBatchDelete}
             >
               {t('settings:users.delete')}
-            </Button>
+            </Button></Can>
             {hasSelection && (
               <Text type="secondary">
-                {t('settings:users.selectedCount', { count: selectedRowKeys.length })}
+                {t('settings:users.selectedCount', { count: selectedUsers.length })}
               </Text>
             )}
           </Space>
           <Space wrap>
-            <Button icon={<UploadOutlined />} onClick={() => setImportOpen(true)}>
-              {t('settings:users.import')}
-            </Button>
+            <Can resource="user" action="import"><Button icon={<UploadOutlined />} onClick={() => setImportOpen(true)}>
+              {t('settings:users.importExcel')}
+            </Button></Can>
             <Select
               allowClear
               value={statusFilter}
@@ -550,14 +525,12 @@ export default function UsersPage() {
                 noStyle
                 rules={[
                   { required: true, message: t('settings:changePassword.newRequired') },
-                  { min: 8, message: t('settings:changePassword.minLength') },
-                  {
-                    pattern: /^(?=.*[A-Za-z])(?=.*\d).+$/,
-                    message: t('settings:users.passwordComplexity'),
-                  },
+                  createPasswordStrengthRule({
+                    t,
+                  }),
                 ]}
               >
-                <Input.Password autoComplete="new-password" maxLength={128} />
+                <Input.Password autoComplete="new-password" maxLength={72} />
               </Form.Item>
               <Button
                 icon={<ThunderboltOutlined />}
@@ -618,32 +591,6 @@ export default function UsersPage() {
         </Form>
       </Modal>
 
-      {/* 批量改角色 */}
-      <Modal
-        title={t('settings:users.changeRole')}
-        open={roleOpen}
-        onCancel={() => setRoleOpen(false)}
-        onOk={handleRoleSave}
-        okText={t('common:confirm')}
-        cancelText={t('common:cancel')}
-        confirmLoading={roleSaving}
-      >
-        <Space orientation="vertical" size={token.margin} style={{ width: '100%' }}>
-          <Text type="secondary">
-            {t('settings:users.changeRoleHint', { count: selectedRowKeys.length })}
-          </Text>
-          <Select
-            value={roleValue}
-            onChange={setRoleValue}
-            style={{ width: '100%' }}
-            options={ASSIGNABLE_ROLES.map((r) => ({
-              value: r,
-              label: t(`settings:profile.role.${r}`, r),
-            }))}
-          />
-        </Space>
-      </Modal>
-
       {/* 批量重置密码 */}
       <Modal
         title={t('settings:users.resetPassword')}
@@ -655,7 +602,7 @@ export default function UsersPage() {
         confirmLoading={pwSaving}
       >
         <Text type="secondary">
-          {t('settings:users.resetHint', { count: selectedRowKeys.length })}
+          {t('settings:users.resetHint', { count: selectedUsers.length })}
         </Text>
         <Form form={pwForm} layout="vertical" style={{ marginTop: token.margin }}>
           <Form.Item
@@ -668,14 +615,12 @@ export default function UsersPage() {
                 noStyle
                 rules={[
                   { required: true, message: t('settings:changePassword.newRequired') },
-                  { min: 8, message: t('settings:changePassword.minLength') },
-                  {
-                    pattern: /^(?=.*[A-Za-z])(?=.*\d).+$/,
-                    message: t('settings:users.passwordComplexity'),
-                  },
+                  createPasswordStrengthRule({
+                    t,
+                  }),
                 ]}
               >
-                <Input.Password autoComplete="new-password" maxLength={128} />
+                <Input.Password autoComplete="new-password" maxLength={72} />
               </Form.Item>
               <Button
                 icon={<ThunderboltOutlined />}
@@ -688,43 +633,28 @@ export default function UsersPage() {
         </Form>
       </Modal>
 
-      {/* CSV 导入 */}
+      {/* Excel 导入 */}
       <Modal
-        title={t('settings:users.import')}
+        title={t('settings:users.importExcel')}
         open={importOpen}
         onCancel={() => {
           setImportOpen(false)
           setImportResult(null)
-          setImportPreview([])
         }}
         footer={null}
       >
         <Space orientation="vertical" size={token.margin} style={{ width: '100%' }}>
-          <Alert type="info" showIcon title={t('settings:users.importFormat')} />
+          <Alert type="info" showIcon title={t('settings:users.importExcelFormat')} />
           <Space.Compact block>
-            <Button icon={<DownloadOutlined />} onClick={downloadTemplate}>
+            <Can resource="user" action="import"><Button icon={<DownloadOutlined />} onClick={downloadTemplate} loading={templateDownloading}>
               {t('settings:users.downloadTemplate')}
-            </Button>
-            <Upload {...uploadProps}>
+            </Button></Can>
+            <Can resource="user" action="import"><Upload {...uploadProps}>
               <Button type="primary" icon={<UploadOutlined />} loading={importing}>
-                {t('settings:users.selectFile')}
+                {t('settings:users.importExcel')}
               </Button>
-            </Upload>
+            </Upload></Can>
           </Space.Compact>
-
-          {importPreview.length > 0 && (
-            <Card size="small" title={t('settings:users.preview')}>
-              <List
-                size="small"
-                dataSource={importPreview}
-                renderItem={(row, index) => (
-                  <List.Item style={{ paddingInline: 0 }}>
-                    <Text type={index === 0 ? 'secondary' : undefined}>{row.join(' | ')}</Text>
-                  </List.Item>
-                )}
-              />
-            </Card>
-          )}
 
           {importResult && (
             <Alert

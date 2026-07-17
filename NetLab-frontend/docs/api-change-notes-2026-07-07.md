@@ -64,7 +64,7 @@ Behavior:
 
 ### List users
 
-`GET /api/admin/users`
+`GET /api/users`
 
 Authentication: Bearer token with `admin` role required.
 
@@ -78,7 +78,7 @@ Query parameters:
 
 ### Update one user
 
-`PUT /api/admin/users/{id}`
+`PUT /api/users/{id}`
 
 Request:
 
@@ -94,7 +94,7 @@ Administrator-role users can be edited through this endpoint.
 
 ### Batch update roles
 
-`PUT /api/admin/users/roles`
+`PUT /api/users/role`
 
 Request:
 
@@ -109,7 +109,7 @@ Only `editor` and `viewer` are assignable through the management UI/API.
 
 ### Batch update emails
 
-`PUT /api/admin/users/emails`
+`PUT /api/users`
 
 Request:
 
@@ -128,7 +128,7 @@ Each email is validated for format and uniqueness before write.
 
 ### Batch delete users
 
-`DELETE /api/admin/users`
+`DELETE /api/users`
 
 Request:
 
@@ -142,13 +142,21 @@ Administrator-role users can be deleted through this endpoint.
 
 ### Import users
 
-`POST /api/admin/users/import`
+`POST /api/users/import`
 
-Multipart form-data:
+JSON body:
 
-- `file`: CSV file, max 2 MB.
+```json
+{
+  "users": [
+    { "username": "alice", "email": "alice@example.com", "role": "viewer", "password": "..." }
+  ]
+}
+```
 
-CSV headers:
+The frontend parses `.xlsx`, `.xls`, and `.csv` files and serializes their rows into this JSON shape. The backend does not parse table files.
+
+User fields:
 
 - `username`: required, 3-64 characters, letters/numbers/underscore/hyphen.
 - `email`: required, valid and unique.

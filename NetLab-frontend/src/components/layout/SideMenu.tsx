@@ -2,23 +2,14 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { Menu, theme } from 'antd'
 import {
-  AppstoreOutlined,
-  DashboardOutlined,
-  DesktopOutlined,
-  CloudOutlined,
-  CloudDownloadOutlined,
   ControlOutlined,
+  DashboardOutlined,
   SettingOutlined,
-  QuestionCircleOutlined,
-  RadarChartOutlined,
   TeamOutlined,
-  ClusterOutlined,
-  DatabaseOutlined,
-  UploadOutlined,
 } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import type { MenuProps } from 'antd'
-import { useAuthStore } from '@/stores/authStore'
+import { usePermission } from '@/hooks/usePermission'
 
 interface SideMenuProps {
   collapsed: boolean
@@ -29,76 +20,20 @@ export default function SideMenu({ collapsed }: SideMenuProps) {
   const navigate = useNavigate()
   const location = useLocation()
   const { token } = theme.useToken()
-  const role = useAuthStore((s) => s.userInfo?.role)
-  const isAdmin = role === 'admin' || role === 'super_admin'
+  const { can } = usePermission()
+  const canReadSettings = can('setting', 'read')
 
   type MenuItem = Required<MenuProps>['items'][number]
-  const rootSubmenuKeys = ['workspace', 'infrastructure', 'administration']
+  const rootSubmenuKeys = ['administration']
 
   const menuItems = useMemo<MenuItem[]>(
     () => [
       {
-        key: 'workspace',
+        key: '/dashboard',
         icon: <DashboardOutlined />,
-        label: t('workspace'),
-        children: [
-          {
-            key: '/dashboard',
-            icon: <DashboardOutlined />,
-            label: t('dashboard'),
-          },
-          {
-            key: '/device-groups',
-            icon: <ClusterOutlined />,
-            label: t('deviceGroups'),
-          },
-          {
-            key: '/observability',
-            icon: <RadarChartOutlined />,
-            label: t('observability'),
-          },
-        ],
+        label: t('dashboard'),
       },
-      {
-        key: 'infrastructure',
-        icon: <DatabaseOutlined />,
-        label: t('infrastructure'),
-        children: [
-          {
-            key: '/device-library',
-            icon: <DatabaseOutlined />,
-            label: t('deviceLibrary'),
-          },
-          {
-            key: 'operations-templates',
-            icon: <CloudOutlined />,
-            label: t('templateMarket'),
-            children: [
-              {
-                key: '/operations-templates',
-                icon: <AppstoreOutlined />,
-                label: t('browseTemplates'),
-              },
-              {
-                key: '/operations-templates/upload',
-                icon: <UploadOutlined />,
-                label: t('myUploads'),
-              },
-              {
-                key: '/operations-templates/installed',
-                icon: <CloudDownloadOutlined />,
-                label: t('installed'),
-              },
-            ],
-          },
-          {
-            key: '/devices/demo/topology',
-            icon: <DesktopOutlined />,
-            label: t('deviceTopology'),
-          },
-        ],
-      },
-      ...(isAdmin
+      ...(canReadSettings
         ? [
             {
               key: 'administration',
@@ -119,13 +54,8 @@ export default function SideMenu({ collapsed }: SideMenuProps) {
             } as MenuItem,
           ]
         : []),
-      {
-        key: '/help',
-        icon: <QuestionCircleOutlined />,
-        label: t('help'),
-      },
     ],
-    [isAdmin, t],
+    [canReadSettings, t],
   )
 
   const leafKeys = useMemo(() => {
@@ -148,10 +78,6 @@ export default function SideMenu({ collapsed }: SideMenuProps) {
   }, [menuItems])
 
   const selectedKey = useMemo(() => {
-    if (location.pathname.startsWith('/devices/') && location.pathname.endsWith('/topology')) {
-      return '/devices/demo/topology'
-    }
-
     return (
       leafKeys
         .filter((key) => location.pathname === key || location.pathname.startsWith(`${key}/`))

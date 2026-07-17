@@ -54,12 +54,17 @@ func NewPostgresDB(cfg config.DatabaseConfig, mode string) (*gorm.DB, error) {
 // 验证码仅存储在 Redis 中（临时、基于 TTL）；
 // 无需 PostgreSQL 表。
 func AutoMigrate(db *gorm.DB) error {
-	return db.AutoMigrate(
+	if err := db.AutoMigrate(
 		&model.User{},
-		&model.AuthBinding{},
 		&model.SystemConfig{},
-		&model.RecoveryCode{},
-	)
+		&model.Role{},
+		&model.Permission{},
+		&model.RolePermission{},
+	); err != nil {
+		return err
+	}
+	// AutoMigrate never removes columns; explicitly retire the obsolete role flag.
+	return db.Exec("ALTER TABLE nb_roles DROP COLUMN IF EXISTS is_system").Error
 }
 
 // SeedDefaultConfigs 在默认系统配置不存在时插入它们。
@@ -71,6 +76,7 @@ func SeedDefaultConfigs(db *gorm.DB) error {
 		{Key: "captcha_enabled", Value: `false`, Description: "Require image captcha on login and registration"},
 		{Key: "passkey_enabled", Value: `true`, Description: "Enable WebAuthn/Passkey authentication"},
 		{Key: "password_reset_enabled", Value: `true`, Description: "Enable password reset via email"},
+		{Key: "smtp", Value: `{}`, Description: "SMTP email delivery settings"},
 		{Key: "password_max_age_days", Value: `0`, Description: "Password max age in days; 0 means never expires"},
 		{Key: "two_factor_required", Value: `false`, Description: "Require two-factor authentication for backend access"},
 		{Key: "icp_beian", Value: `""`, Description: "ICP filing number shown on the login page (e.g. 京ICP备12345678号-1)"},
@@ -97,9 +103,10 @@ func createIfAbsent(db *gorm.DB, c model.SystemConfig) error {
 	return nil
 }
 
-// SeedDefaultAdmin 在数据库中不存在任何用户时创建一个默认管理员用户。
-// 凭据：admin / admin（邮箱：admin@admin.com，角色：admin）
-// 默认管理员必须在首次登录后修改邮箱和密码，避免继续使用初始化凭据。
+// SeedDefaultAdmin 在数据库中不存在任何用户时创建默认管理员用户。
+// 超级管理员凭据：superadmin / superadmin（邮箱：superadmin@netlab.local）
+// 管理员凭据：admin / admin（邮箱：admin@admin.com）
+// 所有默认管理员必须在首次登录后修改邮箱和密码。
 func SeedDefaultAdmin(db *gorm.DB) error {
 	var count int64
 	if err := db.Model(&model.User{}).Count(&count).Error; err != nil {
@@ -109,26 +116,43 @@ func SeedDefaultAdmin(db *gorm.DB) error {
 		return nil
 	}
 
-	hash, err := crypto.HashPassword("admin")
+	// 创建超级管理员 superadmin（role: super_admin）
+	saHash, err := crypto.HashPassword("superadmin")
 	if err != nil {
-		return fmt.Errorf("hash admin password: %w", err)
+		return fmt.Errorf("hash superadmin password: %w", err)
 	}
-
-	admin := &model.User{
-		Username:            "admin",
-		Email:               "admin@admin.com",
-		PasswordHash:        hash,
+	superAdmin := &model.User{
+		Username:            "superadmin",
+		Email:               "superadmin@netlab.local",
+		PasswordHash:        saHash,
 		Role:                model.RoleSuperAdmin,
 		Status:              model.StatusActive,
 		ForcePasswordChange: true,
 		ForceEmailChange:    true,
 	}
+	if err := db.Create(superAdmin).Error; err != nil {
+		return fmt.Errorf("create superadmin user: %w", err)
+	}
 
+	// 创建管理员 admin（role: admin）
+	adminHash, err := crypto.HashPassword("admin")
+	if err != nil {
+		return fmt.Errorf("hash admin password: %w", err)
+	}
+	admin := &model.User{
+		Username:            "admin",
+		Email:               "admin@admin.com",
+		PasswordHash:        adminHash,
+		Role:                model.RoleAdmin,
+		Status:              model.StatusActive,
+		ForcePasswordChange: true,
+		ForceEmailChange:    true,
+	}
 	if err := db.Create(admin).Error; err != nil {
 		return fmt.Errorf("create admin user: %w", err)
 	}
 
-	log.Println("[DB] Default admin user seeded (admin / admin)")
+	log.Println("[DB] Default users seeded: superadmin / superadmin, admin / admin")
 	return nil
 }
 

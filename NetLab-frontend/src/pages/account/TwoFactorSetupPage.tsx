@@ -22,7 +22,7 @@ export default function TwoFactorSetupPage() {
     ;(async () => {
       try {
         const user = await authApi.getUserInfo()
-        useAuthStore.setState({ userInfo: user })
+        useAuthStore.getState().setUserInfo(user)
         if (user.twoFactorEnabled) {
           useAuthStore.setState({ securityActions: null })
           navigate('/dashboard', { replace: true })

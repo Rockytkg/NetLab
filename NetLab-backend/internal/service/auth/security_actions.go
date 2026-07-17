@@ -21,7 +21,7 @@ func computeSecurityActions(ctx context.Context, cs *sysconfig.Service, u *model
 		RequireTwoFactorSetup: !u.TwoFactorEnabled && twoFactorForced(ctx, cs),
 	}
 	switch {
-	case requireEmail && u.Username == "admin":
+	case requireEmail && (u.Username == "admin" || u.Username == "superadmin"):
 		actions.Reason = "default_admin_bootstrap"
 	case requireEmail:
 		actions.Reason = "first_login"

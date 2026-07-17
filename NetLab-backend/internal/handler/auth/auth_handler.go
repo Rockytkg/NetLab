@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"strconv"
 	"encoding/json"
 
 	"github.com/gin-gonic/gin"
@@ -20,31 +21,45 @@ import (
 // AuthHandler 处理认证相关端点的 HTTP 请求。
 type AuthHandler struct {
 	authService      *authsvc.AuthService
+	verificationSvc  *authsvc.VerificationService
+	passwordSvc      *authsvc.PasswordService
 	passkeyService   *authsvc.PasskeyService
 	tokenService     *authsvc.TokenService
 	oauthService     *authsvc.OAuthService
 	twoFactorService *authsvc.TwoFactorService
 	captchaMgr       *captcha.Manager
+	permLister       PermissionLister
 	logger           *zap.Logger
+}
+
+// PermissionLister 提供通过角色名查询权限键列表的能力。
+type PermissionLister interface {
+	PermKeysForRole(roleName string) []string
 }
 
 // NewAuthHandler 创建一个新的 AuthHandler。
 func NewAuthHandler(
 	authService *authsvc.AuthService,
+	verificationSvc *authsvc.VerificationService,
+	passwordSvc *authsvc.PasswordService,
 	passkeyService *authsvc.PasskeyService,
 	tokenService *authsvc.TokenService,
 	oauthService *authsvc.OAuthService,
 	twoFactorService *authsvc.TwoFactorService,
 	captchaMgr *captcha.Manager,
+	permLister PermissionLister,
 	logger *zap.Logger,
 ) *AuthHandler {
 	return &AuthHandler{
 		authService:      authService,
+		verificationSvc:  verificationSvc,
+		passwordSvc:      passwordSvc,
 		passkeyService:   passkeyService,
 		tokenService:     tokenService,
 		oauthService:     oauthService,
 		twoFactorService: twoFactorService,
 		captchaMgr:       captchaMgr,
+		permLister:       permLister,
 		logger:           logger,
 	}
 }
@@ -71,7 +86,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	config, _ := h.authService.GetSystemConfig(c.Request.Context())
 	if config != nil && config.CaptchaEnabled {
 		if params.CaptchaID == "" || params.CaptchaCode == "" {
-			response.Error(c, apperrors.New(apperrors.ErrCodeInvalidCredentials, "captcha is required"))
+			response.Error(c, apperrors.New(apperrors.ErrCodeInvalidCode, "captcha is required"))
 			return
 		}
 		ok, err := h.captchaMgr.Verify(params.CaptchaID, params.CaptchaCode)
@@ -81,12 +96,15 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		}
 	}
 
-	result, appErr := h.authService.Login(c.Request.Context(), params.Username, params.Password, params.CaptchaID, params.CaptchaCode)
+	result, appErr := h.authService.Login(c.Request.Context(), params.Username, params.Password)
 	if appErr != nil {
 		response.Error(c, appErr)
 		return
 	}
 
+	if result.User != nil && h.permLister != nil {
+		result.User.Permissions = h.permLister.PermKeysForRole(result.User.Role)
+	}
 	response.SuccessOK(c, loginResultToDTO(result))
 }
 
@@ -142,6 +160,9 @@ func (h *AuthHandler) GetUserInfo(c *gin.Context) {
 	}
 
 	result := userModelToResult(user)
+	if h.permLister != nil {
+		result.Permissions = h.permLister.PermKeysForRole(result.Role)
+	}
 	if hasPasskey, err := h.passkeyService.HasPasskey(c.Request.Context(), userID); err == nil {
 		result.HasPasskey = hasPasskey
 	}
@@ -210,7 +231,7 @@ func (h *AuthHandler) Register(c *gin.Context) {
 	config, _ := h.authService.GetSystemConfig(c.Request.Context())
 	if config != nil && config.CaptchaEnabled {
 		if params.CaptchaID == "" || params.CaptchaCode == "" {
-			response.Error(c, apperrors.New(apperrors.ErrCodeInvalidCredentials, "captcha is required"))
+			response.Error(c, apperrors.New(apperrors.ErrCodeInvalidCode, "captcha is required"))
 			return
 		}
 		ok, err := h.captchaMgr.Verify(params.CaptchaID, params.CaptchaCode)
@@ -249,9 +270,9 @@ func (h *AuthHandler) SendCode(c *gin.Context) {
 	var cooldown int
 	var appErr *apperrors.AppError
 	if params.Purpose == "reset-password" {
-		cooldown, appErr = h.authService.SendPasswordResetCode(c.Request.Context(), params.Email, locale)
+		cooldown, appErr = h.passwordSvc.SendResetCode(c.Request.Context(), params.Email, locale, params.CaptchaID, params.CaptchaCode)
 	} else {
-		cooldown, appErr = h.authService.SendVerificationCode(c.Request.Context(), params.Email, params.Purpose, locale)
+		cooldown, appErr = h.verificationSvc.SendCode(c.Request.Context(), params.Email, params.Purpose, locale, params.CaptchaID, params.CaptchaCode)
 	}
 	if appErr != nil {
 		if appErr.Code == apperrors.ErrCodeRateLimited {
@@ -285,7 +306,7 @@ func (h *AuthHandler) VerifyCode(c *gin.Context) {
 		return
 	}
 
-	valid, appErr := h.authService.VerifyCode(c.Request.Context(), params.Email, params.Code, params.Purpose)
+	valid, appErr := h.verificationSvc.VerifyCode(c.Request.Context(), params.Email, params.Code, params.Purpose)
 	if appErr != nil {
 		response.Error(c, appErr)
 		return
@@ -318,7 +339,7 @@ func (h *AuthHandler) ForgotPassword(c *gin.Context) {
 	}
 
 	locale := contextkeys.GetLocale(c)
-	if err := h.authService.ForgotPassword(c.Request.Context(), params.Email, locale); err != nil {
+	if err := h.passwordSvc.ForgotPassword(c.Request.Context(), params.Email, locale, "", ""); err != nil {
 		response.Error(c, err)
 		return
 	}
@@ -343,7 +364,7 @@ func (h *AuthHandler) ResetPassword(c *gin.Context) {
 		return
 	}
 
-	if err := h.authService.ResetPassword(c.Request.Context(), params.Email, params.VerifyCode, params.NewPassword); err != nil {
+	if err := h.passwordSvc.ResetPassword(c.Request.Context(), params.Email, params.VerifyCode, params.NewPassword); err != nil {
 		response.Error(c, err)
 		return
 	}
@@ -464,6 +485,9 @@ func (h *AuthHandler) VerifyPasskeyAuth(c *gin.Context) {
 		return
 	}
 
+	if result.User != nil && h.permLister != nil {
+		result.User.Permissions = h.permLister.PermKeysForRole(result.User.Role)
+	}
 	response.SuccessOK(c, loginResultToDTO(result))
 }
 
@@ -539,7 +563,7 @@ func (h *AuthHandler) ChangePassword(c *gin.Context) {
 		return
 	}
 
-	if err := h.authService.ChangePassword(c.Request.Context(), userID, params.CurrentPassword, params.NewPassword); err != nil {
+	if err := h.passwordSvc.ChangePassword(c.Request.Context(), userID, params.CurrentPassword, params.NewPassword); err != nil {
 		response.Error(c, err)
 		return
 	}
@@ -678,7 +702,11 @@ func (h *AuthHandler) ChangeEmail(c *gin.Context) {
 		response.Error(c, appErr)
 		return
 	}
-	response.SuccessOK(c, userInfoToDTO(userModelToResult(user)))
+	info := userModelToResult(user)
+	if h.permLister != nil {
+		info.Permissions = h.permLister.PermKeysForRole(info.Role)
+	}
+	response.SuccessOK(c, userInfoToDTO(info))
 }
 
 // OAuthAuthorize 处理 GET /api/auth/oauth/authorize
@@ -761,6 +789,9 @@ func (h *AuthHandler) OAuthCallback(c *gin.Context) {
 		return
 	}
 
+	if result.User != nil && h.permLister != nil {
+		result.User.Permissions = h.permLister.PermKeysForRole(result.User.Role)
+	}
 	response.SuccessOK(c, loginResultToDTO(result))
 }
 
@@ -775,6 +806,9 @@ func (h *AuthHandler) OAuthBindExisting(c *gin.Context) {
 		response.Error(c, appErr)
 		return
 	}
+	if result.User != nil && h.permLister != nil {
+		result.User.Permissions = h.permLister.PermKeysForRole(result.User.Role)
+	}
 	response.SuccessOK(c, loginResultToDTO(result))
 }
 
@@ -788,6 +822,9 @@ func (h *AuthHandler) OAuthCreateAccount(c *gin.Context) {
 	if appErr != nil {
 		response.Error(c, appErr)
 		return
+	}
+	if result.User != nil && h.permLister != nil {
+		result.User.Permissions = h.permLister.PermKeysForRole(result.User.Role)
 	}
 	response.SuccessOK(c, loginResultToDTO(result))
 }
@@ -972,12 +1009,17 @@ func userInfoToDTO(info *authsvc.UserInfoResult) dtoresponse.UserInfo {
 	if info == nil {
 		return dtoresponse.UserInfo{}
 	}
+	perms := info.Permissions
+	if perms == nil {
+		perms = []string{}
+	}
 	return dtoresponse.UserInfo{
 		ID:                  info.ID,
 		Username:            info.Username,
 		Avatar:              info.Avatar,
 		Email:               info.Email,
 		Role:                info.Role,
+		Permissions:         perms,
 		TwoFactorEnabled:    info.TwoFactorEnabled,
 		PreferredAuthMethod: info.PreferredAuthMethod,
 		HasPasskey:          info.HasPasskey,
@@ -1019,7 +1061,7 @@ func loginResultToDTO(result *authsvc.LoginServiceResult) dtoresponse.LoginResul
 
 func userModelToResult(u *model.User) *authsvc.UserInfoResult {
 	return &authsvc.UserInfoResult{
-		ID:                  u.ID.String(),
+		ID:                  strconv.FormatUint(u.ID, 10),
 		Username:            u.Username,
 		Avatar:              u.Avatar,
 		Email:               u.Email,
@@ -1142,6 +1184,9 @@ func (h *AuthHandler) VerifyTwoFactorLogin(c *gin.Context) {
 		response.Error(c, appErr)
 		return
 	}
+	if result.User != nil && h.permLister != nil {
+		result.User.Permissions = h.permLister.PermKeysForRole(result.User.Role)
+	}
 	response.SuccessOK(c, loginResultToDTO(result))
 }
 
@@ -1166,6 +1211,9 @@ func (h *AuthHandler) VerifyRecoveryLogin(c *gin.Context) {
 		response.Error(c, appErr)
 		return
 	}
+	if result.User != nil && h.permLister != nil {
+		result.User.Permissions = h.permLister.PermKeysForRole(result.User.Role)
+	}
 	response.SuccessOK(c, loginResultToDTO(result))
 }
 
@@ -1187,7 +1235,7 @@ func (h *AuthHandler) SetPreferredAuthMethod(c *gin.Context) {
 	}
 	var params request.PreferredAuthMethodParams
 	if err := c.ShouldBindJSON(&params); err != nil {
-		response.Error(c, apperrors.New(apperrors.ErrCodeInvalidCredentials, "invalid parameters: "+err.Error()))
+		response.Error(c, apperrors.New(apperrors.ErrCodeInvalidCode, "invalid parameters: "+err.Error()))
 		return
 	}
 	// 选择通行密钥作为首选方式时，要求用户已注册至少一个通行密钥。

@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next'
 import { adminApi } from '@/services/admin'
 import type { BeianSettings } from '@/types/settings'
 import SettingsSection from './SettingsSection'
+import Can from '@/components/auth/Can'
 
 interface BeianPanelProps {
   value: BeianSettings
@@ -67,9 +68,9 @@ export default function BeianPanel({ value, onSaved }: BeianPanelProps) {
         <Divider style={{ marginBlock: token.marginLG }} />
         <Form.Item style={{ marginBottom: 0 }}>
           <Space>
-            <Button size="middle" type="primary" htmlType="submit" loading={saving} icon={<SaveOutlined />}>
+            <Can resource="setting" action="update"><Button size="middle" type="primary" htmlType="submit" loading={saving} icon={<SaveOutlined />}>
               {saving ? t('settings:saving') : t('settings:save')}
-            </Button>
+            </Button></Can>
           </Space>
         </Form.Item>
       </Form>

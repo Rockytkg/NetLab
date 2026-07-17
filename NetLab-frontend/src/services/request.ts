@@ -28,12 +28,13 @@ const message = {
   error: (content: string) => getMessageApi().error(content),
 }
 
+// 不设置实例级 Content-Type：axios 会为普通对象请求体自动附加
+// application/json，为 FormData 附加带 boundary 的 multipart/form-data。
+// 若在实例级写死 application/json，axios 会对 FormData 走 formDataToJSON
+// 序列化（丢失 boundary 与文件内容），导致文件上传必然失败。
 const request = axios.create({
   baseURL: API_BASE_URL,
   timeout: REQUEST_TIMEOUT,
-  headers: {
-    'Content-Type': 'application/json',
-  },
 })
 
 // ── Token 刷新状态（防止并发刷新） ───────────────
@@ -213,8 +214,10 @@ request.interceptors.response.use(
         : null
 
     // ── 3. 401 —— 尝试刷新 token（双 token 设计） ───────
-    if (status === 401 && config && config.skipAuthRefresh !== true) {
-      // 若已尝试过刷新但仍返回 401，则不再循环
+    if (status === 401 && config && config.skipAuthRefresh !== true && config._retry !== true) {
+      // 单次重试标记：进入刷新分支立即置位。重试后仍 401 时直接失败，
+      // 避免"刷新→重试→再 401"无限循环耗尽 refresh 限流并轮换令牌。
+      config._retry = true
       if (isRefreshing) {
         return new Promise((resolve) => {
           pendingQueue.push((token) => {

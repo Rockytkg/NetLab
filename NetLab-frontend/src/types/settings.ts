@@ -75,8 +75,7 @@ export interface AdminUserView {
   avatar: string
   role: string
   status: string
-  isAdmin: boolean
-  lastLoginAt?: string | null
+	lastLoginAt?: string | null
   createdAt: string
 }
 
@@ -112,9 +111,55 @@ export interface CreateUserParams {
   password: string
 }
 
-/** CSV 导入结果汇总 */
+/** 批量导出用户参数（仅按勾选的用户 ID 导出） */
+export interface ExportUsersParams {
+  userIds: string[]
+}
+
+/** 批量导入用户记录 */
+export interface ImportUserParams {
+  username: string
+  email: string
+  role?: string
+  password?: string
+}
+
+/** 导入结果汇总 */
 export interface ImportSummary {
   created: number
   skipped: number
   errors: string[]
+}
+
+/** ── RBAC 权限管理 ── */
+
+/** 通用消息响应 */
+export interface MessageResponse {
+  message: string
+}
+
+/** 角色视图 */
+export interface RoleView {
+  id: string
+  name: string
+  description?: string
+	permissions?: PermissionRef[]
+  createdAt: string
+  updatedAt: string
+}
+
+/** 权限简洁引用 */
+export interface PermissionRef {
+  id: string
+  resource: string
+  action: string
+}
+
+/** 权限详细视图 */
+export interface PermissionView {
+  id: string
+  resource: string
+  action: string
+  description?: string
+  createdAt: string
 }

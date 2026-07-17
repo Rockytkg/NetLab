@@ -72,6 +72,9 @@ func (r RedisConfig) Addr() string {
 type JWTConfig struct {
 	AccessSecret          string
 	RefreshSecret         string
+	SigningMode           string
+	PrivateKeyPath        string
+	PublicKeyPath         string
 	AccessExpiry          time.Duration
 	RefreshExpiry         time.Duration
 	SessionAbsoluteExpiry time.Duration
@@ -152,6 +155,9 @@ func Load() (*Config, error) {
 
 	v.SetDefault("JWT_ACCESS_SECRET", "")
 	v.SetDefault("JWT_REFRESH_SECRET", "")
+	v.SetDefault("JWT_SIGNING_MODE", "HS256")
+	v.SetDefault("JWT_PRIVATE_KEY_PATH", "")
+	v.SetDefault("JWT_PUBLIC_KEY_PATH", "")
 	v.SetDefault("JWT_ACCESS_EXPIRY", "15m")
 	v.SetDefault("JWT_REFRESH_EXPIRY", "168h")
 	v.SetDefault("JWT_SESSION_ABSOLUTE_EXPIRY", "720h")
@@ -221,6 +227,9 @@ func Load() (*Config, error) {
 		JWT: JWTConfig{
 			AccessSecret:          v.GetString("JWT_ACCESS_SECRET"),
 			RefreshSecret:         v.GetString("JWT_REFRESH_SECRET"),
+			SigningMode:           strings.ToUpper(strings.TrimSpace(v.GetString("JWT_SIGNING_MODE"))),
+			PrivateKeyPath:        v.GetString("JWT_PRIVATE_KEY_PATH"),
+			PublicKeyPath:         v.GetString("JWT_PUBLIC_KEY_PATH"),
 			AccessExpiry:          accessExpiry,
 			RefreshExpiry:         refreshExpiry,
 			SessionAbsoluteExpiry: sessionAbsoluteExpiry,
@@ -249,6 +258,19 @@ func Load() (*Config, error) {
 			Level:  v.GetString("LOG_LEVEL"),
 			Format: v.GetString("LOG_FORMAT"),
 		},
+	}
+
+	if cfg.JWT.AccessSecret == "" || cfg.JWT.RefreshSecret == "" {
+		return nil, fmt.Errorf("JWT access and refresh secrets must be non-empty")
+	}
+	if cfg.JWT.AccessSecret == cfg.JWT.RefreshSecret {
+		return nil, fmt.Errorf("JWT access and refresh secrets must be different")
+	}
+	if cfg.JWT.SigningMode != "HS256" && cfg.JWT.SigningMode != "RS256" {
+		return nil, fmt.Errorf("unsupported JWT signing mode: %s", cfg.JWT.SigningMode)
+	}
+	if cfg.JWT.SigningMode == "RS256" && (cfg.JWT.PrivateKeyPath == "" || cfg.JWT.PublicKeyPath == "") {
+		return nil, fmt.Errorf("JWT RS256 signing requires private and public key paths")
 	}
 
 	return cfg, nil

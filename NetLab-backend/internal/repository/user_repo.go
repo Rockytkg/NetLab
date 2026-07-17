@@ -5,7 +5,6 @@ import (
 	"errors"
 	"time"
 
-	"github.com/google/uuid"
 	"gorm.io/gorm"
 
 	"netlab-backend/internal/model"
@@ -54,6 +53,18 @@ func (r *UserRepository) FindByUsername(ctx context.Context, username string) (*
 func (r *UserRepository) FindByEmail(ctx context.Context, email string) (*model.User, error) {
 	var user model.User
 	if err := r.db.WithContext(ctx).Where("email = ?", email).First(&user).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &user, nil
+}
+
+// FindByUsernameOrEmail 通过用户名或邮箱获取用户（单次查询）。
+func (r *UserRepository) FindByUsernameOrEmail(ctx context.Context, username string) (*model.User, error) {
+	var user model.User
+	if err := r.db.WithContext(ctx).Where("username = ? OR email = ?", username, username).First(&user).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, nil
 		}
@@ -129,9 +140,6 @@ func (r *UserRepository) List(ctx context.Context, page, size int, keyword, stat
 	if role != "" {
 		q = q.Where("role = ?", role)
 	}
-	q = q.Where("username <> ?", "admin").
-		Where("role <> ?", model.RoleSuperAdmin)
-
 	var total int64
 	if err := q.Count(&total).Error; err != nil {
 		return nil, 0, err
@@ -252,44 +260,29 @@ func (r *UserRepository) SetPreferredAuthMethod(ctx context.Context, userID, met
 		}).Error
 }
 
-// DeleteRecoveryCodes 删除用户全部恢复码（关闭 2FA 或重新生成时调用）。
-func (r *UserRepository) DeleteRecoveryCodes(ctx context.Context, userID string) error {
-	return r.db.WithContext(ctx).Where("user_id = ?", userID).
-		Delete(&model.RecoveryCode{}).Error
+// DeleteRecoveryCodes 清空用户恢复码（关闭 2FA 或重新生成时调用）。
+func (r *UserRepository) DeleteRecoveryCodes(ctx context.Context, userID uint64) error {
+	return r.db.WithContext(ctx).Model(&model.User{}).Where("id = ?", userID).
+		Update("recovery_codes", "[]").Error
 }
 
-// StoreRecoveryCodes 替换式写入一批恢复码哈希：先清空既有记录，再批量插入。
-func (r *UserRepository) StoreRecoveryCodes(ctx context.Context, userID string, hashes []string) error {
-	uid, err := uuid.Parse(userID)
-	if err != nil {
-		return err
-	}
-	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if err := tx.Where("user_id = ?", uid).Delete(&model.RecoveryCode{}).Error; err != nil {
-			return err
-		}
-		if len(hashes) == 0 {
-			return nil
-		}
-		codes := make([]model.RecoveryCode, 0, len(hashes))
-		for _, h := range hashes {
-			codes = append(codes, model.RecoveryCode{UserID: uid, CodeHash: h})
-		}
-		return tx.Create(&codes).Error
-	})
+// StoreRecoveryCodes 替换式写入一批恢复码哈希到 User JSONB。
+func (r *UserRepository) StoreRecoveryCodes(ctx context.Context, userID uint64, hashes []string) error {
+	return r.db.WithContext(ctx).Model(&model.User{}).Where("id = ?", userID).
+		Update("recovery_codes", hashes).Error
 }
 
-// ConsumeRecoveryCode 原子地消费一个恢复码：仅当存在匹配且未使用的记录时
-// 将其标记为已使用，返回是否成功消费。
-func (r *UserRepository) ConsumeRecoveryCode(ctx context.Context, userID, codeHash string) (bool, error) {
-	res := r.db.WithContext(ctx).Model(&model.RecoveryCode{}).
-		Where("user_id = ? AND code_hash = ? AND used = ?", userID, codeHash, false).
-		Updates(map[string]interface{}{
-			"used":    true,
-			"used_at": time.Now(),
-		})
-	if res.Error != nil {
-		return false, res.Error
+// ConsumeRecoveryCode 在 User JSONB 中消费一个恢复码。
+func (r *UserRepository) ConsumeRecoveryCode(ctx context.Context, userID uint64, codeHash string) (bool, error) {
+	var user model.User
+	if err := r.db.WithContext(ctx).First(&user, userID).Error; err != nil {
+		return false, err
 	}
-	return res.RowsAffected > 0, nil
+	if !user.ConsumeRecoveryCode(codeHash) {
+		return false, nil
+	}
+	if err := r.db.WithContext(ctx).Model(&user).Update("recovery_codes", user.RecoveryCodes).Error; err != nil {
+		return false, err
+	}
+	return true, nil
 }

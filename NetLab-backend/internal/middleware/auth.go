@@ -20,6 +20,10 @@ const (
 	ContextKeyUserRole = "user_role"
 	// ContextKeySessionID 存储当前登录会话 ID。
 	ContextKeySessionID = "session_id"
+	// ContextKeyResource 存储当前请求对应的 RBAC 资源名。
+	ContextKeyResource = "rbac_resource"
+	// ContextKeyAction 存储当前请求对应的 RBAC 操作。
+	ContextKeyAction = "rbac_action"
 )
 
 // AuthConfig 配置认证中间件的行为。
@@ -35,7 +39,7 @@ func Auth(jwtManager *pkgjwt.Manager, tokenStore pkgjwt.SessionValidator, cfg Au
 
 		if tokenString == "" {
 			if cfg.Required {
-				response.Error(c, apperrors.New(apperrors.ErrCodeInvalidCredentials, "missing authorization header"))
+				response.Error(c, apperrors.New(apperrors.ErrCodeUnauthorized, "missing authorization header"))
 				return
 			}
 			c.Next()
@@ -86,7 +90,7 @@ func OptionalAuth(jwtManager *pkgjwt.Manager, tokenStore pkgjwt.SessionValidator
 	return Auth(jwtManager, tokenStore, AuthConfig{Required: false})
 }
 
-// Authorize uses Casbin to enforce RBAC decisions for authenticated routes.
+// Authorize uses Casbin to enforce an explicit RBAC resource/action decision.
 func Authorize(enforcer *casbin.Enforcer) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if enforcer == nil {
@@ -95,12 +99,29 @@ func Authorize(enforcer *casbin.Enforcer) gin.HandlerFunc {
 		}
 
 		role := GetUserRole(c)
-		allowed, err := enforcer.Enforce(role, c.Request.URL.Path, c.Request.Method)
+		resource := GetResource(c)
+		action := GetAction(c)
+		if resource == "" || action == "" {
+			response.Error(c, apperrors.ErrOperationDenied)
+			return
+		}
+
+		allowed, err := enforcer.Enforce(role, resource, action)
 		if err == nil && allowed {
 			c.Next()
 			return
 		}
 		response.Error(c, apperrors.ErrOperationDenied)
+	}
+}
+
+// RequireRBAC 标注并立即执行当前路由的 RBAC 权限检查。
+// 该中间件必须同时完成标注和校验，避免全局中间件早于路由中间件执行。
+func RequireRBAC(enforcer *casbin.Enforcer, resource, action string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		c.Set(ContextKeyResource, resource)
+		c.Set(ContextKeyAction, action)
+		Authorize(enforcer)(c)
 	}
 }
 
@@ -138,6 +159,26 @@ func GetUserRole(c *gin.Context) string {
 func GetSessionID(c *gin.Context) string {
 	if sid, exists := c.Get(ContextKeySessionID); exists {
 		if s, ok := sid.(string); ok {
+			return s
+		}
+	}
+	return ""
+}
+
+// GetResource 从 context 中获取当前请求的 RBAC 资源名。
+func GetResource(c *gin.Context) string {
+	if v, exists := c.Get(ContextKeyResource); exists {
+		if s, ok := v.(string); ok {
+			return s
+		}
+	}
+	return ""
+}
+
+// GetAction 从 context 中获取当前请求的 RBAC 操作。
+func GetAction(c *gin.Context) string {
+	if v, exists := c.Get(ContextKeyAction); exists {
+		if s, ok := v.(string); ok {
 			return s
 		}
 	}

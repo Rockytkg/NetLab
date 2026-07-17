@@ -162,8 +162,11 @@ export const authApi = {
   },
 
   /** 向新邮箱发送 5 分钟有效的验证码 */
-  sendChangeEmailCode(newEmail: string): Promise<SendCodeResult> {
-    return request.post('/auth/account/email-change-code', { newEmail })
+  sendChangeEmailCode(
+    newEmail: string,
+    captcha?: Pick<SendCodeParams, 'captchaId' | 'captchaCode'>,
+  ): Promise<SendCodeResult> {
+    return request.post('/auth/account/email-change-code', { newEmail, ...captcha })
   },
 
   /** 修改当前账号邮箱 */
@@ -246,3 +249,4 @@ export const authApi = {
     return request.put('/auth/account/preferred-auth-method', { method })
   },
 }
+

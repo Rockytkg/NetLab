@@ -18,6 +18,7 @@ import (
 	"netlab-backend/internal/database"
 	"netlab-backend/internal/handler/admin"
 	"netlab-backend/internal/handler/auth"
+	rbacHandler "netlab-backend/internal/handler/rbac"
 	"netlab-backend/internal/mailer"
 	"netlab-backend/internal/middleware"
 	"netlab-backend/internal/repository"
@@ -119,7 +120,7 @@ func main() {
 	configRepo := repository.NewConfigRepository(db)
 
 	// ── 初始化运行时配置服务 ─────────────────────────────────────────
-	configService := sysconfig.NewService(configRepo, configCipher)
+	configService := sysconfig.NewService(configRepo, configCipher, rdb)
 
 	// ── 初始化服务层 ─────────────────────────────────────────────────
 	cryptoService, err := authsvc.NewCryptoService(cfg.Auth)
@@ -138,10 +139,12 @@ func main() {
 	// 邮件发送器 —— 从运行时配置服务热加载 SMTP 设置
 	emailSender := mailer.NewProvider(configService)
 
+	verificationService := authsvc.NewVerificationService(userRepo, tokenRepo, configService, emailSender, captchaMgr, logger)
 	authService := authsvc.NewAuthService(
 		userRepo, tokenRepo, configService,
-		tokenService, emailSender, logger,
+		tokenService, emailSender, logger, verificationService,
 	)
+	passwordService := authsvc.NewPasswordService(userRepo, tokenRepo, configService, tokenService, verificationService, logger)
 
 	passkeyService := authsvc.NewPasskeyService(
 		passkeyRepo, userRepo, tokenRepo, tokenService, configService, rdb, logger,
@@ -153,19 +156,28 @@ func main() {
 	)
 
 	adminService := authsvc.NewAdminService(configService, passkeyService)
-	userAdminService := authsvc.NewUserAdminService(userRepo, logger)
+
+	// ── 初始化 RBAC ──────────────────────────────────────────────────
 	enforcer, err := rbac.NewEnforcer(db)
 	if err != nil {
-		logger.Fatal("Failed to initialize RBAC", zap.Error(err))
+		logger.Fatal("Failed to initialize RBAC enforcer", zap.Error(err))
 	}
+	rbacService, err := rbac.NewService(db, enforcer, logger)
+	if err != nil {
+		logger.Fatal("Failed to initialize RBAC service", zap.Error(err))
+	}
+
+	userAdminService := authsvc.NewUserAdminService(userRepo, logger)
+	importExportService := authsvc.NewUserImportExportService(userRepo, logger)
 
 	// ── 初始化处理器 ─────────────────────────────────────────────────
 	twoFactorService := authsvc.NewTwoFactorService(userRepo, tokenRepo, tokenService, configService, logger)
 
 	authHandler := auth.NewAuthHandler(
-		authService, passkeyService, tokenService, oauthService, twoFactorService, captchaMgr, logger,
+		authService, verificationService, passwordService, passkeyService, tokenService, oauthService, twoFactorService, captchaMgr, rbacService, logger,
 	)
-	adminHandler := admin.NewAdminHandler(adminService, userAdminService, emailSender, logger)
+	adminHandler := admin.NewAdminHandler(adminService, userAdminService, importExportService, emailSender, logger)
+	rHandler := rbacHandler.NewHandler(rbacService)
 
 	// ── 初始化限流器 ─────────────────────────────────────────────────
 	var rateLimiter *middleware.RateLimiter
@@ -179,13 +191,14 @@ func main() {
 		Logger:        logger,
 		AuthHandler:   authHandler,
 		AdminHandler:  adminHandler,
+		RBACHandler:   rHandler,
 		AuthService:   authService,
 		TokenService:  tokenService,
 		CryptoService: cryptoService,
 		JWTManager:    tokenService.JWTManager(),
 		SessionStore:  tokenRepo,
 		RateLimiter:   rateLimiter,
-		Enforcer:      enforcer,
+		Enforcer:      rbacService.Enforcer(),
 	})
 
 	// ── 启动服务器并支持优雅关闭 ─────────────────────────────────────

@@ -40,7 +40,7 @@ export default function ChangeEmailPanel() {
     setSaving(true)
     try {
       const user = await authApi.changeEmail(values)
-      useAuthStore.setState({ userInfo: user })
+      useAuthStore.getState().setUserInfo(user)
       form.resetFields()
       setCooldown(0)
       message.success(t('settings:changeEmail.success'))

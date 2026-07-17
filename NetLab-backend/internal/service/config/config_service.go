@@ -13,6 +13,8 @@ import (
 	"strconv"
 	"sync"
 
+	"github.com/redis/go-redis/v9"
+
 	"netlab-backend/internal/repository"
 	"netlab-backend/pkg/crypto"
 )
@@ -90,14 +92,23 @@ func (p ProviderSettings) IsConfigured() bool {
 type Service struct {
 	repo   *repository.ConfigRepository
 	cipher *crypto.AESCipher
+	redis  *redis.Client
 
 	mu    sync.RWMutex
 	cache map[string]string // 原始 key→value 快照；nil 表示未加载
 }
 
 // NewService 创建一个新的配置服务。
-func NewService(repo *repository.ConfigRepository, cipher *crypto.AESCipher) *Service {
-	return &Service{repo: repo, cipher: cipher}
+func NewService(repo *repository.ConfigRepository, cipher *crypto.AESCipher, clients ...*redis.Client) *Service {
+	var client *redis.Client
+	if len(clients) > 0 {
+		client = clients[0]
+	}
+	s := &Service{repo: repo, cipher: cipher, redis: client}
+	if client != nil {
+		go s.listenInvalidation()
+	}
+	return s
 }
 
 // ─── 缓存管理 ────────────────────────────────────────────────────────
@@ -136,7 +147,21 @@ func (s *Service) set(ctx context.Context, key, value, description string) error
 		return err
 	}
 	s.invalidate()
+	if s.redis != nil {
+		_ = s.redis.Publish(ctx, "netlab:config:invalidate", key).Err()
+	}
 	return nil
+}
+
+func (s *Service) listenInvalidation() {
+	sub := s.redis.Subscribe(context.Background(), "netlab:config:invalidate")
+	defer sub.Close()
+	if _, err := sub.Receive(context.Background()); err != nil {
+		return
+	}
+	for range sub.Channel() {
+		s.invalidate()
+	}
 }
 
 // ─── 安全策略 ────────────────────────────────────────────────────────
@@ -174,6 +199,9 @@ func (s *Service) SetSecurity(ctx context.Context, in SecuritySettings) error {
 		}
 	}
 	s.invalidate()
+	if s.redis != nil {
+		_ = s.redis.Publish(ctx, "netlab:config:invalidate", "security").Err()
+	}
 	return nil
 }
 

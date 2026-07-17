@@ -1,6 +1,5 @@
 [
   { "id": "success", "translation": "操作成功" },
-  { "id": "validation_failed", "translation": "参数验证失败" },
   { "id": "validation_failed_with_count", "translation": "{{.Count}} 个字段验证失败" },
 
   { "id": "error.1001", "translation": "用户名或密码错误" },
@@ -12,7 +11,7 @@
   { "id": "error.1007", "translation": "该邮箱已被注册" },
   { "id": "error.1008", "translation": "该用户名已被占用" },
   { "id": "error.1009", "translation": "验证码无效" },
-  { "id": "error.1010", "translation": "密码强度不足，请使用至少8位包含大小写字母、数字和特殊字符的密码" },
+  { "id": "error.1010", "translation": "密码必须包含大写字母、小写字母、数字和特殊字符，且长度为 8-72 字节" },
   { "id": "error.1011", "translation": "请求过于频繁，请稍后再试" },
   { "id": "error.1012", "translation": "会话已过期，请重新登录" },
   { "id": "error.1013", "translation": "数据重复，请检查后重试" },
@@ -21,16 +20,14 @@
   { "id": "error.1016", "translation": "邮件服务未配置，请联系管理员" },
   { "id": "error.1017", "translation": "验证码邮件发送失败，请稍后重试" },
   { "id": "error.1018", "translation": "重置密码功能已关闭" },
+  { "id": "error.1019", "translation": "未登录或登录状态已失效" },
   { "id": "error.1020", "translation": "动态验证码错误或已过期" },
   { "id": "error.1021", "translation": "两步验证尚未配置" },
+  { "id": "error.1022", "translation": "服务器处理失败，请稍后重试" },
+  { "id": "error.1023", "translation": "请求安全校验失败，请刷新页面后重试" },
+  { "id": "error.1024", "translation": "请求无效或已过期，请重试" },
+  { "id": "error.1025", "translation": "文件无效或格式不正确" },
 
-  { "id": "error.crypto.read_body", "translation": "读取请求体失败" },
-  { "id": "error.crypto.decrypt", "translation": "请求解密失败，请检查加密配置" },
-  { "id": "error.signature.missing", "translation": "缺少签名头，请求被拒绝" },
-  { "id": "error.signature.invalid_timestamp", "translation": "请求时间戳格式无效" },
-  { "id": "error.signature.expired", "translation": "请求时间戳已过期" },
-  { "id": "error.signature.invalid", "translation": "签名验证失败，请求被拒绝" },
-  { "id": "error.session_signature.invalid", "translation": "会话签名无效" },
   { "id": "error.internal", "translation": "服务器内部错误，请稍后重试" },
 
   { "id": "email.verification.subject", "translation": "NetLab - 邮箱验证码" },
@@ -51,5 +48,14 @@
   { "id": "email.reset_password.subject", "translation": "NetLab - 密码重置验证码" },
   { "id": "email.reset_password.title", "translation": "重置您的密码" },
   { "id": "email.reset_password.description", "translation": "使用以下验证码重置您的密码。" },
-  { "id": "email.reset_password.expiry", "translation": "验证码10分钟内有效。如您未请求密码重置，请忽略此邮件。" }
+  { "id": "email.reset_password.expiry", "translation": "验证码10分钟内有效。如您未请求密码重置，请忽略此邮件。" },
+
+  { "id": "export.users.header.username", "translation": "用户名" },
+  { "id": "export.users.header.email", "translation": "邮箱" },
+  { "id": "export.users.header.role", "translation": "角色" },
+  { "id": "export.users.header.status", "translation": "状态" },
+  { "id": "export.users.header.twoFactor", "translation": "两步验证" },
+  { "id": "export.users.header.lastLogin", "translation": "最近登录" },
+  { "id": "export.users.header.createdAt", "translation": "创建时间" },
+  { "id": "export.users.header.password", "translation": "密码" }
 ]

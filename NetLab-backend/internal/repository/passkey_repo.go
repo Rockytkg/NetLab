@@ -2,16 +2,15 @@ package repository
 
 import (
 	"context"
-	"errors"
 	"time"
 
-	"github.com/google/uuid"
 	"gorm.io/gorm"
 
 	"netlab-backend/internal/model"
 )
 
 // PasskeyRepository 处理 WebAuthn 凭证的存储。
+// 凭证数据直接存储在 User 表的 passkey_* 字段。
 type PasskeyRepository struct {
 	db *gorm.DB
 }
@@ -21,71 +20,118 @@ func NewPasskeyRepository(db *gorm.DB) *PasskeyRepository {
 	return &PasskeyRepository{db: db}
 }
 
-// Create 存储一个新的 passkey 凭证。
-func (r *PasskeyRepository) Create(ctx context.Context, cred *model.PasskeyCredential) error {
-	cred.Provider = "passkey"
-	if cred.ProviderUserID == "" {
-		cred.ProviderUserID = "passkey_" + cred.CredentialID
-	}
-	return r.db.WithContext(ctx).Create(cred).Error
-}
-
-// FindByCredentialID 通过 WebAuthn 凭证 ID 查找 passkey。
-func (r *PasskeyRepository) FindByCredentialID(ctx context.Context, credentialID string) (*model.PasskeyCredential, error) {
-	var cred model.PasskeyCredential
-	if err := r.db.WithContext(ctx).Where("provider = ? AND credential_id = ?", "passkey", credentialID).First(&cred).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
+// FindByCredentialID 通过 WebAuthn 凭证 ID 查找用户。
+func (r *PasskeyRepository) FindByCredentialID(ctx context.Context, credentialID string) (*model.User, error) {
+	var user model.User
+	if err := r.db.WithContext(ctx).
+		Where("passkey_credential_id = ?", credentialID).
+		First(&user).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
 			return nil, nil
 		}
 		return nil, err
 	}
-	return &cred, nil
+	return &user, nil
 }
 
-// FindByUserID 返回某用户的所有 passkey 凭证。
-func (r *PasskeyRepository) FindByUserID(ctx context.Context, userID uuid.UUID) ([]model.PasskeyCredential, error) {
-	var creds []model.PasskeyCredential
-	if err := r.db.WithContext(ctx).Where("user_id = ? AND provider = ?", userID, "passkey").Find(&creds).Error; err != nil {
+// HasPasskey 检查用户是否注册了 passkey。
+func (r *PasskeyRepository) HasPasskey(ctx context.Context, userID uint64) (bool, error) {
+	var count int64
+	err := r.db.WithContext(ctx).Model(&model.User{}).
+		Where("id = ? AND passkey_credential_id <> ''", userID).
+		Count(&count).Error
+	return count > 0, err
+}
+
+// Save 保存 passkey 凭证到用户记录。
+func (r *PasskeyRepository) Save(ctx context.Context, userID uint64, credentialID, credentialJSON, name string, signCount uint32) error {
+	return r.db.WithContext(ctx).Model(&model.User{}).Where("id = ?", userID).Updates(map[string]interface{}{
+		"passkey_credential_id": credentialID,
+		"passkey_credential":    credentialJSON,
+		"passkey_name":          name,
+		"passkey_sign_count":    signCount,
+		"passkey_last_used_at":  nil,
+		"updated_at":            time.Now(),
+	}).Error
+}
+
+// PasskeyInfo 是存储在 User 表中的 passkey 元数据。
+type PasskeyInfo struct {
+	CredentialID string
+	Name         string
+	LastUsedAt   *time.Time
+}
+
+// CredentialData 是存储在 User 表中的 passkey 凭证原始数据。
+type CredentialData struct {
+	CredentialID string
+	Credential   string
+}
+
+// GetCredential 读取用户当前 passkey 凭证的完整数据（ID + JSON），用于 WebAuthn 认证。
+func (r *PasskeyRepository) GetCredential(ctx context.Context, userID uint64) (*CredentialData, error) {
+	var data CredentialData
+	row := r.db.WithContext(ctx).Model(&model.User{}).
+		Select("passkey_credential_id, passkey_credential").
+		Where("id = ?", userID).
+		Row()
+	if err := row.Scan(&data.CredentialID, &data.Credential); err != nil {
 		return nil, err
 	}
-	return creds, nil
+	if data.CredentialID == "" {
+		return nil, nil
+	}
+	return &data, nil
 }
 
-// Delete 删除一个 passkey 凭证。
-func (r *PasskeyRepository) Delete(ctx context.Context, credentialID string) error {
-	return r.db.WithContext(ctx).Where("provider = ? AND credential_id = ?", "passkey", credentialID).Delete(&model.PasskeyCredential{}).Error
+// GetInfo 读取用户当前 passkey 凭证的元数据（若无 passkey 则返回 nil）。
+func (r *PasskeyRepository) GetInfo(ctx context.Context, userID uint64) (*PasskeyInfo, error) {
+	var info PasskeyInfo
+	row := r.db.WithContext(ctx).Model(&model.User{}).
+		Select("passkey_credential_id, passkey_name, passkey_last_used_at").
+		Where("id = ?", userID).
+		Row()
+	if err := row.Scan(&info.CredentialID, &info.Name, &info.LastUsedAt); err != nil {
+		return nil, err
+	}
+	if info.CredentialID == "" {
+		return nil, nil
+	}
+	return &info, nil
 }
 
-// DeleteByIDForUser 按主键删除属于指定用户的 passkey 凭证。
-// 返回受影响行数，用于区分“无此凭证”与“非本人凭证”。
-func (r *PasskeyRepository) DeleteByIDForUser(ctx context.Context, id, userID uuid.UUID) (int64, error) {
-	res := r.db.WithContext(ctx).
-		Where("id = ? AND user_id = ?", id, userID).
-		Where("provider = ?", "passkey").
-		Delete(&model.PasskeyCredential{})
+// DeleteByUserID 清空某用户的 passkey 凭证。
+func (r *PasskeyRepository) DeleteByUserID(ctx context.Context, userID uint64) (int64, error) {
+	res := r.db.WithContext(ctx).Model(&model.User{}).Where("id = ?", userID).Updates(map[string]interface{}{
+		"passkey_credential_id": "",
+		"passkey_credential":    "",
+		"passkey_name":          "",
+		"passkey_sign_count":    0,
+		"passkey_last_used_at":  nil,
+		"updated_at":            time.Now(),
+	})
 	return res.RowsAffected, res.Error
 }
 
-// UpdateSignCount 更新凭证的签名计数器与最近使用时间，并同步回写
-// 序列化的凭证记录（含新的 authenticator 状态）。
-func (r *PasskeyRepository) UpdateSignCount(ctx context.Context, id uuid.UUID, signCount uint32, credentialJSON string, lastUsed time.Time) error {
-	return r.db.WithContext(ctx).Model(&model.PasskeyCredential{}).
-		Where("id = ?", id).
-		Updates(map[string]interface{}{
-			"sign_count":   signCount,
-			"credential":   credentialJSON,
-			"last_used_at": lastUsed,
-		}).Error
+// UpdateSignCount 更新凭证的签名计数器与最近使用时间。
+func (r *PasskeyRepository) UpdateSignCount(ctx context.Context, userID uint64, signCount uint32, credentialJSON string, lastUsed time.Time) error {
+	return r.db.WithContext(ctx).Model(&model.User{}).Where("id = ?", userID).Updates(map[string]interface{}{
+		"passkey_sign_count":   signCount,
+		"passkey_credential":   credentialJSON,
+		"passkey_last_used_at": lastUsed,
+		"updated_at":           time.Now(),
+	}).Error
 }
 
-// DeleteAllForUser 删除某用户的所有 passkey 凭证。
-func (r *PasskeyRepository) DeleteAllForUser(ctx context.Context, userID uuid.UUID) error {
-	return r.db.WithContext(ctx).Where("user_id = ? AND provider = ?", userID, "passkey").Delete(&model.PasskeyCredential{}).Error
-}
-
-// CountByUserID 返回某用户的 passkey 凭证数量。
-func (r *PasskeyRepository) CountByUserID(ctx context.Context, userID uuid.UUID) (int64, error) {
-	var count int64
-	err := r.db.WithContext(ctx).Model(&model.PasskeyCredential{}).Where("user_id = ? AND provider = ?", userID, "passkey").Count(&count).Error
-	return count, err
+// DeleteCredentialByID 按 credentialID 删除 passkey 凭证（独立于 userID）。
+func (r *PasskeyRepository) DeleteCredentialByID(ctx context.Context, credentialID string) (int64, error) {
+	res := r.db.WithContext(ctx).Model(&model.User{}).Where("passkey_credential_id = ?", credentialID).Updates(map[string]interface{}{
+		"passkey_credential_id": "",
+		"passkey_credential":    "",
+		"passkey_name":          "",
+		"passkey_sign_count":    0,
+		"passkey_last_used_at":  nil,
+		"updated_at":            time.Now(),
+	})
+	return res.RowsAffected, res.Error
 }

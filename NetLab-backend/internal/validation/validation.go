@@ -4,13 +4,25 @@ import (
 	"net/mail"
 	"regexp"
 	"strings"
-	"unicode"
+	"unicode/utf8"
 
 	"netlab-backend/internal/model"
 	"netlab-backend/pkg/apperrors"
 )
 
 var usernamePattern = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
+
+var (
+	passwordHasLowercase = regexp.MustCompile(`[a-z]`)
+	passwordHasUppercase = regexp.MustCompile(`[A-Z]`)
+	passwordHasDigit     = regexp.MustCompile(`[0-9]`)
+	passwordHasSpecial   = regexp.MustCompile(`[^A-Za-z0-9]`)
+)
+
+const (
+	PasswordMinLength = 8
+	PasswordMaxBytes  = 72
+)
 
 func Invalid(message string) *apperrors.AppError {
 	return apperrors.New(apperrors.ErrCodeInvalidCode, message)
@@ -42,22 +54,30 @@ func NormalizeUsername(username string) (string, *apperrors.AppError) {
 	return value, nil
 }
 
+// ValidatePassword 校验密码是否满足基本复杂度要求。
 func ValidatePassword(password string) *apperrors.AppError {
-	if len(password) < 8 || len(password) > 128 {
+	// 1. 检查 UTF-8 合法性
+	if !utf8.ValidString(password) {
 		return apperrors.ErrWeakPassword
 	}
-	var hasLetter, hasDigit bool
-	for _, r := range password {
-		if unicode.IsLetter(r) {
-			hasLetter = true
-		}
-		if unicode.IsDigit(r) {
-			hasDigit = true
-		}
+
+	// 2. 最小字符数（使用 rune 而非 byte）
+	if utf8.RuneCountInString(password) < PasswordMinLength {
+		return apperrors.ErrWeakPassword
 	}
-	if !hasLetter || !hasDigit {
-		return apperrors.New(apperrors.ErrCodeWeakPassword, "password must contain letters and numbers")
+
+	// 3. 最大字节数（bcrypt 硬上限）
+	if len(password) > PasswordMaxBytes {
+		return apperrors.ErrWeakPassword
 	}
+
+	if !passwordHasLowercase.MatchString(password) ||
+		!passwordHasUppercase.MatchString(password) ||
+		!passwordHasDigit.MatchString(password) ||
+		!passwordHasSpecial.MatchString(password) {
+		return apperrors.ErrWeakPassword
+	}
+
 	return nil
 }
 

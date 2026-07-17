@@ -8,6 +8,7 @@ export interface UserInfo {
   avatar?: string
   email?: string
   role: UserRole
+  permissions: string[]
   twoFactorEnabled?: boolean
   /** 首选验证方式：'totp'（身份验证器应用）或 'passkey'（通行密钥） */
   preferredAuthMethod?: string
@@ -100,6 +101,8 @@ export interface ResetPasswordParams {
 export interface SendCodeParams {
   email: string
   purpose: 'register' | 'reset-password' | 'change-email'
+  captchaId?: string
+  captchaCode?: string
 }
 
 export interface SendCodeResult {
@@ -281,3 +284,5 @@ export interface RecoveryLoginParams {
   twoFactorToken: string
   recoveryCode: string
 }
+
+

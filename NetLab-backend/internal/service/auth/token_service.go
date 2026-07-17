@@ -2,15 +2,22 @@ package auth
 
 import (
 	"context"
+	"strconv"
 	"time"
 
 	"netlab-backend/config"
-	"netlab-backend/internal/model"
 	"netlab-backend/internal/repository"
 	"netlab-backend/pkg/apperrors"
 	"netlab-backend/pkg/crypto"
 	pkgjwt "netlab-backend/pkg/jwt"
 )
+
+// TokenUser 是签发 token 所需的最小接口。
+type TokenUser interface {
+	GetID() string
+	GetUsername() string
+	GetRole() string
+}
 
 // TokenService 处理 JWT 生命周期。
 type TokenService struct {
@@ -47,20 +54,20 @@ func (s *TokenService) JWTManager() *pkgjwt.Manager {
 }
 
 // IssueTokens 为用户创建 access + refresh token。
-func (s *TokenService) IssueTokens(ctx context.Context, user *model.User) (*TokenResult, *apperrors.AppError) {
+func (s *TokenService) IssueTokens(ctx context.Context, user TokenUser) (*TokenResult, *apperrors.AppError) {
 	sessionID, err := crypto.GenerateRandomBase64URL(16)
 	if err != nil {
-		return nil, apperrors.Wrap(apperrors.ErrCodeInvalidCredentials, "failed to generate session id", err)
+		return nil, apperrors.Wrap(apperrors.ErrCodeInternal, "failed to generate session id", err)
 	}
 	absoluteExp := time.Now().Add(s.sessionAbsoluteExpiry)
 	refreshExp := s.nextRefreshExpiry(absoluteExp)
-	pair, err := s.jwtManager.IssueTokenPairUntil(user.ID.String(), user.Username, string(user.Role), sessionID, refreshExp)
+	pair, err := s.jwtManager.IssueTokenPairUntil(user.GetID(), user.GetUsername(), user.GetRole(), sessionID, refreshExp)
 	if err != nil {
-		return nil, apperrors.Wrap(apperrors.ErrCodeInvalidCredentials, "failed to issue tokens", err)
+		return nil, apperrors.Wrap(apperrors.ErrCodeInternal, "failed to issue tokens", err)
 	}
 
-	if err := s.tokenRepo.SaveSession(ctx, user.ID.String(), sessionID, pair.RefreshToken, pair.RefreshExpiry, absoluteExp); err != nil {
-		return nil, apperrors.Wrap(apperrors.ErrCodeInvalidCredentials, "failed to save token session", err)
+	if err := s.tokenRepo.SaveSession(ctx, user.GetID(), sessionID, pair.RefreshToken, pair.RefreshExpiry, absoluteExp); err != nil {
+		return nil, apperrors.Wrap(apperrors.ErrCodeInternal, "failed to save token session", err)
 	}
 
 	return &TokenResult{
@@ -112,11 +119,11 @@ func (s *TokenService) RefreshTokens(ctx context.Context, refreshTokenValue stri
 		_ = s.tokenRepo.RevokeAllUserTokens(ctx, claims.UserID)
 		return nil, apperrors.ErrInvalidRefreshToken
 	}
-	pair, issueErr := s.jwtManager.IssueTokenPairUntil(user.ID.String(), user.Username, string(user.Role), claims.SessionID, refreshExp)
+	pair, issueErr := s.jwtManager.IssueTokenPairUntil(strconv.FormatUint(user.ID, 10), user.Username, string(user.Role), claims.SessionID, refreshExp)
 	if issueErr != nil {
-		return nil, apperrors.Wrap(apperrors.ErrCodeInvalidCredentials, "failed to issue tokens", issueErr)
+		return nil, apperrors.Wrap(apperrors.ErrCodeInternal, "failed to issue tokens", issueErr)
 	}
-	if err := s.tokenRepo.RotateSession(ctx, user.ID.String(), claims.SessionID, refreshTokenValue, pair.RefreshToken, pair.RefreshExpiry); err != nil {
+	if err := s.tokenRepo.RotateSession(ctx, strconv.FormatUint(user.ID, 10), claims.SessionID, refreshTokenValue, pair.RefreshToken, pair.RefreshExpiry); err != nil {
 		return nil, apperrors.Wrap(apperrors.ErrCodeInvalidRefreshToken, "failed to rotate token session", err)
 	}
 

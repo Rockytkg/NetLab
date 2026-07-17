@@ -1,7 +1,6 @@
 {
-  "adminOnly": "Only administrators can access system settings",
+  "permissionDenied": "Your account does not have permission to access this resource",
   "saveSuccess": "Saved successfully",
-  "saveFailed": "Failed to save",
   "save": "Save",
   "saving": "Saving…",
   "title": "System Settings",
@@ -156,7 +155,7 @@
     "popupBlocked": "Popup blocked. Please allow popups and try again."
   },
   "users": {
-    "subtitle": "Manage platform users: batch update role, reset passwords, and import users.",
+    "subtitle": "Manage platform users: create, edit, reset passwords, and batch import/export.",
     "columns": {
       "username": "Username",
       "email": "Email",
@@ -170,15 +169,22 @@
       "disabled": "Disabled",
       "locked": "Locked"
     },
-    "adminTag": "Admin",
-    "changeRole": "Change Role",
+    "roles": {
+      "admin": "Administrator",
+      "editor": "Editor",
+      "viewer": "Viewer"
+    },
     "delete": "Delete Users",
     "addUser": "Add User",
     "editUser": "Edit User",
     "resetPassword": "Reset Password",
-    "import": "Import",
-    "downloadTemplate": "Download CSV Template",
-    "preview": "Data Preview",
+    "importExcel": "Import Excel",
+    "importExcelFormat": "Upload an .xlsx, .xls, or .csv file. The first row must contain username, email, role, and password headers in English or Chinese; role defaults to viewer when empty. The file is parsed in the browser.",
+    "export": "Export Users",
+    "exportSuccess": "Export successful",
+    "invalidExcelFile": "Please upload an .xlsx, .xls, or .csv file",
+    "invalidImportData": "The import file is invalid. Check its headers and data rows.",
+    "downloadTemplate": "Download Import Template",
     "searchPlaceholder": "Search username or email",
     "statusFilter": "Filter Status",
     "roleFilter": "Filter Role",
@@ -191,8 +197,6 @@
     "emailInvalid": "Please enter a valid email address",
     "statusRequired": "Please select a status",
     "roleRequired": "Please select one role",
-    "changeRoleHint": "Set the following role for the {{count}} selected users:",
-    "roleUpdated": "Role updated successfully",
     "userCreated": "User created successfully",
     "userUpdated": "User updated successfully",
     "deleteConfirmTitle": "Confirm User Deletion",
@@ -204,11 +208,8 @@
     "generatePassword": "Generate Strong Password",
     "passwordComplexity": "Password must contain both letters and numbers",
     "passwordReset": "Passwords reset successfully",
-    "importFormat": "CSV must include headers: username,email,role,password. role is optional (defaults to viewer, cannot be admin); password is optional (defaults to the username).",
-    "selectFile": "Select CSV File",
     "importDone": "Imported {{created}} users successfully",
-    "importResult": "Import finished: {{created}} created, {{skipped}} skipped",
-    "invalidFile": "Please upload a CSV file"
+    "importResult": "Import finished: {{created}} created, {{skipped}} skipped"
   },
   "twoFactor": {
     "title": "Two-Factor Authentication",

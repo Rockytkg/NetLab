@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/glebarez/sqlite"
-	"github.com/google/uuid"
 	"gorm.io/gorm"
 
 	"netlab-backend/internal/model"
@@ -21,7 +20,7 @@ func testConfigService(t *testing.T, maxAgeDays int) *sysconfig.Service {
 		t.Fatalf("open sqlite: %v", err)
 	}
 	if err := db.Exec(`
-		CREATE TABLE system_configs (
+		CREATE TABLE nb_system_configs (
 			id text PRIMARY KEY,
 			key varchar(128) NOT NULL UNIQUE,
 			value text NOT NULL,
@@ -41,7 +40,7 @@ func testConfigService(t *testing.T, maxAgeDays int) *sysconfig.Service {
 func baseSecurityUser() *model.User {
 	now := time.Now()
 	return &model.User{
-		ID:                uuid.New(),
+		ID: 1,
 		Username:          "user",
 		Email:             "user@example.com",
 		PasswordHash:      "hash",

@@ -95,7 +95,7 @@ export default function SettingsProfilePage() {
               </Title>
               <Space size={token.marginXS} wrap>
                 {userInfo?.role && (
-                  <Tag color={userInfo.role === 'admin' || userInfo.role === 'super_admin' ? 'gold' : 'blue'}>
+                  <Tag color="blue">
                     {t(`settings:profile.role.${userInfo.role}`, userInfo.role)}
                   </Tag>
                 )}

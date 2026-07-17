@@ -1,7 +1,6 @@
 {
-  "adminOnly": "仅管理员可访问系统设置",
+  "permissionDenied": "当前账户没有访问此资源的权限",
   "saveSuccess": "保存成功",
-  "saveFailed": "保存失败",
   "save": "保存",
   "saving": "保存中…",
   "title": "系统设置",
@@ -156,7 +155,7 @@
     "popupBlocked": "弹窗被拦截，请允许弹窗后重试"
   },
   "users": {
-    "subtitle": "管理平台用户：批量修改角色、重置密码与导入用户。",
+    "subtitle": "管理平台用户：创建、编辑、重置密码与批量导入导出。",
     "columns": {
       "username": "用户名",
       "email": "邮箱",
@@ -170,15 +169,22 @@
       "disabled": "已禁用",
       "locked": "已锁定"
     },
-    "adminTag": "管理员",
-    "changeRole": "修改角色",
+    "roles": {
+      "admin": "管理员",
+      "editor": "编辑者",
+      "viewer": "访客"
+    },
     "delete": "删除用户",
     "addUser": "添加用户",
     "editUser": "编辑用户",
     "resetPassword": "重置密码",
-    "import": "批量导入",
-    "downloadTemplate": "下载 CSV 模板",
-    "preview": "数据预览",
+    "importExcel": "导入 Excel",
+    "importExcelFormat": "请上传 .xlsx、.xls 或 .csv 文件：首行为表头（用户名/username、邮箱/email、角色/role、密码/password），每行一个用户；角色留空默认为访客。文件会在浏览器中解析后提交。",
+    "export": "导出用户",
+    "exportSuccess": "导出成功",
+    "invalidExcelFile": "请上传 .xlsx、.xls 或 .csv 文件",
+    "invalidImportData": "导入文件内容无效，请检查表头和数据行",
+    "downloadTemplate": "下载导入模板",
     "searchPlaceholder": "搜索用户名或邮箱",
     "statusFilter": "筛选状态",
     "roleFilter": "筛选角色",
@@ -191,8 +197,6 @@
     "emailInvalid": "请输入有效的邮箱地址",
     "statusRequired": "请选择状态",
     "roleRequired": "请选择一个角色",
-    "changeRoleHint": "将为选中的 {{count}} 个用户设置以下角色：",
-    "roleUpdated": "角色修改成功",
     "userCreated": "用户创建成功",
     "userUpdated": "用户信息已更新",
     "deleteConfirmTitle": "确认删除用户",
@@ -204,11 +208,8 @@
     "generatePassword": "生成强密码",
     "passwordComplexity": "密码需同时包含字母和数字",
     "passwordReset": "密码重置成功",
-    "importFormat": "CSV 需包含表头：username,email,role,password。role 可选（默认 viewer，不可为 admin），password 可选（默认与用户名相同）。",
-    "selectFile": "选择 CSV 文件",
     "importDone": "成功导入 {{created}} 个用户",
-    "importResult": "导入完成：成功 {{created}} 个，跳过 {{skipped}} 个",
-    "invalidFile": "请上传 CSV 文件"
+    "importResult": "导入完成：成功 {{created}} 个，跳过 {{skipped}} 个"
   },
   "twoFactor": {
     "title": "两步验证",

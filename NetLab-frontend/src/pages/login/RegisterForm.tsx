@@ -1,14 +1,17 @@
-import { useState, useRef, useCallback } from 'react'
-import { Form, Input, Button, App, Typography, theme } from 'antd'
+import { useState, useRef, useCallback, useEffect } from 'react'
+import { Form, Input, Button, App, Typography, theme, Image, Tooltip } from 'antd'
 import {
   UserOutlined,
   LockOutlined,
   MailOutlined,
   SafetyCertificateOutlined,
+  ReloadOutlined,
+  NumberOutlined,
 } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import { authApi } from '@/services/auth'
 import { isAuthSecurityError } from '@/services/authSecurity'
+import { createPasswordStrengthRule } from '@/utils/password-strength'
 
 const { Text } = Typography
 
@@ -22,8 +25,25 @@ export default function RegisterForm({ onBack }: RegisterFormProps) {
   const { token: themeToken } = theme.useToken()
   const [loading, setLoading] = useState(false)
   const [cooldown, setCooldown] = useState(0)
+  const [captchaId, setCaptchaId] = useState<string | null>(null)
+  const [captchaImage, setCaptchaImage] = useState<string | null>(null)
+  const [captchaLoading, setCaptchaLoading] = useState(false)
   const timerRef = useRef<ReturnType<typeof setInterval>>()
   const [form] = Form.useForm()
+
+  const fetchCaptcha = useCallback(async () => {
+    setCaptchaLoading(true)
+    try {
+      const result = await authApi.getCaptcha()
+      setCaptchaId(result.captchaId)
+      setCaptchaImage(result.captchaImage)
+    } catch { /* handled by interceptor */ }
+    finally { setCaptchaLoading(false) }
+  }, [])
+
+  useEffect(() => {
+    fetchCaptcha()
+  }, [fetchCaptcha])
 
   const handleSendCode = useCallback(async () => {
     if (cooldown > 0) return
@@ -32,8 +52,14 @@ export default function RegisterForm({ onBack }: RegisterFormProps) {
       message.warning(t('emailInvalid'))
       return
     }
+    let captchaCode: string
     try {
-      await authApi.sendCode({ email, purpose: 'register' })
+      captchaCode = await form.validateFields(['captchaCode']).then((values) => values.captchaCode)
+    } catch {
+      return
+    }
+    try {
+      await authApi.sendCode({ email, purpose: 'register', captchaId: captchaId ?? undefined, captchaCode })
       message.success(t('sendCodeSuccess'))
       const cd = 60
       setCooldown(cd)
@@ -44,7 +70,7 @@ export default function RegisterForm({ onBack }: RegisterFormProps) {
         })
       }, 1000)
     } catch { /* handled by interceptor */ }
-  }, [cooldown, form, t, message])
+  }, [cooldown, form, captchaId, t, message])
 
   const onFinish = useCallback(async (values: {
     username: string; email: string; password: string
@@ -73,10 +99,52 @@ export default function RegisterForm({ onBack }: RegisterFormProps) {
           <Input prefix={<MailOutlined style={iconStyle} />} placeholder={t('emailPlaceholder')} autoComplete="email" />
         </Form.Item>
 
-        <Form.Item name="verifyCode" rules={[{ required: true, message: t('verifyCodeRequired') }]}>
+        <Form.Item
+          name="captchaCode"
+          rules={[{ required: true, message: t('captchaRequired') }]}
+        >
           <Input
+            className="netlab-login-captcha-input"
             prefix={<SafetyCertificateOutlined style={iconStyle} />}
+            placeholder={t('captchaPlaceholder')}
+            autoComplete="off"
+            suffix={
+              captchaImage ? (
+                <Tooltip title={t('clickToRefresh')}>
+                  <Image
+                    src={captchaImage}
+                    alt="captcha"
+                    height={32}
+                    style={{ objectFit: 'contain', cursor: 'pointer' }}
+                    preview={{
+                      open: false,
+                      cover: <ReloadOutlined spin={captchaLoading} />,
+                      onOpenChange: () => fetchCaptcha(),
+                    }}
+                  />
+                </Tooltip>
+              ) : (
+                <Button type="link" size="small" loading={captchaLoading} onClick={fetchCaptcha} style={{ padding: 0, fontSize: 12 }}>
+                  {t('clickToRefresh')}
+                </Button>
+              )
+            }
+          />
+        </Form.Item>
+
+        <Form.Item
+          name="verifyCode"
+          rules={[
+            { required: true, message: t('verifyCodeRequired') },
+            { len: 6, message: t('verifyCodeInvalid') },
+            { pattern: /^\d{6}$/, message: t('verifyCodeInvalid') },
+          ]}
+        >
+          <Input
+            prefix={<NumberOutlined style={iconStyle} />}
             placeholder={t('verifyCodePlaceholder')}
+            maxLength={6}
+            autoComplete="one-time-code"
             suffix={
               <Button type="link" size="small" disabled={cooldown > 0} onClick={handleSendCode} style={{ padding: 0, fontSize: 12 }}>
                 {cooldown > 0 ? t('sendCodeRetry', { seconds: cooldown }) : t('sendCode')}
@@ -85,10 +153,17 @@ export default function RegisterForm({ onBack }: RegisterFormProps) {
           />
         </Form.Item>
 
-        <Form.Item name="password" rules={[{ required: true, message: t('passwordRequired') }, { min: 8, message: t('passwordMinLength') }]}>
+        <Form.Item
+          name="password"
+          rules={[
+            { required: true, message: t('passwordRequired') },
+            createPasswordStrengthRule({
+              t,
+            }),
+          ]}
+        >
           <Input.Password prefix={<LockOutlined style={iconStyle} />} placeholder={t('passwordPlaceholder')} autoComplete="new-password" />
         </Form.Item>
-
         <Form.Item
           name="confirmPassword"
           dependencies={['password']}

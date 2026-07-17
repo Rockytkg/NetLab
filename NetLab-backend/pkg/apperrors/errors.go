@@ -30,8 +30,13 @@ const (
 	ErrCodeEmailNotConfigured     ErrorCode = 1016
 	ErrCodeEmailSendFailed        ErrorCode = 1017
 	ErrCodePasswordResetClosed    ErrorCode = 1018
+	ErrCodeUnauthorized           ErrorCode = 1019
 	ErrCodeInvalidTwoFactorCode   ErrorCode = 1020
 	ErrCodeTwoFactorNotConfigured ErrorCode = 1021
+	ErrCodeInternal               ErrorCode = 1022
+	ErrCodeInvalidSignature       ErrorCode = 1023
+	ErrCodeInvalidRequest         ErrorCode = 1024
+	ErrCodeInvalidFile            ErrorCode = 1025
 )
 
 // HTTPStatus 将错误码映射为对应的 HTTP 状态码。
@@ -43,6 +48,12 @@ func (c ErrorCode) HTTPStatus() int {
 		return http.StatusForbidden
 	case ErrCodeTokenExpired, ErrCodeInvalidRefreshToken, ErrCodeSessionExpired:
 		return http.StatusUnauthorized
+	case ErrCodeUnauthorized, ErrCodeInvalidSignature:
+		return http.StatusUnauthorized
+	case ErrCodeInternal:
+		return http.StatusInternalServerError
+	case ErrCodeInvalidRequest, ErrCodeInvalidFile:
+		return http.StatusBadRequest
 	case ErrCodeUserNotFound:
 		return http.StatusNotFound
 	case ErrCodeEmailExists, ErrCodeUsernameExists, ErrCodeDuplicateEntry:
@@ -117,6 +128,8 @@ var (
 	ErrPasswordResetClosed    = New(ErrCodePasswordResetClosed, "password reset is disabled")
 	ErrInvalidTwoFactorCode   = New(ErrCodeInvalidTwoFactorCode, "invalid two-factor authentication code")
 	ErrTwoFactorNotConfigured = New(ErrCodeTwoFactorNotConfigured, "two-factor authentication is not configured")
+	ErrUnauthorized           = New(ErrCodeUnauthorized, "authentication required")
+	ErrInternal               = New(ErrCodeInternal, "internal server error")
 )
 
 // ValidationError 用于请求校验失败。

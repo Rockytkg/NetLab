@@ -7,7 +7,7 @@ const { Text } = Typography
 
 export default function NotFoundPage() {
   const navigate = useNavigate()
-  const { t } = useTranslation('common')
+  const { t } = useTranslation(['common', 'menu'])
   const { token } = theme.useToken()
 
   return (
@@ -62,7 +62,7 @@ export default function NotFoundPage() {
           }
           subTitle={
             <Text type="secondary" style={{ fontSize: 14 }}>
-              {t('noData')}
+              {t('common:error404')}
             </Text>
           }
           extra={
@@ -71,14 +71,14 @@ export default function NotFoundPage() {
                 icon={<ArrowLeftOutlined />}
                 onClick={() => navigate(-1)}
               >
-                {t('back')}
+                {t('common:back')}
               </Button>
               <Button
                 type="primary"
                 icon={<HomeOutlined />}
                 onClick={() => navigate('/', { replace: true })}
               >
-                {t('profile')}
+                {t('menu:home')}
               </Button>
             </div>
           }

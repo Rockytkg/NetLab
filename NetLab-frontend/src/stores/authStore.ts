@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { UserInfo, LoginParams, LoginResult, SecurityActions } from '@/types/auth'
+import { normalizeUserInfo } from '@/utils/auth-normalize'
 import { authApi } from '@/services/auth'
 
 interface AuthState {
@@ -21,6 +22,8 @@ interface AuthState {
   refreshAccessToken: () => Promise<string | null>
   fetchUserInfo: () => Promise<void>
   isAuthenticated: () => boolean
+  /** 统一写入 userInfo（内部自动 normalize），替换直接 setState({ userInfo }) 调用。 */
+  setUserInfo: (user: UserInfo | null) => void
 }
 
 export const useAuthStore = create<AuthState>()(
@@ -32,13 +35,15 @@ export const useAuthStore = create<AuthState>()(
       securityActions: null,
       loading: false,
 
+      setUserInfo: (user: UserInfo | null) => set({ userInfo: normalizeUserInfo(user) }),
+
       login: async (params: LoginParams) => {
         const result = await authApi.login(params)
         if (!result.accessToken || !result.refreshToken || !result.user) return result
         set({
           accessToken: result.accessToken,
           refreshToken: result.refreshToken,
-          userInfo: result.user,
+          userInfo: normalizeUserInfo(result.user),
           securityActions: result.securityActions,
         })
         return result
@@ -87,7 +92,7 @@ export const useAuthStore = create<AuthState>()(
         set({ loading: true })
         try {
           const user = await authApi.getUserInfo()
-          set({ userInfo: user, loading: false })
+          set({ userInfo: normalizeUserInfo(user), loading: false })
         } catch {
           set({ loading: false })
           throw new Error('Failed to fetch user information')
@@ -100,6 +105,18 @@ export const useAuthStore = create<AuthState>()(
     }),
     {
       name: 'netlab-auth',
+      version: 2,
+      migrate: (persistedState: unknown, version: number) => {
+        const state = persistedState as Record<string, unknown>
+        // v1 → v2: 对旧版本 userInfo 补全 permissions 字段
+        if (version < 2) {
+          const userInfo = state.userInfo as Record<string, unknown> | null
+          if (userInfo && !Array.isArray(userInfo.permissions)) {
+            userInfo.permissions = []
+          }
+        }
+        return state as AuthState
+      },
       partialize: (state) => ({
         accessToken: state.accessToken,
         refreshToken: state.refreshToken,

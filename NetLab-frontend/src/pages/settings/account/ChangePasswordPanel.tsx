@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { authApi } from '@/services/auth'
 import { useAuthStore } from '@/stores/authStore'
+import { createPasswordStrengthRule } from '@/utils/password-strength'
 import type { ChangePasswordParams } from '@/types/auth'
 
 /**
@@ -68,10 +69,12 @@ export default function ChangePasswordPanel() {
           label={t('settings:changePassword.new')}
           rules={[
             { required: true, message: t('settings:changePassword.newRequired') },
-            { min: 8, message: t('settings:changePassword.minLength') },
+            createPasswordStrengthRule({
+              t,
+            }),
           ]}
         >
-          <Input.Password prefix={<LockOutlined />} autoComplete="new-password" maxLength={128} />
+          <Input.Password prefix={<LockOutlined />} autoComplete="new-password" maxLength={72} />
         </Form.Item>
         <Form.Item
           name="confirmPassword"

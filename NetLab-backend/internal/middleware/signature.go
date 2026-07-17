@@ -45,7 +45,7 @@ func Signature(cfg SignatureConfig) gin.HandlerFunc {
 
 		if sigHeader == "" {
 			if cfg.Required {
-				response.Error(c, apperrors.New(apperrors.ErrCodeInvalidCredentials, "missing signature header"))
+				response.Error(c, apperrors.New(apperrors.ErrCodeInvalidSignature, "missing signature header"))
 				return
 			}
 			c.Next()
@@ -55,7 +55,7 @@ func Signature(cfg SignatureConfig) gin.HandlerFunc {
 		// 校验时间戳以防止重放攻击
 		if tsHeader == "" {
 			if cfg.Required {
-				response.Error(c, apperrors.New(apperrors.ErrCodeInvalidCredentials, "missing timestamp header"))
+				response.Error(c, apperrors.New(apperrors.ErrCodeInvalidSignature, "missing timestamp header"))
 				return
 			}
 			c.Next()
@@ -64,7 +64,7 @@ func Signature(cfg SignatureConfig) gin.HandlerFunc {
 
 		ts, err := time.Parse(time.RFC3339, tsHeader)
 		if err != nil {
-			response.Error(c, apperrors.New(apperrors.ErrCodeInvalidCredentials, "invalid timestamp format"))
+			response.Error(c, apperrors.New(apperrors.ErrCodeInvalidSignature, "invalid timestamp format"))
 			return
 		}
 
@@ -73,14 +73,14 @@ func Signature(cfg SignatureConfig) gin.HandlerFunc {
 			skew = -skew
 		}
 		if skew > MaxTimestampSkew {
-			response.Error(c, apperrors.New(apperrors.ErrCodeInvalidCredentials, "request timestamp expired"))
+			response.Error(c, apperrors.New(apperrors.ErrCodeInvalidSignature, "request timestamp expired"))
 			return
 		}
 
 		// 读取并恢复请求体以用于签名计算
 		body, err := io.ReadAll(c.Request.Body)
 		if err != nil {
-			response.Error(c, apperrors.New(apperrors.ErrCodeInvalidCredentials, "failed to read request body"))
+			response.Error(c, apperrors.New(apperrors.ErrCodeInvalidSignature, "failed to read request body"))
 			return
 		}
 		c.Request.Body.Close()
@@ -99,7 +99,7 @@ func Signature(cfg SignatureConfig) gin.HandlerFunc {
 
 		valid, err := crypto.VerifyHMACSHA256Hex(cfg.SignatureKey, payload, sigHeader)
 		if err != nil || !valid {
-			response.Error(c, apperrors.New(apperrors.ErrCodeInvalidCredentials, "invalid signature"))
+			response.Error(c, apperrors.New(apperrors.ErrCodeInvalidSignature, "invalid signature"))
 			return
 		}
 

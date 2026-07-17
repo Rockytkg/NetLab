@@ -1,0 +1,12 @@
+{
+  "id": "fix-admin-flows-and-cleanup",
+  "title": "修复内置管理员首次换绑邮箱免验证码、用户管理自见、批量导入 1001/1005 故障，随后全项目清扫冗余",
+  "status": "in_progress",
+  "strategy": "debug-investigate",
+  "currentPhase": "5-fix",
+  "nextAction": "按确认方向实施修复与清扫",
+  "gate": null,
+  "branch": "main",
+  "scope": "fix-admin-flows-and-cleanup",
+  "createdAt": "2026-07-17T22:02:44+08:00"
+}

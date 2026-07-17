@@ -22,7 +22,7 @@ import {
 } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import { adminApi } from '@/services/admin'
-import { useAuthStore } from '@/stores/authStore'
+import { usePermission } from '@/hooks/usePermission'
 import type { MenuProps, TabsProps } from 'antd'
 import type {
   AdminSettings,
@@ -45,8 +45,8 @@ export default function SettingsPage() {
   const { t } = useTranslation('settings')
   const { token } = theme.useToken()
   const screens = useBreakpoint()
-  const role = useAuthStore((s) => s.userInfo?.role)
-  const isAdmin = role === 'admin' || role === 'super_admin'
+  const { can } = usePermission()
+  const canReadSettings = can('setting', 'read')
 
   const [settings, setSettings] = useState<AdminSettings | null>(null)
   const [loading, setLoading] = useState(true)
@@ -67,7 +67,7 @@ export default function SettingsPage() {
   }
 
   useEffect(() => {
-    if (!isAdmin) {
+    if (!canReadSettings) {
       setLoading(false)
       return
     }
@@ -87,7 +87,7 @@ export default function SettingsPage() {
     return () => {
       alive = false
     }
-  }, [isAdmin])
+  }, [canReadSettings])
 
   // 局部更新已加载的设置快照，避免保存后整页刷新。
   const patch = (partial: Partial<AdminSettings>) =>
@@ -98,8 +98,8 @@ export default function SettingsPage() {
       prev ? { ...prev, oauth: prev.oauth.map((p) => (p.id === next.id ? next : p)) } : prev,
     )
 
-  if (!isAdmin) {
-    return <Result status="403" title="403" subTitle={t('adminOnly')} />
+  if (!canReadSettings) {
+    return <Result status="403" title="403" subTitle={t('permissionDenied')} />
   }
 
   const settingsItems =
@@ -242,3 +242,4 @@ export default function SettingsPage() {
     </ConfigProvider>
   )
 }
+

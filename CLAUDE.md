@@ -36,9 +36,8 @@ make test             # go test ./... -v -cover
 make test-race        # go test ./... -v -race
 make lint             # golangci-lint run ./...
 make swagger          # Generate Swagger docs from annotations
-make docker-up        # Start PostgreSQL + Redis via docker-compose
+make docker-up        # Start PostgreSQL + Redis (AutoMigrate runs on server startup)
 make docker-down      # Stop infrastructure containers
-make migrate          # Apply initial SQL migration (manual psql)
 ```
 
 ## Repository Structure
@@ -78,7 +77,7 @@ NetLab/
     │   ├── email/smtp.go        # SMTP email sender
     │   ├── response/response.go # Standardized API response envelope
     │   └── apperrors/errors.go  # Typed application errors with i18n codes
-    ├── migrations/              # SQL migration files
+    ├── migrations/              # (removed — GORM AutoMigrate only)
     └── docker-compose.yml       # PostgreSQL 16 + Redis 7
 ```
 
@@ -166,3 +165,13 @@ PostgreSQL runs on port 5432 (user: `netlab`, db: `netlab`). Redis runs on port 
 | Phase 2 | 🔲 Planned | Device inventory, site/group management, device details, real network topology view |
 | Phase 3 | 🔲 Planned | SNMP polling, metric trends, interface monitoring, Syslog ingestion and search |
 | Phase 4 | 🔲 Planned | RADIUS authentication/auditing, alert policies, notification workflows, responsive operations workspace |
+
+## .context 项目上下文
+
+> 项目使用 `.context/` 管理开发决策上下文。
+
+- 编码规范：`.context/prefs/coding-style.md`
+- 工作流规则：`.context/prefs/workflow.md`
+- 决策历史：`.context/history/commits.md`
+
+**规则**：修改代码前必读 prefs/，做决策时按 workflow.md 规则记录日志。

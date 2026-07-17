@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { authApi } from '@/services/auth'
 import { useAuthStore } from '@/stores/authStore'
+import { createPasswordStrengthRule } from '@/utils/password-strength'
 
 const { Title, Text } = Typography
 
@@ -59,9 +60,10 @@ export default function SecurityRequiredPage() {
   }) => {
     setSubmitting(true)
     try {
-      const user = await authApi.completeSecurityUpdate(values)
-      useAuthStore.setState({ userInfo: user, securityActions: null })
+      await authApi.completeSecurityUpdate(values)
       message.success(t('securityUpdateSuccess'))
+      // 完成后强制重新登录：服务端已撤销会话，logout 会一并清空本地
+      // token / userInfo / securityActions（无需先写入随即被清空的用户信息）。
       await useAuthStore.getState().logout({ callApi: false })
       navigate('/login', { replace: true })
     } finally {
@@ -142,12 +144,13 @@ export default function SecurityRequiredPage() {
                     label={t('newPassword')}
                     rules={[
                       { required: true, message: t('newPasswordRequired') },
-                      { min: 8, message: t('passwordMinLength') },
-                    ]}
+                      createPasswordStrengthRule({
+                      t,
+                    }),
+                  ]}
                   >
-                    <Input.Password prefix={<LockOutlined />} autoComplete='new-password' maxLength={128} />
+                    <Input.Password prefix={<LockOutlined />} autoComplete='new-password' maxLength={72} />
                   </Form.Item>
-
                   <Form.Item
                     name='confirmPassword'
                     label={t('confirmPassword')}
@@ -162,7 +165,7 @@ export default function SecurityRequiredPage() {
                       }),
                     ]}
                   >
-                    <Input.Password prefix={<LockOutlined />} autoComplete='new-password' maxLength={128} />
+                    <Input.Password prefix={<LockOutlined />} autoComplete='new-password' maxLength={72} />
                   </Form.Item>
 
                   {needEmail && (

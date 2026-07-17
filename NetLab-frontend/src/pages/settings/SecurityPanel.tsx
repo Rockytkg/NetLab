@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next'
 import { adminApi } from '@/services/admin'
 import type { SecuritySettings } from '@/types/settings'
 import SettingsSection from './SettingsSection'
+import Can from '@/components/auth/Can'
 
 const { Text } = Typography
 
@@ -81,9 +82,9 @@ export default function SecurityPanel({ value, onSaved }: SecurityPanelProps) {
         </Form.Item>
         <Divider style={{ marginBlock: token.marginLG }} />
         <Form.Item style={{ marginBottom: 0 }}>
-          <Button size="middle" type="primary" htmlType="submit" loading={saving} icon={<SaveOutlined />}>
+          <Can resource="setting" action="update"><Button size="middle" type="primary" htmlType="submit" loading={saving} icon={<SaveOutlined />}>
             {saving ? t('settings:saving') : t('settings:save')}
-          </Button>
+          </Button></Can>
         </Form.Item>
       </Form>
     </SettingsSection>

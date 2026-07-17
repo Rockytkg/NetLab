@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	"go.uber.org/zap"
+	"strconv"
 
 	"netlab-backend/internal/model"
 	"netlab-backend/internal/repository"
@@ -202,7 +202,7 @@ func (s *OAuthService) HandleCallback(ctx context.Context, provider, code, state
 
 	s.logger.Info("oauth login success",
 		zap.String("provider", provider),
-		zap.String("user_id", user.ID.String()),
+		zap.String("user_id", strconv.FormatUint(user.ID, 10)),
 		zap.String("email", oauthUser.Email),
 	)
 	return s.issueOAuthLogin(ctx, user, provider)
@@ -224,38 +224,32 @@ func (s *OAuthService) HandleBindCallback(ctx context.Context, userID, provider,
 		return appErr
 	}
 
-	uid, parseErr := uuid.Parse(userID)
+	uid, parseErr := strconv.ParseUint(userID, 10, 64)
 	if parseErr != nil {
-		return apperrors.New(apperrors.ErrCodeInvalidCredentials, "invalid user id")
+		return apperrors.New(apperrors.ErrCodeInternal, "invalid user id")
 	}
 
 	// 该第三方身份是否已被其他账号绑定？
-	existing, dbErr := s.bindingRepo.FindByProviderUID(ctx, oauthUser.Provider, oauthUser.ProviderUserID)
+	existingUser, dbErr := s.bindingRepo.FindByProviderUID(ctx, oauthUser.Provider, oauthUser.ProviderUserID)
 	if dbErr != nil {
 		return apperrors.Wrap(apperrors.ErrCodeOperationDenied, "database error", dbErr)
 	}
-	if existing != nil {
-		if existing.UserID == uid {
+	if existingUser != nil {
+		if existingUser.ID == uid {
 			return nil // 幂等：已绑定到本账号
 		}
 		return apperrors.New(apperrors.ErrCodeDuplicateEntry, "this third-party account is already linked to another user")
 	}
 
-	// 同一提供商每账号仅允许一个绑定。
-	if has, dbErr := s.bindingRepo.ExistsForUser(ctx, uid, oauthUser.Provider); dbErr != nil {
+	// 互斥绑定：已绑定其他提供商则拒绝。
+	if has, dbErr := s.bindingRepo.HasAny(ctx, uid); dbErr != nil {
 		return apperrors.Wrap(apperrors.ErrCodeOperationDenied, "database error", dbErr)
 	} else if has {
 		return apperrors.New(apperrors.ErrCodeDuplicateEntry, "provider already linked to this account")
 	}
 
-	binding := &model.UserOAuthBinding{
-		UserID:         uid,
-		Provider:       oauthUser.Provider,
-		ProviderUserID: oauthUser.ProviderUserID,
-		Email:          oauthUser.Email,
-	}
-	if err := s.bindingRepo.Create(ctx, binding); err != nil {
-		s.logger.Error("create oauth binding failed", zap.Error(err))
+	if err := s.bindingRepo.Bind(ctx, uid, oauthUser.Provider, oauthUser.ProviderUserID, oauthUser.Email); err != nil {
+		s.logger.Error("save oauth binding failed", zap.Error(err))
 		return apperrors.Wrap(apperrors.ErrCodeOperationDenied, "failed to bind provider", err)
 	}
 	s.logger.Info("oauth provider bound",
@@ -268,29 +262,26 @@ func (s *OAuthService) HandleBindCallback(ctx context.Context, userID, provider,
 // UnbindProvider 解除当前用户与某提供商的绑定。
 // 为防止账号被锁死：若用户没有本地密码，且解绑后将不再有任何绑定，则拒绝。
 func (s *OAuthService) UnbindProvider(ctx context.Context, userID, provider string) *apperrors.AppError {
-	uid, err := uuid.Parse(userID)
+	uid, err := strconv.ParseUint(userID, 10, 64)
 	if err != nil {
-		return apperrors.New(apperrors.ErrCodeInvalidCredentials, "invalid user id")
+		return apperrors.New(apperrors.ErrCodeInternal, "invalid user id")
 	}
 	user, dbErr := s.userRepo.FindByID(ctx, userID)
 	if dbErr != nil || user == nil {
 		return apperrors.ErrUserNotFound
 	}
 	if user.PasswordHash == "" {
-		count, cErr := s.bindingRepo.CountByUser(ctx, uid)
+		hasAny, cErr := s.bindingRepo.HasAny(ctx, uid)
 		if cErr != nil {
 			return apperrors.Wrap(apperrors.ErrCodeOperationDenied, "database error", cErr)
 		}
-		if count <= 1 {
+		if hasAny {
 			return apperrors.New(apperrors.ErrCodeOperationDenied, "cannot unbind the only login method; set a password first")
 		}
 	}
-	affected, dbErr := s.bindingRepo.DeleteByProviderForUser(ctx, uid, provider)
+	dbErr = s.bindingRepo.Unbind(ctx, uid, provider)
 	if dbErr != nil {
 		return apperrors.Wrap(apperrors.ErrCodeOperationDenied, "failed to unbind provider", dbErr)
-	}
-	if affected == 0 {
-		return apperrors.New(apperrors.ErrCodeOperationDenied, "provider not linked")
 	}
 	s.logger.Info("oauth provider unbound",
 		zap.String("provider", provider),
@@ -300,10 +291,10 @@ func (s *OAuthService) UnbindProvider(ctx context.Context, userID, provider stri
 }
 
 // ListBindings 返回当前用户已绑定的提供商列表。
-func (s *OAuthService) ListBindings(ctx context.Context, userID string) ([]model.UserOAuthBinding, *apperrors.AppError) {
-	uid, err := uuid.Parse(userID)
+func (s *OAuthService) ListBindings(ctx context.Context, userID string) ([]model.OAuthProviderInfo, *apperrors.AppError) {
+	uid, err := strconv.ParseUint(userID, 10, 64)
 	if err != nil {
-		return nil, apperrors.New(apperrors.ErrCodeInvalidCredentials, "invalid user id")
+		return nil, apperrors.New(apperrors.ErrCodeInternal, "invalid user id")
 	}
 	list, dbErr := s.bindingRepo.ListByUser(ctx, uid)
 	if dbErr != nil {
@@ -425,19 +416,15 @@ func (s *OAuthService) fetchUserInfo(ctx context.Context, provider, code string)
 // resolveLoginUser 按 (provider, providerUserID) 绑定关系定位登录用户。
 // 命中绑定 -> 直接登录；未命中 -> 返回 pending 绑定会话。
 func (s *OAuthService) resolveLoginUser(ctx context.Context, oauthUser *OAuthUserInfo) (*model.User, *PendingOAuthBindingResult, *apperrors.AppError) {
-	binding, err := s.bindingRepo.FindByProviderUID(ctx, oauthUser.Provider, oauthUser.ProviderUserID)
+	existingUser, err := s.bindingRepo.FindByProviderUID(ctx, oauthUser.Provider, oauthUser.ProviderUserID)
 	if err != nil {
 		return nil, nil, apperrors.Wrap(apperrors.ErrCodeUserNotFound, "database error", err)
 	}
-	if binding != nil {
-		user, err := s.userRepo.FindByID(ctx, binding.UserID.String())
-		if err != nil || user == nil {
-			return nil, nil, apperrors.ErrUserNotFound
-		}
-		if !user.IsActive() {
+	if existingUser != nil {
+		if !existingUser.IsActive() {
 			return nil, nil, apperrors.ErrAccountDisabled
 		}
-		return user, nil, nil
+		return existingUser, nil, nil
 	}
 	pending, appErr := s.storePendingBinding(ctx, oauthUser)
 	return nil, pending, appErr
@@ -445,24 +432,18 @@ func (s *OAuthService) resolveLoginUser(ctx context.Context, oauthUser *OAuthUse
 
 // createBindingStrict 幂等地为用户建立一条 OAuth 绑定；若该第三方身份
 // 已绑定到其他账号则返回错误。
-func (s *OAuthService) createBindingStrict(ctx context.Context, userID uuid.UUID, oauthUser *OAuthUserInfo) *apperrors.AppError {
-	existing, err := s.bindingRepo.FindByProviderUID(ctx, oauthUser.Provider, oauthUser.ProviderUserID)
+func (s *OAuthService) createBindingStrict(ctx context.Context, userID uint64, oauthUser *OAuthUserInfo) *apperrors.AppError {
+	existingUser, err := s.bindingRepo.FindByProviderUID(ctx, oauthUser.Provider, oauthUser.ProviderUserID)
 	if err != nil {
 		return apperrors.Wrap(apperrors.ErrCodeOperationDenied, "database error", err)
 	}
-	if existing != nil {
-		if existing.UserID != userID {
+	if existingUser != nil {
+		if existingUser.ID != userID {
 			return apperrors.New(apperrors.ErrCodeDuplicateEntry, "this third-party account is already linked to another user")
 		}
 		return nil
 	}
-	binding := &model.UserOAuthBinding{
-		UserID:         userID,
-		Provider:       oauthUser.Provider,
-		ProviderUserID: oauthUser.ProviderUserID,
-		Email:          oauthUser.Email,
-	}
-	if err := s.bindingRepo.Create(ctx, binding); err != nil {
+	if err := s.bindingRepo.Bind(ctx, userID, oauthUser.Provider, oauthUser.ProviderUserID, oauthUser.Email); err != nil {
 		return apperrors.Wrap(apperrors.ErrCodeOperationDenied, "failed to bind provider", err)
 	}
 	return nil
@@ -474,7 +455,7 @@ func (s *OAuthService) issueOAuthLogin(ctx context.Context, user *model.User, pr
 	if appErr != nil {
 		return nil, appErr
 	}
-	_ = s.userRepo.UpdateLoginSuccess(ctx, user.ID.String())
+	_ = s.userRepo.UpdateLoginSuccess(ctx, strconv.FormatUint(user.ID, 10))
 	return &LoginServiceResult{
 		Tokens:  tokens,
 		User:    userToInfo(user),

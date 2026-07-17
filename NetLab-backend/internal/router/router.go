@@ -12,6 +12,7 @@ import (
 	_ "netlab-backend/docs" // Swagger 文档（匿名导入以触发 init() 注册）
 	"netlab-backend/internal/handler/admin"
 	"netlab-backend/internal/handler/auth"
+	rbacHandler "netlab-backend/internal/handler/rbac"
 	"netlab-backend/internal/middleware"
 	authsvc "netlab-backend/internal/service/auth"
 	pkgjwt "netlab-backend/pkg/jwt"
@@ -25,6 +26,7 @@ type RouterConfig struct {
 	Logger        *zap.Logger
 	AuthHandler   *auth.AuthHandler
 	AdminHandler  *admin.AdminHandler
+	RBACHandler   *rbacHandler.Handler
 	AuthService   *authsvc.AuthService
 	TokenService  *authsvc.TokenService
 	CryptoService *authsvc.CryptoService
@@ -60,7 +62,7 @@ func Setup(cfg RouterConfig) *gin.Engine {
 	// ── API 路由 ──────────────────────────────────────────
 	api := r.Group("/api")
 	{
-		publicAuth := api.Group("/auth")
+		publicAuth := api.Group(authRoutePrefix)
 		publicAuth.Use(middleware.OptionalAuth(cfg.JWTManager, cfg.SessionStore))
 		{
 			// ── 预共享密钥保护的端点（仅签名）──
@@ -178,10 +180,10 @@ func Setup(cfg RouterConfig) *gin.Engine {
 		// ── 已认证路由（需要 JWT）──
 		authenticated := api.Group("")
 		authenticated.Use(middleware.RequireAuth(cfg.JWTManager, cfg.SessionStore))
-		authenticated.Use(middleware.Authorize(cfg.Enforcer))
 		{
-			authUser := authenticated.Group("/auth")
+			authUser := authenticated.Group(authRoutePrefix)
 			{
+				authUser.Use(middleware.RequireRBAC(cfg.Enforcer, authPermissionResource, authPermissionRead))
 				// 用户信息——标准限流（频繁轮询）
 				authUser.GET("/userinfo",
 					cfg.limitStandard("auth-userinfo"),
@@ -284,63 +286,135 @@ func Setup(cfg RouterConfig) *gin.Engine {
 				)
 			}
 
-			// ── 管理端路由（需要 admin 角色）──
-			// 系统设置的读写仅对 admin 开放。
-			if cfg.AdminHandler != nil {
-				adminGroup := authenticated.Group("/admin")
+			// ── RBAC 管理 ──
+			if cfg.RBACHandler != nil {
+				rbacGroup := authenticated.Group("/rbac")
 				{
-					adminGroup.GET("/settings",
+					rbacGroup.GET("/roles",
+						cfg.limitStandard("rbac-roles-list"),
+						middleware.RequireRBAC(cfg.Enforcer, "rbac", "read"),
+						cfg.RBACHandler.ListRoles,
+					)
+					rbacGroup.GET("/roles/:id",
+						cfg.limitStandard("rbac-roles-get"),
+						middleware.RequireRBAC(cfg.Enforcer, "rbac", "read"),
+						cfg.RBACHandler.GetRole,
+					)
+					rbacGroup.POST("/roles",
+						cfg.limitModerate("rbac-roles-create"),
+						middleware.RequireRBAC(cfg.Enforcer, "rbac", "write"),
+						cfg.RBACHandler.CreateRole,
+					)
+					rbacGroup.PUT("/roles/:id",
+						cfg.limitModerate("rbac-roles-update"),
+						middleware.RequireRBAC(cfg.Enforcer, "rbac", "write"),
+						cfg.RBACHandler.UpdateRole,
+					)
+					rbacGroup.DELETE("/roles/:id",
+						cfg.limitModerate("rbac-roles-delete"),
+						middleware.RequireRBAC(cfg.Enforcer, "rbac", "write"),
+						cfg.RBACHandler.DeleteRole,
+					)
+
+					rbacGroup.GET("/roles/:id/permissions",
+						cfg.limitStandard("rbac-roles-perms-get"),
+						middleware.RequireRBAC(cfg.Enforcer, "rbac", "read"),
+						cfg.RBACHandler.GetRolePermissions,
+					)
+					rbacGroup.PUT("/roles/:id/permissions",
+						cfg.limitModerate("rbac-roles-perms-set"),
+						middleware.RequireRBAC(cfg.Enforcer, "rbac", "write"),
+						cfg.RBACHandler.SetRolePermissions,
+					)
+
+					rbacGroup.GET("/permissions",
+						cfg.limitStandard("rbac-perms-list"),
+						middleware.RequireRBAC(cfg.Enforcer, "rbac", "read"),
+						cfg.RBACHandler.ListAllPermissions,
+					)
+				}
+			}
+
+			// ── 按资源划分的受保护路由 ──
+			if cfg.AdminHandler != nil {
+				settingsGroup := authenticated.Group("/settings")
+				usersGroup := authenticated.Group("/users")
+				{
+					settingsGroup.GET("",
 						cfg.limitStandard("admin-settings-get"),
+						middleware.RequireRBAC(cfg.Enforcer, "setting", "read"),
 						cfg.AdminHandler.GetSettings,
 					)
-					adminGroup.PUT("/settings/security",
+					settingsGroup.PUT("/security",
 						cfg.limitModerate("admin-security"),
+						middleware.RequireRBAC(cfg.Enforcer, "setting", "update"),
 						cfg.AdminHandler.UpdateSecurity,
 					)
-					adminGroup.PUT("/settings/beian",
+					settingsGroup.PUT("/beian",
 						cfg.limitModerate("admin-beian"),
+						middleware.RequireRBAC(cfg.Enforcer, "setting", "update"),
 						cfg.AdminHandler.UpdateBeian,
 					)
-					adminGroup.PUT("/settings/smtp",
+					settingsGroup.PUT("/smtp",
 						cfg.limitModerate("admin-smtp"),
+						middleware.RequireRBAC(cfg.Enforcer, "setting", "update"),
 						cfg.AdminHandler.UpdateSMTP,
 					)
-					adminGroup.POST("/settings/smtp/test",
+					settingsGroup.POST("/smtp/test",
 						cfg.limitStrict("admin-smtp-test"),
+						middleware.RequireRBAC(cfg.Enforcer, "setting", "update"),
 						cfg.AdminHandler.TestSMTP,
 					)
-					adminGroup.PUT("/settings/oauth/:provider",
+					settingsGroup.PUT("/oauth/:provider",
 						cfg.limitModerate("admin-oauth"),
+						middleware.RequireRBAC(cfg.Enforcer, "setting", "update"),
 						cfg.AdminHandler.UpdateOAuthProvider,
 					)
 
 					// ── 用户管理 ──
-					adminGroup.GET("/users",
+					usersGroup.GET("",
 						cfg.limitStandard("admin-users-list"),
+						middleware.RequireRBAC(cfg.Enforcer, "user", "read"),
 						cfg.AdminHandler.ListUsers,
 					)
-					adminGroup.POST("/users",
+					usersGroup.POST("",
 						cfg.limitModerate("admin-users-create"),
+						middleware.RequireRBAC(cfg.Enforcer, "user", "create"),
 						cfg.AdminHandler.CreateUser,
 					)
-					adminGroup.DELETE("/users",
+					usersGroup.DELETE("",
 						cfg.limitModerate("admin-users-delete"),
+						middleware.RequireRBAC(cfg.Enforcer, "user", "delete"),
 						cfg.AdminHandler.BatchDeleteUsers,
 					)
-					adminGroup.PUT("/users/role",
+					usersGroup.PUT("/role",
 						cfg.limitModerate("admin-users-role"),
+						middleware.RequireRBAC(cfg.Enforcer, "user", "update"),
 						cfg.AdminHandler.BatchUpdateRole,
 					)
-					adminGroup.PUT("/users/reset-password",
+					usersGroup.PUT("/reset-password",
 						cfg.limitModerate("admin-users-reset-pw"),
+						middleware.RequireRBAC(cfg.Enforcer, "user", "update"),
 						cfg.AdminHandler.BatchResetPassword,
 					)
-					adminGroup.POST("/users/import",
+					usersGroup.POST("/import",
 						cfg.limitStrict("admin-users-import"),
+						middleware.RequireRBAC(cfg.Enforcer, "user", "import"),
 						cfg.AdminHandler.ImportUsers,
 					)
-					adminGroup.PUT("/users/:id",
+					usersGroup.GET("/import-template",
+						cfg.limitStandard("admin-users-template"),
+						middleware.RequireRBAC(cfg.Enforcer, "user", "import"),
+						cfg.AdminHandler.DownloadImportTemplate,
+					)
+					usersGroup.POST("/export",
+						cfg.limitStandard("admin-users-export"),
+						middleware.RequireRBAC(cfg.Enforcer, "user", "read"),
+						cfg.AdminHandler.ExportUsers,
+					)
+					usersGroup.PUT("/:id",
 						cfg.limitModerate("admin-users-update"),
+						middleware.RequireRBAC(cfg.Enforcer, "user", "update"),
 						cfg.AdminHandler.UpdateUser,
 					)
 				}

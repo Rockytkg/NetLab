@@ -38,6 +38,12 @@ declare module 'axios' {
      */
     skipAuthRefresh?: boolean
 
+    /**
+     * 内部标记：该请求已因 401 刷新并重试过一次。
+     * 防止"刷新→重试→再 401"无限循环。
+     */
+    _retry?: boolean
+
   }
 
   interface InternalAxiosRequestConfig {
@@ -60,6 +66,12 @@ declare module 'axios' {
      * auth 相关接口（如 login、refresh）本身应设为 true。
      */
     skipAuthRefresh?: boolean
+
+    /**
+     * 内部标记：该请求已因 401 刷新并重试过一次。
+     * 防止"刷新→重试→再 401"无限循环。
+     */
+    _retry?: boolean
 
   }
 }
@@ -103,6 +115,11 @@ export const BUSINESS_ERROR_I18N_MAP: Record<number, string> = {
   1016: 'common:errEmailNotConfigured',
   1017: 'common:errEmailSendFailed',
   1018: 'common:errPasswordResetDisabled',
+  1019: 'common:errUnauthorized',
   1020: 'common:errInvalidTwoFactorCode',
   1021: 'common:errTwoFactorNotConfigured',
+  1022: 'common:errInternalError',
+  1023: 'common:errInvalidSignature',
+  1024: 'common:errInvalidRequest',
+  1025: 'common:errInvalidFile',
 }

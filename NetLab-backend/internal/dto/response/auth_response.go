@@ -4,14 +4,15 @@ import "time"
 
 // UserInfo 是 GET /auth/userinfo 的响应。
 type UserInfo struct {
-	ID                  string `json:"id"`
-	Username            string `json:"username"`
-	Avatar              string `json:"avatar,omitempty"`
-	Email               string `json:"email,omitempty"`
-	Role                string `json:"role"`
-	TwoFactorEnabled    bool   `json:"twoFactorEnabled"`
-	PreferredAuthMethod string `json:"preferredAuthMethod,omitempty"`
-	HasPasskey          bool   `json:"hasPasskey"`
+	ID                  string   `json:"id"`
+	Username            string   `json:"username"`
+	Avatar              string   `json:"avatar,omitempty"`
+	Email               string   `json:"email,omitempty"`
+	Role                string   `json:"role"`
+	Permissions         []string `json:"permissions"`
+	TwoFactorEnabled    bool     `json:"twoFactorEnabled"`
+	PreferredAuthMethod string   `json:"preferredAuthMethod,omitempty"`
+	HasPasskey          bool     `json:"hasPasskey"`
 }
 
 type SecurityActions struct {

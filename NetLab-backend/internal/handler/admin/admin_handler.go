@@ -1,7 +1,10 @@
 package admin
 
 import (
+	"fmt"
+	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
@@ -16,25 +19,27 @@ import (
 	"netlab-backend/pkg/response"
 )
 
-// AdminHandler 处理系统设置管理端点（需 admin 角色）。
+// AdminHandler 处理系统设置与用户资源端点，访问由 RBAC 权限控制。
 type AdminHandler struct {
-	adminService     *authsvc.AdminService
-	userAdminService *authsvc.UserAdminService
-	mailer           *mailer.Provider
-	logger           *zap.Logger
+	adminService        *authsvc.AdminService
+	userAdminService    *authsvc.UserAdminService
+	importExportService *authsvc.UserImportExportService
+	mailer              *mailer.Provider
+	logger              *zap.Logger
 }
 
 // NewAdminHandler 创建一个新的 AdminHandler。
-func NewAdminHandler(adminService *authsvc.AdminService, userAdminService *authsvc.UserAdminService, mailerProvider *mailer.Provider, logger *zap.Logger) *AdminHandler {
+func NewAdminHandler(adminService *authsvc.AdminService, userAdminService *authsvc.UserAdminService, importExportService *authsvc.UserImportExportService, mailerProvider *mailer.Provider, logger *zap.Logger) *AdminHandler {
 	return &AdminHandler{
-		adminService:     adminService,
-		userAdminService: userAdminService,
-		mailer:           mailerProvider,
-		logger:           logger,
+		adminService:        adminService,
+		userAdminService:    userAdminService,
+		importExportService: importExportService,
+		mailer:              mailerProvider,
+		logger:              logger,
 	}
 }
 
-// GetSettings 处理 GET /api/admin/settings
+// GetSettings 处理 GET /api/settings
 // @Summary      Get system settings
 // @Description  Return all system settings (secrets masked). Admin only.
 // @Tags         Admin
@@ -42,7 +47,7 @@ func NewAdminHandler(adminService *authsvc.AdminService, userAdminService *auths
 // @Security     BearerAuth
 // @Success      200  {object}  response.ApiResponse
 // @Failure      403  {object}  response.ApiResponse
-// @Router       /api/admin/settings [get]
+// @Router       /api/settings [get]
 func (h *AdminHandler) GetSettings(c *gin.Context) {
 	settings, err := h.adminService.GetSettings(c.Request.Context())
 	if err != nil {
@@ -52,15 +57,7 @@ func (h *AdminHandler) GetSettings(c *gin.Context) {
 	response.SuccessOK(c, settings)
 }
 
-// UpdateSecurity 处理 PUT /api/admin/settings/security
-// @Summary      Update security settings
-// @Tags         Admin
-// @Accept       json
-// @Produce      json
-// @Security     BearerAuth
-// @Param        body  body      request.UpdateSecurityParams  true  "Security settings"
-// @Success      200   {object}  response.ApiResponse{data=dtoresponse.MessageResponse}
-// @Router       /api/admin/settings/security [put]
+// UpdateSecurity 处理 PUT /api/settings/security
 func (h *AdminHandler) UpdateSecurity(c *gin.Context) {
 	var params request.UpdateSecurityParams
 	if err := c.ShouldBindJSON(&params); err != nil {
@@ -81,15 +78,7 @@ func (h *AdminHandler) UpdateSecurity(c *gin.Context) {
 	response.SuccessOK(c, dtoresponse.MessageResponse{Message: "security settings updated"})
 }
 
-// UpdateBeian 处理 PUT /api/admin/settings/beian
-// @Summary      Update filing (备案) information
-// @Tags         Admin
-// @Accept       json
-// @Produce      json
-// @Security     BearerAuth
-// @Param        body  body      request.UpdateBeianParams  true  "Beian settings"
-// @Success      200   {object}  response.ApiResponse{data=dtoresponse.MessageResponse}
-// @Router       /api/admin/settings/beian [put]
+// UpdateBeian 处理 PUT /api/settings/beian
 func (h *AdminHandler) UpdateBeian(c *gin.Context) {
 	var params request.UpdateBeianParams
 	if err := c.ShouldBindJSON(&params); err != nil {
@@ -107,15 +96,7 @@ func (h *AdminHandler) UpdateBeian(c *gin.Context) {
 	response.SuccessOK(c, dtoresponse.MessageResponse{Message: "filing information updated"})
 }
 
-// UpdateSMTP 处理 PUT /api/admin/settings/smtp
-// @Summary      Update SMTP settings
-// @Tags         Admin
-// @Accept       json
-// @Produce      json
-// @Security     BearerAuth
-// @Param        body  body      request.UpdateSMTPParams  true  "SMTP settings"
-// @Success      200   {object}  response.ApiResponse{data=dtoresponse.MessageResponse}
-// @Router       /api/admin/settings/smtp [put]
+// UpdateSMTP 处理 PUT /api/settings/smtp
 func (h *AdminHandler) UpdateSMTP(c *gin.Context) {
 	var params request.UpdateSMTPParams
 	if err := c.ShouldBindJSON(&params); err != nil {
@@ -138,15 +119,7 @@ func (h *AdminHandler) UpdateSMTP(c *gin.Context) {
 	response.SuccessOK(c, dtoresponse.MessageResponse{Message: "smtp settings updated"})
 }
 
-// TestSMTP 处理 POST /api/admin/settings/smtp/test
-// @Summary      Send a test email using the current SMTP settings
-// @Tags         Admin
-// @Accept       json
-// @Produce      json
-// @Security     BearerAuth
-// @Param        body  body      request.TestSMTPParams  true  "Recipient"
-// @Success      200   {object}  response.ApiResponse{data=dtoresponse.MessageResponse}
-// @Router       /api/admin/settings/smtp/test [post]
+// TestSMTP 处理 POST /api/settings/smtp/test
 func (h *AdminHandler) TestSMTP(c *gin.Context) {
 	var params request.TestSMTPParams
 	if err := c.ShouldBindJSON(&params); err != nil {
@@ -163,16 +136,7 @@ func (h *AdminHandler) TestSMTP(c *gin.Context) {
 	response.SuccessOK(c, dtoresponse.MessageResponse{Message: "test email sent"})
 }
 
-// UpdateOAuthProvider 处理 PUT /api/admin/settings/oauth/:provider
-// @Summary      Update an OAuth provider configuration
-// @Tags         Admin
-// @Accept       json
-// @Produce      json
-// @Security     BearerAuth
-// @Param        provider  path  string  true  "Provider ID"
-// @Param        body  body      request.UpdateOAuthParams  true  "OAuth provider settings"
-// @Success      200   {object}  response.ApiResponse{data=dtoresponse.MessageResponse}
-// @Router       /api/admin/settings/oauth/{provider} [put]
+// UpdateOAuthProvider 处理 PUT /api/settings/oauth/:provider
 func (h *AdminHandler) UpdateOAuthProvider(c *gin.Context) {
 	provider := c.Param("provider")
 	var params request.UpdateOAuthParams
@@ -195,19 +159,7 @@ func (h *AdminHandler) UpdateOAuthProvider(c *gin.Context) {
 
 // ─── 用户管理 ────────────────────────────────────────────────────────
 
-// ListUsers 处理 GET /api/admin/users
-// @Summary      List users
-// @Description  Paginated user list with optional keyword filter. Admin only.
-// @Tags         Admin
-// @Produce      json
-// @Security     BearerAuth
-// @Param        page     query     int     false  "Page number (1-based)"
-// @Param        size     query     int     false  "Page size"
-// @Param        keyword  query     string  false  "Filter by username or email"
-// @Param        status   query     string  false  "Filter by status"
-// @Param        role     query     string  false  "Filter by role"
-// @Success      200      {object}  response.ApiResponse
-// @Router       /api/admin/users [get]
+// ListUsers 处理 GET /api/users
 func (h *AdminHandler) ListUsers(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	size, _ := strconv.Atoi(c.DefaultQuery("size", "20"))
@@ -223,16 +175,7 @@ func (h *AdminHandler) ListUsers(c *gin.Context) {
 	response.SuccessOK(c, result)
 }
 
-// CreateUser 处理 POST /api/admin/users
-// @Summary      Create one user
-// @Description  Create a user from the admin panel. Admin only.
-// @Tags         Admin
-// @Accept       json
-// @Produce      json
-// @Security     BearerAuth
-// @Param        body  body      request.CreateUserParams  true  "New user fields"
-// @Success      200   {object}  response.ApiResponse
-// @Router       /api/admin/users [post]
+// CreateUser 处理 POST /api/users
 func (h *AdminHandler) CreateUser(c *gin.Context) {
 	var params request.CreateUserParams
 	if err := c.ShouldBindJSON(&params); err != nil {
@@ -247,17 +190,7 @@ func (h *AdminHandler) CreateUser(c *gin.Context) {
 	response.SuccessOK(c, user)
 }
 
-// UpdateUser 处理 PUT /api/admin/users/:id
-// @Summary      Update one user
-// @Description  Update a user's email, role, and status. Admin only.
-// @Tags         Admin
-// @Accept       json
-// @Produce      json
-// @Security     BearerAuth
-// @Param        id    path      string                    true  "User ID"
-// @Param        body  body      request.UpdateUserParams  true  "Managed user fields"
-// @Success      200   {object}  response.ApiResponse{data=dtoresponse.MessageResponse}
-// @Router       /api/admin/users/{id} [put]
+// UpdateUser 处理 PUT /api/users/:id
 func (h *AdminHandler) UpdateUser(c *gin.Context) {
 	var params request.UpdateUserParams
 	if err := c.ShouldBindJSON(&params); err != nil {
@@ -271,16 +204,7 @@ func (h *AdminHandler) UpdateUser(c *gin.Context) {
 	response.SuccessOK(c, dtoresponse.MessageResponse{Message: "user updated"})
 }
 
-// BatchUpdateRole 处理 PUT /api/admin/users/role
-// @Summary      Batch update user role
-// @Description  Update role for multiple users. Admin only.
-// @Tags         Admin
-// @Accept       json
-// @Produce      json
-// @Security     BearerAuth
-// @Param        body  body      request.BatchUpdateRoleParams  true  "User IDs and role"
-// @Success      200   {object}  response.ApiResponse{data=dtoresponse.MessageResponse}
-// @Router       /api/admin/users/role [put]
+// BatchUpdateRole 处理 PUT /api/users/role
 func (h *AdminHandler) BatchUpdateRole(c *gin.Context) {
 	var params request.BatchUpdateRoleParams
 	if err := c.ShouldBindJSON(&params); err != nil {
@@ -294,16 +218,7 @@ func (h *AdminHandler) BatchUpdateRole(c *gin.Context) {
 	response.SuccessOK(c, dtoresponse.MessageResponse{Message: "role updated"})
 }
 
-// BatchDeleteUsers 处理 DELETE /api/admin/users
-// @Summary      Batch delete users
-// @Description  Delete selected users after confirmation. Admin only.
-// @Tags         Admin
-// @Accept       json
-// @Produce      json
-// @Security     BearerAuth
-// @Param        body  body      request.BatchDeleteUsersParams  true  "User IDs"
-// @Success      200   {object}  response.ApiResponse{data=dtoresponse.MessageResponse}
-// @Router       /api/admin/users [delete]
+// BatchDeleteUsers 处理 DELETE /api/users
 func (h *AdminHandler) BatchDeleteUsers(c *gin.Context) {
 	var params request.BatchDeleteUsersParams
 	if err := c.ShouldBindJSON(&params); err != nil {
@@ -317,16 +232,7 @@ func (h *AdminHandler) BatchDeleteUsers(c *gin.Context) {
 	response.SuccessOK(c, dtoresponse.MessageResponse{Message: "users deleted"})
 }
 
-// BatchResetPassword 处理 PUT /api/admin/users/reset-password
-// @Summary      Batch reset user passwords
-// @Description  Set a common new password for multiple users. Admin only.
-// @Tags         Admin
-// @Accept       json
-// @Produce      json
-// @Security     BearerAuth
-// @Param        body  body      request.BatchResetPasswordParams  true  "User IDs and new password"
-// @Success      200   {object}  response.ApiResponse{data=dtoresponse.MessageResponse}
-// @Router       /api/admin/users/reset-password [put]
+// BatchResetPassword 处理 PUT /api/users/reset-password
 func (h *AdminHandler) BatchResetPassword(c *gin.Context) {
 	var params request.BatchResetPasswordParams
 	if err := c.ShouldBindJSON(&params); err != nil {
@@ -340,38 +246,59 @@ func (h *AdminHandler) BatchResetPassword(c *gin.Context) {
 	response.SuccessOK(c, dtoresponse.MessageResponse{Message: "passwords reset"})
 }
 
-// ImportUsers 处理 POST /api/admin/users/import
-// @Summary      Import users from CSV
-// @Description  Bulk-create users from an uploaded CSV file (columns: username,email,role,password). Admin only.
-// @Tags         Admin
-// @Accept       multipart/form-data
-// @Produce      json
-// @Security     BearerAuth
-// @Param        file  formData  file  true  "CSV file"
-// @Success      200   {object}  response.ApiResponse
-// @Router       /api/admin/users/import [post]
+// ImportUsers 处理 POST /api/users/import，仅接受前端序列化后的 JSON。
 func (h *AdminHandler) ImportUsers(c *gin.Context) {
-	fileHeader, err := c.FormFile("file")
-	if err != nil {
-		response.Error(c, apperrors.New(apperrors.ErrCodeInvalidCredentials, "csv file is required"))
+	var params request.ImportUsersParams
+	if err := c.ShouldBindJSON(&params); err != nil {
+		response.Error(c, apperrors.New(apperrors.ErrCodeInvalidRequest, "invalid import data: "+err.Error()))
 		return
 	}
-	// 限制上传大小（2 MB），避免超大文件占用内存。
-	if fileHeader.Size > 2<<20 {
-		response.Error(c, apperrors.New(apperrors.ErrCodeInvalidCredentials, "csv file too large (max 2MB)"))
-		return
+	records := make([]authsvc.UserImportRecord, len(params.Users))
+	for i, user := range params.Users {
+		records[i] = authsvc.UserImportRecord{
+			Username: user.Username,
+			Email:    user.Email,
+			Role:     user.Role,
+			Password: user.Password,
+		}
 	}
-	f, err := fileHeader.Open()
-	if err != nil {
-		response.Error(c, apperrors.New(apperrors.ErrCodeInvalidCredentials, "failed to open csv file"))
-		return
-	}
-	defer f.Close()
-
-	summary, appErr := h.userAdminService.ImportUsersCSV(c.Request.Context(), f)
+	summary, appErr := h.importExportService.ImportUsers(c.Request.Context(), records)
 	if appErr != nil {
 		response.Error(c, appErr)
 		return
 	}
 	response.SuccessOK(c, summary)
+}
+
+// xlsxContentType 是 .xlsx 文件的标准 MIME 类型。
+const xlsxContentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+// ExportUsers 处理 POST /api/users/export。
+// 仅导出请求体中勾选的用户；Excel 构建成功后才写响应头，避免出错时
+// 向已声明为 xlsx 的响应写入 JSON 错误导致下载损坏文件。
+func (h *AdminHandler) ExportUsers(c *gin.Context) {
+	var params request.ExportUsersParams
+	if err := c.ShouldBindJSON(&params); err != nil {
+		response.Error(c, apperrors.New(apperrors.ErrCodeInvalidCode, "invalid parameters: "+err.Error()))
+		return
+	}
+	data, appErr := h.importExportService.ExportUsersExcel(c.Request.Context(), params.UserIDs, contextkeys.GetLocale(c))
+	if appErr != nil {
+		response.Error(c, appErr)
+		return
+	}
+	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=users-%s.xlsx", time.Now().Format("20060102-150405")))
+	c.Data(http.StatusOK, xlsxContentType, data)
+}
+
+// DownloadImportTemplate 处理 GET /api/users/import-template。
+// 返回按请求 locale 本地化表头的 xlsx 导入模板。
+func (h *AdminHandler) DownloadImportTemplate(c *gin.Context) {
+	data, appErr := h.importExportService.BuildImportTemplate(contextkeys.GetLocale(c))
+	if appErr != nil {
+		response.Error(c, appErr)
+		return
+	}
+	c.Header("Content-Disposition", "attachment; filename=netlab-users-template.xlsx")
+	c.Data(http.StatusOK, xlsxContentType, data)
 }

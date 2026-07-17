@@ -34,11 +34,6 @@ docker-up:
 docker-down:
 	docker-compose down
 
-# ── Database ─────────────────────────────────────────────────────────────
-migrate:
-	@echo "Running migrations..."
-	psql -h localhost -U netlab -d netlab -f migrations/001_init.sql
-
 # ── Clean ───────────────────────────────────────────────────────────────
 clean:
 	rm -rf bin/

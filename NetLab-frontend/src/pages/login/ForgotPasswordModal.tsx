@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
 import {
   Modal,
   Form,
@@ -9,11 +9,14 @@ import {
   App,
   Typography,
   theme,
+  Image,
+  Tooltip,
 } from 'antd'
-import { MailOutlined, LockOutlined, SafetyCertificateOutlined } from '@ant-design/icons'
+import { MailOutlined, LockOutlined, SafetyCertificateOutlined, ReloadOutlined, NumberOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import { authApi } from '@/services/auth'
 import { isAuthSecurityError } from '@/services/authSecurity'
+import { createPasswordStrengthRule } from '@/utils/password-strength'
 
 const { Text } = Typography
 
@@ -31,10 +34,27 @@ function Step1Form({ t, themeToken, sendCodeLoading, verifyLoading, cooldown, on
   sendCodeLoading: boolean
   verifyLoading: boolean
   cooldown: number
-  onSendCode: (email: string) => Promise<void>
+  onSendCode: (email: string, captchaId: string, captchaCode: string) => Promise<void>
   onFinish: (values: { email: string; verifyCode: string }) => void
 }) {
   const [form] = Form.useForm()
+  const [captchaId, setCaptchaId] = useState<string | null>(null)
+  const [captchaImage, setCaptchaImage] = useState<string | null>(null)
+  const [captchaLoading, setCaptchaLoading] = useState(false)
+
+  const fetchCaptcha = useCallback(async () => {
+    setCaptchaLoading(true)
+    try {
+      const result = await authApi.getCaptcha()
+      setCaptchaId(result.captchaId)
+      setCaptchaImage(result.captchaImage)
+    } catch { /* handled by interceptor */ }
+    finally { setCaptchaLoading(false) }
+  }, [])
+
+  useEffect(() => {
+    fetchCaptcha()
+  }, [fetchCaptcha])
 
   const handleSendCodeLocal = useCallback(async () => {
     try {
@@ -42,9 +62,11 @@ function Step1Form({ t, themeToken, sendCodeLoading, verifyLoading, cooldown, on
     } catch {
       return
     }
-    const emailValue = form.getFieldValue('email')
-    await onSendCode(emailValue)
-  }, [form, onSendCode])
+    const values = form.getFieldsValue(['email', 'captchaCode'])
+    if (!captchaId || !values.captchaCode) return
+    const emailValue = values.email
+    await onSendCode(emailValue, captchaId, values.captchaCode)
+  }, [form, onSendCode, captchaId])
 
   return (
     <Form form={form} size="large" layout="vertical" onFinish={onFinish}>
@@ -63,12 +85,49 @@ function Step1Form({ t, themeToken, sendCodeLoading, verifyLoading, cooldown, on
       </Form.Item>
 
       <Form.Item
-        name="verifyCode"
-        rules={[{ required: true, message: t('verifyCodeRequired') }]}
+        name="captchaCode"
+        rules={[{ required: true, message: t('captchaRequired') }]}
       >
         <Input
+          className="netlab-login-captcha-input"
           prefix={<SafetyCertificateOutlined style={{ color: themeToken.colorTextQuaternary }} />}
+          placeholder={t('captchaPlaceholder')}
+          autoComplete="off"
+          suffix={captchaImage ? (
+            <Tooltip title={t('clickToRefresh')}>
+              <Image
+                src={captchaImage}
+                alt="captcha"
+                height={32}
+                style={{ objectFit: 'contain', cursor: 'pointer' }}
+                preview={{
+                  open: false,
+                  cover: <ReloadOutlined spin={captchaLoading} />,
+                  onOpenChange: () => fetchCaptcha(),
+                }}
+              />
+            </Tooltip>
+          ) : (
+            <Button type="link" size="small" loading={captchaLoading} onClick={fetchCaptcha} style={{ padding: 0, fontSize: 12 }}>
+              {t('clickToRefresh')}
+            </Button>
+          )}
+        />
+      </Form.Item>
+
+      <Form.Item
+        name="verifyCode"
+        rules={[
+          { required: true, message: t('verifyCodeRequired') },
+          { len: 6, message: t('verifyCodeInvalid') },
+          { pattern: /^\d{6}$/, message: t('verifyCodeInvalid') },
+        ]}
+      >
+        <Input
+          prefix={<NumberOutlined style={{ color: themeToken.colorTextQuaternary }} />}
           placeholder={t('verifyCodePlaceholder')}
+          maxLength={6}
+          autoComplete="one-time-code"
           suffix={
             <Button
               type="link"
@@ -117,7 +176,7 @@ export default function ForgotPasswordModal({ open, onClose }: ForgotPasswordMod
   }, [onClose])
 
   // ── 发送验证码 ──
-  const handleSendCode = useCallback(async (emailValue: string) => {
+  const handleSendCode = useCallback(async (emailValue: string, captchaId: string, captchaCode: string) => {
     if (cooldown > 0) return
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailValue)) {
       message.warning(t('emailInvalid'))
@@ -125,7 +184,7 @@ export default function ForgotPasswordModal({ open, onClose }: ForgotPasswordMod
     }
     setSendCodeLoading(true)
     try {
-      await authApi.forgotPassword({ email: emailValue })
+      await authApi.sendCode({ email: emailValue, purpose: 'reset-password', captchaId, captchaCode })
       message.success(t('sendCodeSuccess'))
       const cd = 60
       setCooldown(cd)
@@ -257,7 +316,9 @@ export default function ForgotPasswordModal({ open, onClose }: ForgotPasswordMod
               name="newPassword"
               rules={[
                 { required: true, message: t('newPasswordRequired') },
-                { min: 8, message: t('passwordMinLength') },
+                createPasswordStrengthRule({
+                  t,
+                }),
               ]}
             >
               <Input.Password

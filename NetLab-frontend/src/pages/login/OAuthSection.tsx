@@ -16,6 +16,7 @@ import { authApi } from '@/services/auth'
 import { completeLogin } from '@/utils/auth-flow'
 import PasskeyButton from './PasskeyButton'
 import LinuxDoIcon from '@/components/common/icons/LinuxDoIcon'
+import { createPasswordStrengthRule } from '@/utils/password-strength'
 
 const { Text } = Typography
 
@@ -237,7 +238,12 @@ export default function OAuthSection({ providers, passkeyEnabled = false }: OAut
                   <Form.Item name="email" label={t('email')} rules={[{ required: true, type: 'email', message: t('emailInvalid') }]}>
                     <Input prefix={<MailOutlined />} autoComplete="email" />
                   </Form.Item>
-                  <Form.Item name="password" label={t('password')} rules={[{ required: true, message: t('passwordRequired') }, { min: 8, message: t('passwordMinLength') }]}>
+                  <Form.Item name="password" label={t('password')} rules={[
+                { required: true, message: t('passwordRequired') },
+                createPasswordStrengthRule({
+                  t,
+                }),
+              ]}>
                     <Input.Password prefix={<LockOutlined />} autoComplete="new-password" />
                   </Form.Item>
                   <Form.Item

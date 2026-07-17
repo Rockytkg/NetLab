@@ -2,6 +2,7 @@ package auth
 
 import (
 	"bytes"
+	"strconv"
 	"context"
 	cryptorand "crypto/rand"
 	"crypto/sha256"
@@ -146,7 +147,8 @@ func (s *TwoFactorService) ConfirmSetup(ctx context.Context, userID, code string
 	_ = s.tokenRepo.DeleteTwoFactorSetupSecret(ctx, userID)
 
 	codes, hashes := generateRecoveryCodes(twoFactorRecoveryCount)
-	if err := s.userRepo.StoreRecoveryCodes(ctx, userID, hashes); err != nil {
+	uidVal, _ := strconv.ParseUint(userID, 10, 64)
+	if err := s.userRepo.StoreRecoveryCodes(ctx, uidVal, hashes); err != nil {
 		s.logger.Warn("failed to store recovery codes", zap.String("user_id", userID), zap.Error(err))
 	}
 
@@ -177,7 +179,7 @@ func (s *TwoFactorService) Disable(ctx context.Context, userID, verifyCode strin
 	if err := s.userRepo.DisableTwoFactor(ctx, userID); err != nil {
 		return apperrors.Wrap(apperrors.ErrCodeOperationDenied, "failed to disable two-factor", err)
 	}
-	_ = s.userRepo.DeleteRecoveryCodes(ctx, userID)
+	_ = s.userRepo.DeleteRecoveryCodes(ctx, user.ID)
 	s.logger.Info("two-factor authentication disabled", zap.String("user_id", userID))
 	return nil
 }
@@ -195,7 +197,7 @@ func (s *TwoFactorService) VerifyLogin(ctx context.Context, token, code string) 
 		return nil, appErr
 	}
 
-	if locked, _, _ := s.tokenRepo.IsTwoFactorLocked(ctx, user.ID.String()); locked {
+	if locked, _, _ := s.tokenRepo.IsTwoFactorLocked(ctx, strconv.FormatUint(user.ID, 10)); locked {
 		return nil, apperrors.ErrRateLimited
 	}
 
@@ -205,7 +207,7 @@ func (s *TwoFactorService) VerifyLogin(ctx context.Context, token, code string) 
 	}
 
 	if !validateTOTP(code, secret) {
-		_, locked, _ := s.tokenRepo.IncrementTwoFactorFailure(ctx, user.ID.String(), twoFactorMaxAttempts, twoFactorLockDuration)
+		_, locked, _ := s.tokenRepo.IncrementTwoFactorFailure(ctx, strconv.FormatUint(user.ID, 10), twoFactorMaxAttempts, twoFactorLockDuration)
 		if locked {
 			// 达到阈值：作废挑战令牌，强制用户重新登录。
 			s.tokenRepo.ConsumeTwoFactorChallenge(ctx, token)
@@ -229,24 +231,24 @@ func (s *TwoFactorService) VerifyLoginWithRecovery(ctx context.Context, token, r
 		return nil, appErr
 	}
 
-	if locked, _, _ := s.tokenRepo.IsTwoFactorLocked(ctx, user.ID.String()); locked {
+	if locked, _, _ := s.tokenRepo.IsTwoFactorLocked(ctx, strconv.FormatUint(user.ID, 10)); locked {
 		return nil, apperrors.ErrRateLimited
 	}
 
 	hash := sha256Hex(normalized)
-	consumed, err := s.userRepo.ConsumeRecoveryCode(ctx, user.ID.String(), hash)
+	consumed, err := s.userRepo.ConsumeRecoveryCode(ctx, user.ID, hash)
 	if err != nil {
 		return nil, apperrors.Wrap(apperrors.ErrCodeOperationDenied, "failed to consume recovery code", err)
 	}
 	if !consumed {
-		_, locked, _ := s.tokenRepo.IncrementTwoFactorFailure(ctx, user.ID.String(), twoFactorMaxAttempts, twoFactorLockDuration)
+		_, locked, _ := s.tokenRepo.IncrementTwoFactorFailure(ctx, strconv.FormatUint(user.ID, 10), twoFactorMaxAttempts, twoFactorLockDuration)
 		if locked {
 			s.tokenRepo.ConsumeTwoFactorChallenge(ctx, token)
 		}
 		return nil, apperrors.ErrInvalidTwoFactorCode
 	}
 
-	s.logger.Info("two-factor login completed with recovery code", zap.String("user_id", user.ID.String()))
+	s.logger.Info("two-factor login completed with recovery code", zap.String("user_id", strconv.FormatUint(user.ID, 10)))
 	return s.completeChallenge(ctx, user, token)
 }
 
@@ -254,7 +256,7 @@ func (s *TwoFactorService) VerifyLoginWithRecovery(ctx context.Context, token, r
 // method 取值为 "totp"（身份验证器应用）或 "passkey"（通行密钥）。
 func (s *TwoFactorService) SetPreferredAuthMethod(ctx context.Context, userID, method string) *apperrors.AppError {
 	if method != "totp" && method != "passkey" {
-		return apperrors.New(apperrors.ErrCodeInvalidCredentials, "invalid preferred auth method")
+		return apperrors.New(apperrors.ErrCodeInvalidRequest, "invalid preferred auth method")
 	}
 	if err := s.userRepo.SetPreferredAuthMethod(ctx, userID, method); err != nil {
 		return apperrors.Wrap(apperrors.ErrCodeOperationDenied, "failed to update preferred auth method", err)
@@ -293,10 +295,10 @@ func (s *TwoFactorService) completeChallenge(ctx context.Context, user *model.Us
 	if err != nil {
 		return nil, apperrors.Wrap(apperrors.ErrCodeSessionExpired, "failed to consume 2fa challenge", err)
 	}
-	if consumedUserID != user.ID.String() {
+	if consumedUserID != strconv.FormatUint(user.ID, 10) {
 		return nil, apperrors.ErrSessionExpired
 	}
-	_ = s.tokenRepo.ClearTwoFactorFailures(ctx, user.ID.String())
+	_ = s.tokenRepo.ClearTwoFactorFailures(ctx, strconv.FormatUint(user.ID, 10))
 
 	tokens, appErr := s.tokenService.IssueTokens(ctx, user)
 	if appErr != nil {

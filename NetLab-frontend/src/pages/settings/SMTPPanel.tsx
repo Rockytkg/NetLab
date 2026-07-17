@@ -20,6 +20,7 @@ import { adminApi } from '@/services/admin'
 import type { SMTPSettings } from '@/types/settings'
 import { SECRET_MASK } from '@/types/settings'
 import SettingsSection from './SettingsSection'
+import Can from '@/components/auth/Can'
 
 interface SMTPPanelProps {
   value: SMTPSettings
@@ -70,9 +71,9 @@ export default function SMTPPanel({ value, onSaved }: SMTPPanelProps) {
 
   const actions = (
     <Space wrap>
-      <Button size="middle" type="primary" htmlType="submit" loading={saving} icon={<SaveOutlined />}>
+      <Can resource="setting" action="update"><Button size="middle" type="primary" htmlType="submit" loading={saving} icon={<SaveOutlined />}>
         {saving ? t('settings:saving') : t('settings:save')}
-      </Button>
+      </Button></Can>
     </Space>
   )
 
@@ -167,7 +168,7 @@ export default function SMTPPanel({ value, onSaved }: SMTPPanelProps) {
                           placeholder={t('settings:smtp.testRecipientPlaceholder')}
                           allowClear
                         />
-                        <Button
+                        <Can resource="setting" action="update"><Button
                           size="middle"
                           icon={<SendOutlined />}
                           loading={testing}
@@ -175,7 +176,7 @@ export default function SMTPPanel({ value, onSaved }: SMTPPanelProps) {
                           onClick={handleTest}
                         >
                           {t('settings:smtp.test')}
-                        </Button>
+                        </Button></Can>
                       </Space.Compact>
                     </Form.Item>
                   </Col>

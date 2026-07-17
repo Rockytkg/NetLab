@@ -7,7 +7,7 @@ package request
 // 默认 admin）。
 type LoginParams struct {
 	Username    string `json:"username" binding:"required,min=1,max=64"`
-	Password    string `json:"password" binding:"required,max=128"`
+	Password    string `json:"password" binding:"required,max=72"`
 	CaptchaID   string `json:"captchaId,omitempty"`
 	CaptchaCode string `json:"captchaCode,omitempty"`
 }
@@ -16,7 +16,7 @@ type LoginParams struct {
 type RegisterParams struct {
 	Username        string `json:"username" binding:"required,min=3,max=64"`
 	Email           string `json:"email" binding:"required,email,max=255"`
-	Password        string `json:"password" binding:"required,min=8,max=128"`
+	Password        string `json:"password" binding:"required,min=8,max=72"`
 	ConfirmPassword string `json:"confirmPassword" binding:"required,eqfield=Password"`
 	VerifyCode      string `json:"verifyCode" binding:"required,len=6"`
 	CaptchaID       string `json:"captchaId,omitempty"`
@@ -30,8 +30,10 @@ type RefreshTokenParams struct {
 
 // SendCodeParams 是 POST /auth/send-code 的请求体。
 type SendCodeParams struct {
-	Email   string `json:"email" binding:"required,email,max=255"`
-	Purpose string `json:"purpose" binding:"required,oneof=register reset-password change-email"`
+	CaptchaID   string `json:"captchaId,omitempty"`
+	CaptchaCode string `json:"captchaCode,omitempty"`
+	Email       string `json:"email" binding:"required,email,max=255"`
+	Purpose     string `json:"purpose" binding:"required,oneof=register reset-password change-email"`
 }
 
 // ForgotPasswordParams 是 POST /auth/forgot-password 的请求体。
@@ -43,7 +45,7 @@ type ForgotPasswordParams struct {
 type ResetPasswordParams struct {
 	Email           string `json:"email" binding:"required,email,max=255"`
 	VerifyCode      string `json:"verifyCode" binding:"required,len=6"`
-	NewPassword     string `json:"newPassword" binding:"required,min=8,max=128"`
+	NewPassword     string `json:"newPassword" binding:"required,min=8,max=72"`
 	ConfirmPassword string `json:"confirmPassword" binding:"required,eqfield=NewPassword"`
 }
 
@@ -68,13 +70,13 @@ type PasskeyVerificationParams struct {
 
 // ChangePasswordParams 是 POST /auth/account/change-password 的请求体（已登录用户）。
 type ChangePasswordParams struct {
-	CurrentPassword string `json:"currentPassword" binding:"required,max=128"`
-	NewPassword     string `json:"newPassword" binding:"required,min=8,max=128"`
+	CurrentPassword string `json:"currentPassword" binding:"required,max=72"`
+	NewPassword     string `json:"newPassword" binding:"required,min=8,max=72"`
 	ConfirmPassword string `json:"confirmPassword" binding:"required,eqfield=NewPassword"`
 }
 
 type CompleteSecurityUpdateParams struct {
-	NewPassword     string `json:"newPassword" binding:"required,min=8,max=128"`
+	NewPassword     string `json:"newPassword" binding:"required,min=8,max=72"`
 	ConfirmPassword string `json:"confirmPassword" binding:"required,eqfield=NewPassword"`
 	NewEmail        string `json:"newEmail" binding:"omitempty,email,max=255"`
 	VerifyCode      string `json:"verifyCode" binding:"omitempty,len=6"`
@@ -107,7 +109,7 @@ type OAuthCreateAccountParams struct {
 	PendingToken    string `json:"pendingToken" binding:"required"`
 	Username        string `json:"username" binding:"required,min=3,max=64"`
 	Email           string `json:"email" binding:"required,email,max=255"`
-	Password        string `json:"password" binding:"required,min=8,max=128"`
+	Password        string `json:"password" binding:"required,min=8,max=72"`
 	ConfirmPassword string `json:"confirmPassword" binding:"required,eqfield=Password"`
 	VerifyCode      string `json:"verifyCode" binding:"required,len=6"`
 }

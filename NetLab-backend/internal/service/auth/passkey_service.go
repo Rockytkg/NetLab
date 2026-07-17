@@ -11,9 +11,9 @@ import (
 
 	"github.com/go-webauthn/webauthn/protocol"
 	"github.com/go-webauthn/webauthn/webauthn"
-	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
+	"strconv"
 	"gorm.io/gorm"
 
 	"netlab-backend/internal/model"
@@ -173,7 +173,7 @@ func (s *PasskeyService) FinishRegistration(ctx context.Context, userID, name, v
 
 	session, err := s.loadSession(ctx, passkeyRegSessionPrefix+userID)
 	if err != nil {
-		return apperrors.New(apperrors.ErrCodeInvalidCredentials, "registration session expired")
+		return apperrors.New(apperrors.ErrCodeInvalidRequest, "registration session expired")
 	}
 
 	waUser, appErr := s.loadWebAuthnUser(ctx, userID)
@@ -183,12 +183,12 @@ func (s *PasskeyService) FinishRegistration(ctx context.Context, userID, name, v
 
 	parsed, err := protocol.ParseCredentialCreationResponseBytes(rawResponse)
 	if err != nil {
-		return apperrors.Wrap(apperrors.ErrCodeInvalidCredentials, "invalid attestation response", err)
+		return apperrors.Wrap(apperrors.ErrCodeInvalidRequest, "invalid attestation response", err)
 	}
 
 	credential, err := s.wa.CreateCredential(waUser, *session, parsed)
 	if err != nil {
-		return apperrors.Wrap(apperrors.ErrCodeInvalidCredentials, "attestation verification failed", err)
+		return apperrors.Wrap(apperrors.ErrCodeInvalidRequest, "attestation verification failed", err)
 	}
 
 	credJSON, err := json.Marshal(credential)
@@ -196,18 +196,10 @@ func (s *PasskeyService) FinishRegistration(ctx context.Context, userID, name, v
 		return apperrors.Wrap(apperrors.ErrCodeOperationDenied, "failed to serialize credential", err)
 	}
 
-	uid, _ := uuid.Parse(userID)
-	record := &model.PasskeyCredential{
-		UserID:         uid,
-		Provider:       "passkey",
-		ProviderUserID: "passkey_" + base64.RawURLEncoding.EncodeToString(credential.ID),
-		CredentialID:   base64.RawURLEncoding.EncodeToString(credential.ID),
-		Credential:     string(credJSON),
-		Name:           strings.TrimSpace(name),
-		SignCount:      credential.Authenticator.SignCount,
-	}
+	uid, _ := strconv.ParseUint(userID, 10, 64)
+	credID := base64.RawURLEncoding.EncodeToString(credential.ID)
 
-	if err := s.passkeyRepo.Create(ctx, record); err != nil {
+	if err := s.passkeyRepo.Save(ctx, uid, credID, string(credJSON), strings.TrimSpace(name), credential.Authenticator.SignCount); err != nil {
 		// 仅当确为唯一键冲突（同一 credential_id 已注册）时才提示“数据重复”，
 		// 其它数据库错误（如约束/连接问题）按操作失败处理，避免误导用户。
 		if errors.Is(err, gorm.ErrDuplicatedKey) {
@@ -218,7 +210,7 @@ func (s *PasskeyService) FinishRegistration(ctx context.Context, userID, name, v
 
 	s.logger.Info("passkey registered",
 		zap.String("user_id", userID),
-		zap.String("credential_id", record.CredentialID),
+		zap.String("credential_id", credID),
 	)
 	return nil
 }
@@ -256,62 +248,63 @@ func (s *PasskeyService) FinishLogin(ctx context.Context, sessionID string, rawR
 
 	session, err := s.loadSession(ctx, passkeyAuthSessionPrefix+sessionID)
 	if err != nil {
-		return nil, apperrors.New(apperrors.ErrCodeInvalidCredentials, "login session expired")
+		return nil, apperrors.New(apperrors.ErrCodeInvalidRequest, "login session expired")
 	}
 
 	parsed, err := protocol.ParseCredentialRequestResponseBytes(rawResponse)
 	if err != nil {
-		return nil, apperrors.Wrap(apperrors.ErrCodeInvalidCredentials, "invalid assertion response", err)
+		return nil, apperrors.Wrap(apperrors.ErrCodeInvalidRequest, "invalid assertion response", err)
 	}
 
 	// 用于定位凭证所属用户的回调；同时把匹配到的记录带出以便更新计数器。
-	var matched *model.PasskeyCredential
+	var matchedUser *model.User
+	var matchedCredID string
 	handler := func(rawID, userHandle []byte) (webauthn.User, error) {
 		credID := base64.RawURLEncoding.EncodeToString(rawID)
-		cred, err := s.passkeyRepo.FindByCredentialID(ctx, credID)
+		credUser, err := s.passkeyRepo.FindByCredentialID(ctx, credID)
 		if err != nil {
 			return nil, err
 		}
-		if cred == nil {
+		if credUser == nil {
 			return nil, errors.New("credential not found")
 		}
-		matched = cred
-		return s.buildWebAuthnUser(ctx, cred.UserID.String())
+		matchedUser = credUser
+		return s.buildWebAuthnUser(ctx, strconv.FormatUint(credUser.ID, 10))
 	}
 
 	credential, err := s.wa.ValidateDiscoverableLogin(handler, *session, parsed)
 	if err != nil {
 		return nil, apperrors.Wrap(apperrors.ErrCodeInvalidCredentials, "assertion verification failed", err)
 	}
-	if matched == nil {
+	if matchedUser == nil {
 		return nil, apperrors.ErrInvalidCredentials
 	}
 
 	// 防克隆：若认证器返回的计数器未增长（且非 0），视为可疑。
 	if credential.Authenticator.CloneWarning {
 		s.logger.Warn("passkey clone warning — sign count did not increase",
-			zap.String("credential_id", matched.CredentialID),
+			zap.String("credential_id", matchedCredID),
 		)
 		return nil, apperrors.New(apperrors.ErrCodeInvalidCredentials, "credential may be cloned")
 	}
 
-	user, appErr := s.getActiveUser(ctx, matched.UserID.String())
+	user, appErr := s.getActiveUser(ctx, strconv.FormatUint(matchedUser.ID, 10))
 	if appErr != nil {
 		return nil, appErr
 	}
 
 	// 持久化更新后的签名计数器与凭证状态。
 	if credJSON, err := json.Marshal(credential); err == nil {
-		_ = s.passkeyRepo.UpdateSignCount(ctx, matched.ID, credential.Authenticator.SignCount, string(credJSON), time.Now())
+		_ = s.passkeyRepo.UpdateSignCount(ctx, matchedUser.ID, credential.Authenticator.SignCount, string(credJSON), time.Now())
 	}
 
 	tokens, appErr := s.tokenService.IssueTokens(ctx, user)
 	if appErr != nil {
 		return nil, appErr
 	}
-	_ = s.userRepo.UpdateLoginSuccess(ctx, user.ID.String())
+	_ = s.userRepo.UpdateLoginSuccess(ctx, strconv.FormatUint(user.ID, 10))
 
-	s.logger.Info("passkey authentication successful", zap.String("user_id", user.ID.String()))
+	s.logger.Info("passkey authentication successful", zap.String("user_id", strconv.FormatUint(user.ID, 10)))
 
 	return &LoginServiceResult{
 		Tokens:  tokens,
@@ -332,26 +325,37 @@ type PasskeyInfo struct {
 
 // ListForUser 返回某用户的所有 passkey 元数据。
 func (s *PasskeyService) ListForUser(ctx context.Context, userID string) ([]PasskeyInfo, *apperrors.AppError) {
-	uid, err := uuid.Parse(userID)
+	uid, err := strconv.ParseUint(userID, 10, 64)
 	if err != nil {
-		return nil, apperrors.New(apperrors.ErrCodeInvalidCredentials, "invalid user id")
+		return nil, apperrors.New(apperrors.ErrCodeInternal, "invalid user id")
 	}
-	creds, err := s.passkeyRepo.FindByUserID(ctx, uid)
+	user, err := s.userRepo.FindByID(ctx, userID)
 	if err != nil {
 		return nil, apperrors.Wrap(apperrors.ErrCodeOperationDenied, "failed to list passkeys", err)
 	}
-	out := make([]PasskeyInfo, len(creds))
-	for i, c := range creds {
-		name := c.Name
-		if name == "" {
-			name = "Passkey"
-		}
-		out[i] = PasskeyInfo{
-			ID:         c.ID.String(),
+	if user == nil {
+		return nil, apperrors.ErrUserNotFound
+	}
+
+	info, err := s.passkeyRepo.GetInfo(ctx, uid)
+	if err != nil {
+		return nil, apperrors.Wrap(apperrors.ErrCodeOperationDenied, "failed to list passkeys", err)
+	}
+	if info == nil {
+		return []PasskeyInfo{}, nil
+	}
+
+	name := info.Name
+	if name == "" {
+		name = "Passkey"
+	}
+	out := []PasskeyInfo{
+		{
+			ID:         info.CredentialID,
 			Name:       name,
-			CreatedAt:  c.CreatedAt,
-			LastUsedAt: c.LastUsedAt,
-		}
+			CreatedAt:  user.CreatedAt,
+			LastUsedAt: info.LastUsedAt,
+		},
 	}
 	return out, nil
 }
@@ -359,23 +363,20 @@ func (s *PasskeyService) ListForUser(ctx context.Context, userID string) ([]Pass
 // DeleteForUser 删除属于该用户的一个 passkey。
 // verifyCode 为发送到用户邮箱的一次性验证码，用于二次校验。
 func (s *PasskeyService) DeleteForUser(ctx context.Context, userID, passkeyID, verifyCode string) *apperrors.AppError {
-	uid, err := uuid.Parse(userID)
+	uid, err := strconv.ParseUint(userID, 10, 64)
 	if err != nil {
-		return apperrors.New(apperrors.ErrCodeInvalidCredentials, "invalid user id")
+		return apperrors.New(apperrors.ErrCodeInternal, "invalid user id")
 	}
 	if appErr := s.verifyEmailCode(ctx, userID, verifyCode); appErr != nil {
 		return appErr
 	}
-	pid, err := uuid.Parse(passkeyID)
-	if err != nil {
-		return apperrors.New(apperrors.ErrCodeInvalidCredentials, "invalid passkey id")
-	}
-	affected, err := s.passkeyRepo.DeleteByIDForUser(ctx, pid, uid)
+	// 通过 userID 删除（系统中只允许注册一个 passkey）
+	affected, err := s.passkeyRepo.DeleteByUserID(ctx, uid)
 	if err != nil {
 		return apperrors.Wrap(apperrors.ErrCodeOperationDenied, "failed to delete passkey", err)
 	}
 	if affected == 0 {
-		return apperrors.New(apperrors.ErrCodeInvalidCredentials, "passkey not found")
+		return apperrors.New(apperrors.ErrCodeInvalidRequest, "passkey not found")
 	}
 	return nil
 }
@@ -408,15 +409,11 @@ func (s *PasskeyService) verifyEmailCode(ctx context.Context, userID, code strin
 
 // HasPasskey 返回用户是否已注册至少一个通行密钥。
 func (s *PasskeyService) HasPasskey(ctx context.Context, userID string) (bool, error) {
-	uid, err := uuid.Parse(userID)
+	uid, err := strconv.ParseUint(userID, 10, 64)
 	if err != nil {
 		return false, nil
 	}
-	count, err := s.passkeyRepo.CountByUserID(ctx, uid)
-	if err != nil {
-		return false, err
-	}
-	return count > 0, nil
+	return s.passkeyRepo.HasPasskey(ctx, uid)
 }
 
 func (s *PasskeyService) ensureEnabled(ctx context.Context) *apperrors.AppError {
@@ -464,19 +461,20 @@ func (s *PasskeyService) buildWebAuthnUser(ctx context.Context, userID string) (
 }
 
 func (s *PasskeyService) assembleUser(ctx context.Context, u *model.User) (*webauthnUser, error) {
-	creds, err := s.passkeyRepo.FindByUserID(ctx, u.ID)
+	cred, err := s.passkeyRepo.GetCredential(ctx, u.ID)
 	if err != nil {
-		return nil, err
+		s.logger.Warn("failed to read passkey credential",
+			zap.String("user_id", strconv.FormatUint(u.ID, 10)), zap.Error(err))
 	}
-	waCreds := make([]webauthn.Credential, 0, len(creds))
-	for _, c := range creds {
+	waCreds := make([]webauthn.Credential, 0, 1)
+	if cred != nil && cred.Credential != "" {
 		var wc webauthn.Credential
-		if err := json.Unmarshal([]byte(c.Credential), &wc); err != nil {
+		if err := json.Unmarshal([]byte(cred.Credential), &wc); err != nil {
 			s.logger.Warn("skipping malformed passkey credential",
-				zap.String("credential_id", c.CredentialID), zap.Error(err))
-			continue
+				zap.String("credential_id", cred.CredentialID), zap.Error(err))
+		} else {
+			waCreds = append(waCreds, wc)
 		}
-		waCreds = append(waCreds, wc)
 	}
 	return &webauthnUser{user: u, creds: waCreds}, nil
 }
@@ -498,7 +496,7 @@ type webauthnUser struct {
 
 func (w *webauthnUser) WebAuthnID() []byte {
 	id := w.user.ID // uuid.UUID 底层是 [16]byte
-	return id[:]
+	return []byte(strconv.FormatUint(id, 10))
 }
 func (w *webauthnUser) WebAuthnName() string                       { return w.user.Username }
 func (w *webauthnUser) WebAuthnDisplayName() string                { return w.user.Username }

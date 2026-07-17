@@ -1,11 +1,9 @@
 import { useTranslation } from 'react-i18next'
 import {
-  AutoComplete,
   Avatar,
   Badge,
   Button,
   Dropdown,
-  Input,
   Space,
   theme,
   Typography,
@@ -18,7 +16,6 @@ import {
   SettingOutlined,
   GlobalOutlined,
   BellOutlined,
-  SearchOutlined,
   BulbOutlined,
   CheckOutlined,
   SunOutlined,
@@ -41,19 +38,13 @@ interface HeaderBarProps {
 /** 路由 → i18n 页面标题映射 */
 const PAGE_TITLES: Record<string, { titleNs: string; titleKey: string }> = {
   '/dashboard': { titleNs: 'menu', titleKey: 'dashboard' },
-  '/device-groups': { titleNs: 'operations', titleKey: 'deviceGroups' },
-  '/devices': { titleNs: 'operations', titleKey: 'deviceTopology' },
-  '/device-library': { titleNs: 'menu', titleKey: 'deviceLibrary' },
-  '/operations-templates': { titleNs: 'operations', titleKey: 'operationsTemplates' },
   '/settings/users': { titleNs: 'menu', titleKey: 'userManagement' },
   '/settings/profile': { titleNs: 'menu', titleKey: 'profile' },
   '/settings': { titleNs: 'menu', titleKey: 'settings' },
-  '/help': { titleNs: 'menu', titleKey: 'help' },
-  '/observability': { titleNs: 'operations', titleKey: 'observability' },
 }
 
 export default function HeaderBar({ onOpenMobileMenu }: HeaderBarProps) {
-  const { t } = useTranslation(['common', 'menu', 'operations'])
+  const { t } = useTranslation(['common', 'menu'])
   const { switchLanguage } = useI18n()
   const sidebarCollapsed = useAppStore((s) => s.sidebarCollapsed)
   const toggleSidebar = useAppStore((s) => s.toggleSidebar)
@@ -153,15 +144,8 @@ export default function HeaderBar({ onOpenMobileMenu }: HeaderBarProps) {
     },
   }
 
-  // 全局搜索选项（占位 —— 将在第三阶段接入真实数据）
-  const searchOptions = useMemo(
-    () => [
-      { value: 'search-groups', label: t('operations:deviceGroups'), category: t('menu:workspace') },
-      { value: 'search-devices', label: t('menu:deviceLibrary'), category: t('menu:infrastructure') },
-      { value: 'search-observability', label: t('operations:observability'), category: t('operations:observability') },
-    ],
-    [t]
-  )
+  // 全局搜索（占位）已随占位页面一并移除；
+  // Phase 3 接入真实数据源时再恢复。
 
   return (
     <div
@@ -202,22 +186,8 @@ export default function HeaderBar({ onOpenMobileMenu }: HeaderBarProps) {
         </div>
       </Space>
 
-      {/* ── 右侧：搜索 + 通知 + 用户 ── */}
+      {/* ── 右侧：通知 + 用户 ── */}
       <Space size="middle">
-        <AutoComplete
-          className="netlab-header-search"
-          style={{ width: 240 }}
-          options={searchOptions}
-          placeholder={t('common:search')}
-          onSelect={(value) => {
-            if (value === 'search-groups') navigate('/device-groups')
-            else if (value === 'search-devices') navigate('/device-library')
-            else if (value === 'search-observability') navigate('/observability')
-          }}
-        >
-          <Input prefix={<SearchOutlined />} allowClear />
-        </AutoComplete>
-
         <Badge dot offset={[-4, 4]}>
           <Button
             className="netlab-icon-button"

@@ -12,6 +12,7 @@ import (
 type Manager struct {
 	accessSecret  []byte
 	refreshSecret []byte
+	signer        Signer
 	accessExpiry  time.Duration
 	issuer        string
 }
@@ -27,13 +28,22 @@ type Claims struct {
 }
 
 // NewManager 创建一个新的 JWT Manager。
-func NewManager(accessSecret, refreshSecret string, accessExpiry time.Duration, issuer string) *Manager {
-	return &Manager{
-		accessSecret:  []byte(accessSecret),
-		refreshSecret: []byte(refreshSecret),
-		accessExpiry:  accessExpiry,
-		issuer:        issuer,
+func NewManager(accessSecret, refreshSecret string, accessExpiry time.Duration, issuer string, options ...string) *Manager {
+	mode, privateKeyPath, publicKeyPath := "HS256", "", ""
+	if len(options) > 0 && options[0] != "" {
+		mode = options[0]
 	}
+	if len(options) > 1 {
+		privateKeyPath = options[1]
+	}
+	if len(options) > 2 {
+		publicKeyPath = options[2]
+	}
+	signer, err := NewSigner(mode, privateKeyPath, publicKeyPath)
+	if err != nil {
+		panic(err)
+	}
+	return &Manager{accessSecret: []byte(accessSecret), refreshSecret: []byte(refreshSecret), signer: signer, accessExpiry: accessExpiry, issuer: issuer}
 }
 
 // TokenPair 包含一个 access token 和一个 refresh token。
@@ -64,8 +74,7 @@ func (m *Manager) IssueAccessToken(userID, username, role, sessionID string) (st
 		TokenType: "access",
 	}
 
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	signed, err := token.SignedString(m.accessSecret)
+	signed, err := m.signer.Sign(claims, m.accessSecret)
 	if err != nil {
 		return "", time.Time{}, fmt.Errorf("sign access token: %w", err)
 	}
@@ -90,8 +99,7 @@ func (m *Manager) IssueRefreshTokenUntil(userID, sessionID string, expiresAt tim
 		TokenType: "refresh",
 	}
 
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	signed, err := token.SignedString(m.refreshSecret)
+	signed, err := m.signer.Sign(claims, m.refreshSecret)
 	if err != nil {
 		return "", time.Time{}, fmt.Errorf("sign refresh token: %w", err)
 	}
@@ -150,26 +158,13 @@ func (m *Manager) ParseRefreshToken(tokenString string) (*Claims, error) {
 }
 
 func (m *Manager) parseToken(tokenString string, secret []byte) (*Claims, error) {
-	token, err := jwt.ParseWithClaims(tokenString, &Claims{}, func(token *jwt.Token) (interface{}, error) {
-		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
-		}
-		return secret, nil
-	})
+	claims, err := m.signer.Verify(tokenString, &Claims{}, secret)
 	if err != nil {
 		return nil, fmt.Errorf("parse token: %w", err)
 	}
-
-	claims, ok := token.Claims.(*Claims)
-	if !ok || !token.Valid {
-		return nil, fmt.Errorf("invalid token claims")
-	}
-
-	// 校验 access token 的令牌类型
 	if claims.TokenType != "access" && claims.TokenType != "refresh" {
 		return nil, fmt.Errorf("unknown token type: %s", claims.TokenType)
 	}
-
 	return claims, nil
 }
 

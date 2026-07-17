@@ -13,6 +13,7 @@ import type { OAuthProviderSettings } from '@/types/settings'
 import { SECRET_MASK } from '@/types/settings'
 import LinuxDoIcon from '@/components/common/icons/LinuxDoIcon'
 import SettingsSection from './SettingsSection'
+import Can from '@/components/auth/Can'
 
 const PROVIDER_ICONS: Record<string, React.ReactNode> = {
   github: <GithubOutlined />,
@@ -109,9 +110,9 @@ function ProviderCard({ provider, onSaved }: ProviderCardProps) {
         </Form.Item>
         <Divider style={{ marginBlock: token.margin }} />
         <Form.Item style={{ marginBottom: 0 }}>
-          <Button size="middle" type="primary" htmlType="submit" loading={saving} icon={<SaveOutlined />}>
+          <Can resource="setting" action="update"><Button size="middle" type="primary" htmlType="submit" loading={saving} icon={<SaveOutlined />}>
             {saving ? t('settings:saving') : t('settings:oauth.save', { provider: provider.name })}
-          </Button>
+          </Button></Can>
         </Form.Item>
       </Card>
     </Form>
