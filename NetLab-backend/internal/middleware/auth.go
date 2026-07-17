@@ -14,12 +14,8 @@ import (
 const (
 	// ContextKeyUserID 存储已认证用户的 ID。
 	ContextKeyUserID = "user_id"
-	// ContextKeyUsername 存储已认证用户的用户名。
-	ContextKeyUsername = "username"
 	// ContextKeyUserRole 存储已认证用户的角色。
 	ContextKeyUserRole = "user_role"
-	// ContextKeySessionID 存储当前登录会话 ID。
-	ContextKeySessionID = "session_id"
 	// ContextKeyResource 存储当前请求对应的 RBAC 资源名。
 	ContextKeyResource = "rbac_resource"
 	// ContextKeyAction 存储当前请求对应的 RBAC 操作。
@@ -72,9 +68,7 @@ func Auth(jwtManager *pkgjwt.Manager, tokenStore pkgjwt.SessionValidator, cfg Au
 
 		// 将用户信息注入到 context 中
 		c.Set(ContextKeyUserID, claims.UserID)
-		c.Set(ContextKeyUsername, claims.Username)
 		c.Set(ContextKeyUserRole, claims.Role)
-		c.Set(ContextKeySessionID, claims.SessionID)
 
 		c.Next()
 	}
@@ -135,31 +129,11 @@ func GetUserID(c *gin.Context) string {
 	return ""
 }
 
-// GetUsername 从 context 中获取已认证的用户名。
-func GetUsername(c *gin.Context) string {
-	if name, exists := c.Get(ContextKeyUsername); exists {
-		if s, ok := name.(string); ok {
-			return s
-		}
-	}
-	return ""
-}
-
 // GetUserRole 从 context 中获取已认证用户的角色。
 func GetUserRole(c *gin.Context) string {
 	if role, exists := c.Get(ContextKeyUserRole); exists {
 		if r, ok := role.(string); ok {
 			return r
-		}
-	}
-	return ""
-}
-
-// GetSessionID 从 context 中获取当前登录会话 ID。
-func GetSessionID(c *gin.Context) string {
-	if sid, exists := c.Get(ContextKeySessionID); exists {
-		if s, ok := sid.(string); ok {
-			return s
 		}
 	}
 	return ""

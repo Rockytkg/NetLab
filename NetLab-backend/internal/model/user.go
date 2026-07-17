@@ -112,10 +112,7 @@ func (u *User) BeforeCreate(tx *gorm.DB) error {
 	return nil
 }
 
-func (u *User) IsActive() bool     { return u.Status == StatusActive }
-func (u *User) IsLocked() bool     { return u.Status == StatusLocked }
-func (u *User) IsPrivileged() bool { return u.Role == RoleSuperAdmin || u.Role == RoleAdmin }
-func (u *User) IsSuperAdmin() bool { return u.Role == RoleSuperAdmin }
+func (u *User) IsActive() bool { return u.Status == StatusActive }
 
 // ── TokenUser interface ──────────────────────────────────────────────────
 

@@ -53,18 +53,20 @@ export default function SettingsPage() {
   const [loadFailed, setLoadFailed] = useState(false)
   const [activeKey, setActiveKey] = useState('beian')
 
-  const fetchSettings = async () => {
+  const loadSettings = async (alive?: () => boolean) => {
     setLoading(true)
     setLoadFailed(false)
     try {
       const data = await adminApi.getSettings()
-      setSettings(data)
+      if (!alive || alive()) setSettings(data)
     } catch {
-      setLoadFailed(true)
+      if (!alive || alive()) setLoadFailed(true)
     } finally {
-      setLoading(false)
+      if (!alive || alive()) setLoading(false)
     }
   }
+
+  const fetchSettings = () => loadSettings()
 
   useEffect(() => {
     if (!canReadSettings) {
@@ -72,18 +74,7 @@ export default function SettingsPage() {
       return
     }
     let alive = true
-    ;(async () => {
-      setLoading(true)
-      setLoadFailed(false)
-      try {
-        const data = await adminApi.getSettings()
-        if (alive) setSettings(data)
-      } catch {
-        if (alive) setLoadFailed(true)
-      } finally {
-        if (alive) setLoading(false)
-      }
-    })()
+    void loadSettings(() => alive)
     return () => {
       alive = false
     }
