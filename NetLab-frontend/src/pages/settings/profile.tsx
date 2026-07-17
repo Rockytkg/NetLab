@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react'
 import { Avatar, Card, Descriptions, Grid, Space, Tag, Tabs, Typography, theme } from 'antd'
-import { UserOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '@/stores/authStore'
 import { authApi } from '@/services/auth'
 import type { SystemConfig } from '@/types/auth'
+import { getAvatarColor } from '@/utils/avatar'
 import ChangePasswordPanel from './account/ChangePasswordPanel'
 import ChangeEmailPanel from './account/ChangeEmailPanel'
 import PasskeyPanel from './account/PasskeyPanel'
@@ -88,15 +88,21 @@ export default function SettingsProfilePage() {
         {/* 账户资料 */}
         <Card variant="outlined" styles={{ body: { paddingBlock: token.paddingLG } }}>
           <Space size={token.marginLG} align="center" wrap>
-            <Avatar size={72} icon={<UserOutlined />} src={userInfo?.avatar} />
+            <Avatar
+              size={72}
+              src={userInfo?.avatar}
+              style={{ backgroundColor: getAvatarColor(userInfo?.nickname) }}
+            >
+              {userInfo?.nickname?.charAt(0)}
+            </Avatar>
             <div>
               <Title level={4} style={{ marginBottom: token.marginXS }}>
-                {userInfo?.username || '-'}
+                {userInfo?.nickname || '-'}
               </Title>
               <Space size={token.marginXS} wrap>
                 {userInfo?.role && (
                   <Tag color="blue">
-                    {t(`settings:profile.role.${userInfo.role}`, userInfo.role)}
+                    {userInfo.role}
                   </Tag>
                 )}
               </Space>
@@ -111,6 +117,9 @@ export default function SettingsProfilePage() {
           >
             <Descriptions.Item label={t('settings:profile.username')}>
               {userInfo?.username || '-'}
+            </Descriptions.Item>
+            <Descriptions.Item label={t('settings:profile.phone')}>
+              {userInfo?.phone || '-'}
             </Descriptions.Item>
             <Descriptions.Item label={t('settings:profile.email')}>
               {userInfo?.email || '-'}

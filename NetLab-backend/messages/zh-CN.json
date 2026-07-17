@@ -51,11 +51,12 @@
   { "id": "email.reset_password.expiry", "translation": "验证码10分钟内有效。如您未请求密码重置，请忽略此邮件。" },
 
   { "id": "export.users.header.username", "translation": "用户名" },
+  { "id": "export.users.header.nickname", "translation": "昵称" },
+  { "id": "export.users.header.phone", "translation": "手机号" },
   { "id": "export.users.header.email", "translation": "邮箱" },
   { "id": "export.users.header.role", "translation": "角色" },
   { "id": "export.users.header.status", "translation": "状态" },
   { "id": "export.users.header.twoFactor", "translation": "两步验证" },
-  { "id": "export.users.header.lastLogin", "translation": "最近登录" },
   { "id": "export.users.header.createdAt", "translation": "创建时间" },
   { "id": "export.users.header.password", "translation": "密码" }
 ]

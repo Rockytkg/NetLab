@@ -78,6 +78,11 @@ export default function SideMenu({ collapsed }: SideMenuProps) {
   }, [menuItems])
 
   const selectedKey = useMemo(() => {
+    // 用户中心不属于侧边栏菜单，避免被 /settings 的前缀匹配误激活。
+    if (location.pathname === '/settings/profile' || location.pathname.startsWith('/settings/profile/')) {
+      return ''
+    }
+
     return (
       leafKeys
         .filter((key) => location.pathname === key || location.pathname.startsWith(`${key}/`))
@@ -85,7 +90,7 @@ export default function SideMenu({ collapsed }: SideMenuProps) {
     )
   }, [leafKeys, location.pathname])
 
-  const selectedKeys = [selectedKey]
+  const selectedKeys = selectedKey ? [selectedKey] : []
 
   const selectedAncestorKeys = useMemo(() => {
     const findPath = (items: MenuItem[] = [], target: string, parents: string[] = []): string[] => {

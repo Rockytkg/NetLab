@@ -196,26 +196,26 @@ func Setup(cfg RouterConfig) *gin.Engine {
 					cfg.AuthHandler.Logout,
 				)
 
-				// Passkey 注册选项——标准限流
-				authUser.GET("/passkey/register-options",
+				// 账户 Passkey 注册选项——标准限流
+				authUser.GET("/account/passkeys/register-options",
 					cfg.limitStandard("passkey-reg-opt"),
 					cfg.AuthHandler.GetPasskeyRegisterOptions,
 				)
 
-				// Passkey 注册——中等限流
-				authUser.POST("/passkey/register",
+				// 账户 Passkey 注册——中等限流
+				authUser.POST("/account/passkeys",
 					cfg.limitModerate("passkey-register"),
 					cfg.AuthHandler.VerifyPasskeyRegistration,
 				)
 
-				// Passkey 列表——标准限流
-				authUser.GET("/passkey/list",
+				// 账户 Passkey 列表——标准限流
+				authUser.GET("/account/passkeys",
 					cfg.limitStandard("passkey-list"),
 					cfg.AuthHandler.ListPasskeys,
 				)
 
-				// Passkey 删除——标准限流
-				authUser.DELETE("/passkey/:id",
+				// 账户 Passkey 删除——标准限流
+				authUser.DELETE("/account/passkeys/:id",
 					cfg.limitStandard("passkey-delete"),
 					cfg.AuthHandler.DeletePasskey,
 				)

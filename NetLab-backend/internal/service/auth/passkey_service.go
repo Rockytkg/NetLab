@@ -13,8 +13,8 @@ import (
 	"github.com/go-webauthn/webauthn/webauthn"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
-	"strconv"
 	"gorm.io/gorm"
+	"strconv"
 
 	"netlab-backend/internal/model"
 	"netlab-backend/internal/repository"
@@ -269,6 +269,7 @@ func (s *PasskeyService) FinishLogin(ctx context.Context, sessionID string, rawR
 			return nil, errors.New("credential not found")
 		}
 		matchedUser = credUser
+		matchedCredID = credID
 		return s.buildWebAuthnUser(ctx, strconv.FormatUint(credUser.ID, 10))
 	}
 
@@ -295,14 +296,13 @@ func (s *PasskeyService) FinishLogin(ctx context.Context, sessionID string, rawR
 
 	// 持久化更新后的签名计数器与凭证状态。
 	if credJSON, err := json.Marshal(credential); err == nil {
-		_ = s.passkeyRepo.UpdateSignCount(ctx, matchedUser.ID, credential.Authenticator.SignCount, string(credJSON), time.Now())
+		_ = s.passkeyRepo.UpdateSignCount(ctx, matchedCredID, credential.Authenticator.SignCount, string(credJSON), time.Now())
 	}
 
 	tokens, appErr := s.tokenService.IssueTokens(ctx, user)
 	if appErr != nil {
 		return nil, appErr
 	}
-	_ = s.userRepo.UpdateLoginSuccess(ctx, strconv.FormatUint(user.ID, 10))
 
 	s.logger.Info("passkey authentication successful", zap.String("user_id", strconv.FormatUint(user.ID, 10)))
 
@@ -329,33 +329,22 @@ func (s *PasskeyService) ListForUser(ctx context.Context, userID string) ([]Pass
 	if err != nil {
 		return nil, apperrors.New(apperrors.ErrCodeInternal, "invalid user id")
 	}
-	user, err := s.userRepo.FindByID(ctx, userID)
+	info, err := s.passkeyRepo.List(ctx, uid)
 	if err != nil {
 		return nil, apperrors.Wrap(apperrors.ErrCodeOperationDenied, "failed to list passkeys", err)
 	}
-	if user == nil {
-		return nil, apperrors.ErrUserNotFound
-	}
-
-	info, err := s.passkeyRepo.GetInfo(ctx, uid)
-	if err != nil {
-		return nil, apperrors.Wrap(apperrors.ErrCodeOperationDenied, "failed to list passkeys", err)
-	}
-	if info == nil {
-		return []PasskeyInfo{}, nil
-	}
-
-	name := info.Name
-	if name == "" {
-		name = "Passkey"
-	}
-	out := []PasskeyInfo{
-		{
-			ID:         info.CredentialID,
+	out := make([]PasskeyInfo, 0, len(info))
+	for _, item := range info {
+		name := item.Name
+		if name == "" {
+			name = "Passkey"
+		}
+		out = append(out, PasskeyInfo{
+			ID:         item.ID,
 			Name:       name,
-			CreatedAt:  user.CreatedAt,
-			LastUsedAt: info.LastUsedAt,
-		},
+			CreatedAt:  item.CreatedAt,
+			LastUsedAt: item.LastUsedAt,
+		})
 	}
 	return out, nil
 }
@@ -370,8 +359,7 @@ func (s *PasskeyService) DeleteForUser(ctx context.Context, userID, passkeyID, v
 	if appErr := s.verifyEmailCode(ctx, userID, verifyCode); appErr != nil {
 		return appErr
 	}
-	// 通过 userID 删除（系统中只允许注册一个 passkey）
-	affected, err := s.passkeyRepo.DeleteByUserID(ctx, uid)
+	affected, err := s.passkeyRepo.DeleteByCredentialID(ctx, uid, passkeyID)
 	if err != nil {
 		return apperrors.Wrap(apperrors.ErrCodeOperationDenied, "failed to delete passkey", err)
 	}
@@ -461,13 +449,16 @@ func (s *PasskeyService) buildWebAuthnUser(ctx context.Context, userID string) (
 }
 
 func (s *PasskeyService) assembleUser(ctx context.Context, u *model.User) (*webauthnUser, error) {
-	cred, err := s.passkeyRepo.GetCredential(ctx, u.ID)
+	credentials, err := s.passkeyRepo.GetCredentials(ctx, u.ID)
 	if err != nil {
 		s.logger.Warn("failed to read passkey credential",
 			zap.String("user_id", strconv.FormatUint(u.ID, 10)), zap.Error(err))
 	}
-	waCreds := make([]webauthn.Credential, 0, 1)
-	if cred != nil && cred.Credential != "" {
+	waCreds := make([]webauthn.Credential, 0, len(credentials))
+	for _, cred := range credentials {
+		if cred.Credential == "" {
+			continue
+		}
 		var wc webauthn.Credential
 		if err := json.Unmarshal([]byte(cred.Credential), &wc); err != nil {
 			s.logger.Warn("skipping malformed passkey credential",

@@ -334,12 +334,20 @@ func (s *OAuthService) BindPendingToExisting(ctx context.Context, pendingToken, 
 }
 
 // CreateAccountForPending 为 pending 第三方身份创建新账号并完成登录。
-func (s *OAuthService) CreateAccountForPending(ctx context.Context, pendingToken, username, email, password, verifyCode string) (*LoginServiceResult, *apperrors.AppError) {
+func (s *OAuthService) CreateAccountForPending(ctx context.Context, pendingToken, username, nickname, phone, email, password, verifyCode string) (*LoginServiceResult, *apperrors.AppError) {
 	oauthUser, appErr := s.consumePendingBinding(ctx, pendingToken)
 	if appErr != nil {
 		return nil, appErr
 	}
 	username, appErr = validation.NormalizeUsername(username)
+	if appErr != nil {
+		return nil, appErr
+	}
+	nickname, appErr = validation.NormalizeNickname(nickname)
+	if appErr != nil {
+		return nil, appErr
+	}
+	phone, appErr = validation.NormalizePhone(phone)
 	if appErr != nil {
 		return nil, appErr
 	}
@@ -364,6 +372,11 @@ func (s *OAuthService) CreateAccountForPending(ctx context.Context, pendingToken
 	} else if exists {
 		return nil, apperrors.ErrEmailExists
 	}
+	if exists, err := s.userRepo.ExistsByPhone(ctx, phone); err != nil {
+		return nil, apperrors.Wrap(apperrors.ErrCodeDuplicateEntry, "database error", err)
+	} else if exists {
+		return nil, apperrors.ErrDuplicateEntry
+	}
 	if appErr := s.verifyEmailCode(ctx, email, "register", verifyCode); appErr != nil {
 		return nil, appErr
 	}
@@ -374,6 +387,8 @@ func (s *OAuthService) CreateAccountForPending(ctx context.Context, pendingToken
 	now := time.Now()
 	user := &model.User{
 		Username:          username,
+		Nickname:          nickname,
+		Phone:             phone,
 		Email:             email,
 		PasswordHash:      hash,
 		Avatar:            oauthUser.AvatarURL,
@@ -455,7 +470,6 @@ func (s *OAuthService) issueOAuthLogin(ctx context.Context, user *model.User, pr
 	if appErr != nil {
 		return nil, appErr
 	}
-	_ = s.userRepo.UpdateLoginSuccess(ctx, strconv.FormatUint(user.ID, 10))
 	return &LoginServiceResult{
 		Tokens:  tokens,
 		User:    userToInfo(user),

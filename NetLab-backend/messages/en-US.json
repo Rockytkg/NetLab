@@ -51,11 +51,12 @@
   { "id": "email.reset_password.expiry", "translation": "This code expires in 10 minutes. If you did not request a password reset, please ignore this email." },
 
   { "id": "export.users.header.username", "translation": "Username" },
+  { "id": "export.users.header.nickname", "translation": "Nickname" },
+  { "id": "export.users.header.phone", "translation": "Phone" },
   { "id": "export.users.header.email", "translation": "Email" },
   { "id": "export.users.header.role", "translation": "Role" },
   { "id": "export.users.header.status", "translation": "Status" },
   { "id": "export.users.header.twoFactor", "translation": "2FA Enabled" },
-  { "id": "export.users.header.lastLogin", "translation": "Last Login" },
   { "id": "export.users.header.createdAt", "translation": "Created At" },
   { "id": "export.users.header.password", "translation": "Password" }
 ]

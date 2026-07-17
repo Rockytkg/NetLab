@@ -11,6 +11,7 @@ import (
 )
 
 var usernamePattern = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
+var phonePattern = regexp.MustCompile(`^1[3-9]\d{9}$`)
 
 var (
 	passwordHasLowercase = regexp.MustCompile(`[a-z]`)
@@ -50,6 +51,22 @@ func NormalizeUsername(username string) (string, *apperrors.AppError) {
 	}
 	if !usernamePattern.MatchString(value) {
 		return "", Invalid("username may contain only letters, numbers, underscores, and hyphens")
+	}
+	return value, nil
+}
+
+func NormalizeNickname(nickname string) (string, *apperrors.AppError) {
+	value := strings.TrimSpace(nickname)
+	if value == "" || utf8.RuneCountInString(value) > 64 {
+		return "", Invalid("nickname is required and must be at most 64 characters")
+	}
+	return value, nil
+}
+
+func NormalizePhone(phone string) (string, *apperrors.AppError) {
+	value := strings.TrimSpace(phone)
+	if !phonePattern.MatchString(value) {
+		return "", Invalid("phone format is invalid")
 	}
 	return value, nil
 }

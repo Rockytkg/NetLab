@@ -4,6 +4,7 @@ import {
   UserOutlined,
   LockOutlined,
   MailOutlined,
+  PhoneOutlined,
   SafetyCertificateOutlined,
   ReloadOutlined,
   NumberOutlined,
@@ -73,7 +74,7 @@ export default function RegisterForm({ onBack }: RegisterFormProps) {
   }, [cooldown, form, captchaId, t, message])
 
   const onFinish = useCallback(async (values: {
-    username: string; email: string; password: string
+    username: string; nickname: string; phone: string; email: string; password: string
     confirmPassword: string; verifyCode: string
   }) => {
     setLoading(true)
@@ -93,6 +94,14 @@ export default function RegisterForm({ onBack }: RegisterFormProps) {
       <Form form={form} name="register" size="large" layout="vertical" requiredMark={false} onFinish={onFinish} className="netlab-login-form netlab-login-form-register">
         <Form.Item name="username" rules={[{ required: true, message: t('usernameRequired') }]}>
           <Input prefix={<UserOutlined style={iconStyle} />} placeholder={t('usernamePlaceholder')} autoComplete="username" />
+        </Form.Item>
+
+        <Form.Item name="nickname" rules={[{ required: true, message: t('nicknameRequired') }]}>
+          <Input prefix={<UserOutlined style={iconStyle} />} placeholder={t('nicknamePlaceholder')} maxLength={64} />
+        </Form.Item>
+
+        <Form.Item name="phone" rules={[{ required: true, message: t('phoneRequired') }, { pattern: /^1[3-9]\d{9}$/, message: t('phoneInvalid') }]}>
+          <Input prefix={<PhoneOutlined style={iconStyle} />} placeholder={t('phonePlaceholder')} maxLength={11} autoComplete="tel" />
         </Form.Item>
 
         <Form.Item name="email" rules={[{ required: true, message: t('emailRequired') }, { type: 'email', message: t('emailInvalid') }]}>

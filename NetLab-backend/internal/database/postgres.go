@@ -54,17 +54,16 @@ func NewPostgresDB(cfg config.DatabaseConfig, mode string) (*gorm.DB, error) {
 // 验证码仅存储在 Redis 中（临时、基于 TTL）；
 // 无需 PostgreSQL 表。
 func AutoMigrate(db *gorm.DB) error {
-	if err := db.AutoMigrate(
+	models := []any{
 		&model.User{},
+		&model.Passkey{},
 		&model.SystemConfig{},
 		&model.Role{},
 		&model.Permission{},
 		&model.RolePermission{},
-	); err != nil {
-		return err
 	}
-	// AutoMigrate never removes columns; explicitly retire the obsolete role flag.
-	return db.Exec("ALTER TABLE nb_roles DROP COLUMN IF EXISTS is_system").Error
+
+	return db.AutoMigrate(models...)
 }
 
 // SeedDefaultConfigs 在默认系统配置不存在时插入它们。
@@ -123,6 +122,8 @@ func SeedDefaultAdmin(db *gorm.DB) error {
 	}
 	superAdmin := &model.User{
 		Username:            "superadmin",
+		Nickname:            "Super Admin",
+		Phone:               "13800000000",
 		Email:               "superadmin@netlab.local",
 		PasswordHash:        saHash,
 		Role:                model.RoleSuperAdmin,
@@ -141,6 +142,8 @@ func SeedDefaultAdmin(db *gorm.DB) error {
 	}
 	admin := &model.User{
 		Username:            "admin",
+		Nickname:            "Administrator",
+		Phone:               "13800000099",
 		Email:               "admin@admin.com",
 		PasswordHash:        adminHash,
 		Role:                model.RoleAdmin,

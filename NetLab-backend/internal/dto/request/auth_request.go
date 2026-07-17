@@ -15,6 +15,8 @@ type LoginParams struct {
 // RegisterParams 是 POST /auth/register 的请求体。
 type RegisterParams struct {
 	Username        string `json:"username" binding:"required,min=3,max=64"`
+	Nickname        string `json:"nickname" binding:"required,max=64"`
+	Phone           string `json:"phone" binding:"required"`
 	Email           string `json:"email" binding:"required,email,max=255"`
 	Password        string `json:"password" binding:"required,min=8,max=72"`
 	ConfirmPassword string `json:"confirmPassword" binding:"required,eqfield=Password"`
@@ -108,6 +110,8 @@ type OAuthBindExistingParams struct {
 type OAuthCreateAccountParams struct {
 	PendingToken    string `json:"pendingToken" binding:"required"`
 	Username        string `json:"username" binding:"required,min=3,max=64"`
+	Nickname        string `json:"nickname" binding:"required,max=64"`
+	Phone           string `json:"phone" binding:"required"`
 	Email           string `json:"email" binding:"required,email,max=255"`
 	Password        string `json:"password" binding:"required,min=8,max=72"`
 	ConfirmPassword string `json:"confirmPassword" binding:"required,eqfield=Password"`

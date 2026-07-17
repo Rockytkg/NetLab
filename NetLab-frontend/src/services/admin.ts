@@ -75,7 +75,7 @@ export const adminApi = {
     return request.get('/users', { params })
   },
 
-  /** 更新单个用户邮箱、角色和状态 */
+  /** 更新单个用户资料、角色和状态 */
   updateUser(id: string, params: UpdateUserParams): Promise<{ message: string }> {
     return request.put(`/users/${id}`, params)
   },
@@ -122,16 +122,20 @@ export const adminApi = {
     const headers = (rows[0] ?? []).map((value) => normalizeImportHeader(String(value)))
     const indexes = {
       username: headers.indexOf('username'),
+      nickname: headers.indexOf('nickname'),
+      phone: headers.indexOf('phone'),
       email: headers.indexOf('email'),
       role: headers.indexOf('role'),
       password: headers.indexOf('password'),
     }
-    if (indexes.username < 0 || indexes.email < 0) {
-      throw new Error('username and email columns are required')
+    if (indexes.username < 0 || indexes.nickname < 0 || indexes.phone < 0 || indexes.email < 0) {
+      throw new Error('username, nickname, phone and email columns are required')
     }
 
     const users: ImportUserParams[] = rows.slice(1).map((row) => ({
       username: cell(row, indexes.username),
+      nickname: cell(row, indexes.nickname),
+      phone: cell(row, indexes.phone),
       email: cell(row, indexes.email),
       role: cell(row, indexes.role),
       password: cell(row, indexes.password),
@@ -148,6 +152,10 @@ function normalizeImportHeader(value: string) {
   return ({
     username: 'username',
     '\u7528\u6237\u540d': 'username',
+    nickname: 'nickname',
+    '\u6635\u79f0': 'nickname',
+    phone: 'phone',
+    '\u624b\u673a\u53f7': 'phone',
     email: 'email',
     '\u90ae\u7bb1': 'email',
     role: 'role',

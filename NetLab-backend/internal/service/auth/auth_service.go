@@ -107,8 +107,6 @@ func (s *AuthService) Login(ctx context.Context, username, password string) (*Lo
 	}
 
 	_ = s.tokenRepo.ClearLoginFailures(ctx, strconv.FormatUint(user.ID, 10))
-	_ = s.userRepo.UpdateLoginSuccess(ctx, strconv.FormatUint(user.ID, 10))
-
 	s.logger.Info("user logged in",
 		zap.String("user_id", strconv.FormatUint(user.ID, 10)),
 		zap.String("username", user.Username),
@@ -122,13 +120,21 @@ func (s *AuthService) Login(ctx context.Context, username, password string) (*Lo
 }
 
 // Register 创建一个新的用户账户。
-func (s *AuthService) Register(ctx context.Context, username, email, password, verifyCode string) *apperrors.AppError {
+func (s *AuthService) Register(ctx context.Context, username, nickname, phone, email, password, verifyCode string) *apperrors.AppError {
 	sec, err := s.configService.Security(ctx)
 	if err == nil && !sec.RegistrationEnabled {
 		return apperrors.ErrOperationDenied
 	}
 	var appErr *apperrors.AppError
 	username, appErr = validation.NormalizeUsername(username)
+	if appErr != nil {
+		return appErr
+	}
+	nickname, appErr = validation.NormalizeNickname(nickname)
+	if appErr != nil {
+		return appErr
+	}
+	phone, appErr = validation.NormalizePhone(phone)
 	if appErr != nil {
 		return appErr
 	}
@@ -159,6 +165,13 @@ func (s *AuthService) Register(ctx context.Context, username, email, password, v
 	if exists {
 		return apperrors.ErrEmailExists
 	}
+	exists, err = s.userRepo.ExistsByPhone(ctx, phone)
+	if err != nil {
+		return apperrors.Wrap(apperrors.ErrCodeDuplicateEntry, "database error", err)
+	}
+	if exists {
+		return apperrors.ErrDuplicateEntry
+	}
 
 	storedCode, err := s.tokenRepo.GetVerificationCode(ctx, email, "register")
 	if err != nil {
@@ -176,6 +189,8 @@ func (s *AuthService) Register(ctx context.Context, username, email, password, v
 	now := time.Now()
 	user := &model.User{
 		Username:          username,
+		Nickname:          nickname,
+		Phone:             phone,
 		Email:             email,
 		PasswordHash:      passwordHash,
 		Role:              model.RoleViewer,
@@ -389,6 +404,8 @@ type SecurityActionsResult struct {
 type UserInfoResult struct {
 	ID                  string
 	Username            string
+	Nickname            string
+	Phone               string
 	Avatar              string
 	Email               string
 	Role                string
@@ -402,6 +419,8 @@ func userToInfo(u *model.User) *UserInfoResult {
 	return &UserInfoResult{
 		ID:                  strconv.FormatUint(u.ID, 10),
 		Username:            u.Username,
+		Nickname:            u.Nickname,
+		Phone:               u.Phone,
 		Avatar:              u.Avatar,
 		Email:               u.Email,
 		Role:                string(u.Role),

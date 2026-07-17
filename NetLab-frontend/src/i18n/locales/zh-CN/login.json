@@ -13,7 +13,14 @@
   "welcome": "欢迎回来",
   "subtitle": "请输入您的账号信息以登录系统",
   "username": "用户名",
+  "nickname": "昵称",
+  "phone": "手机号",
   "usernamePlaceholder": "请输入用户名",
+  "nicknamePlaceholder": "请输入昵称",
+  "nicknameRequired": "请输入昵称",
+  "phonePlaceholder": "请输入手机号",
+  "phoneRequired": "请输入手机号",
+  "phoneInvalid": "请输入有效的手机号",
   "password": "密码",
   "passwordPlaceholder": "请输入密码",
   "remember": "记住我",
@@ -120,5 +127,3 @@
   "twoFactorRecoveryInvalid": "恢复码无效或已使用",
   "twoFactorRecoverySubmit": "使用恢复码登录"
 }
-
-

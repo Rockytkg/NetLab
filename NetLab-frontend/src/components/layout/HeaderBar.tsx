@@ -28,6 +28,7 @@ import { useAuthStore } from '@/stores/authStore'
 import { useI18n } from '@/hooks/useI18n'
 import { LOCALE_OPTIONS } from '@/types/i18n'
 import type { SupportedLocale } from '@/types/i18n'
+import { getAvatarColor } from '@/utils/avatar'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useMemo } from 'react'
 
@@ -201,11 +202,13 @@ export default function HeaderBar({ onOpenMobileMenu }: HeaderBarProps) {
           <Space style={{ cursor: 'pointer', minWidth: 40 }}>
             <Avatar
               size="small"
-              icon={<UserOutlined />}
               src={userInfo?.avatar}
-            />
+              style={{ backgroundColor: getAvatarColor(userInfo?.nickname) }}
+            >
+              {userInfo?.nickname?.charAt(0)}
+            </Avatar>
             <span className="netlab-desktop-only">
-              {userInfo?.username || t('common:guestUser')}
+              {userInfo?.nickname || t('common:guestUser')}
             </span>
           </Space>
         </Dropdown>

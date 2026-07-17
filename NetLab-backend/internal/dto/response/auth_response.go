@@ -6,6 +6,8 @@ import "time"
 type UserInfo struct {
 	ID                  string   `json:"id"`
 	Username            string   `json:"username"`
+	Nickname            string   `json:"nickname"`
+	Phone               string   `json:"phone"`
 	Avatar              string   `json:"avatar,omitempty"`
 	Email               string   `json:"email,omitempty"`
 	Role                string   `json:"role"`

@@ -33,6 +33,8 @@ func NewUserImportExportService(userRepo *repository.UserRepository, logger *zap
 // UserImportRecord 是前端解析表格后提交的一条用户记录。
 type UserImportRecord struct {
 	Username string
+	Nickname string
+	Phone    string
 	Email    string
 	Role     string
 	Password string
@@ -44,9 +46,11 @@ func (s *UserImportExportService) ImportUsers(ctx context.Context, records []Use
 	for rowNumber, record := range records {
 		line := rowNumber + 1
 		username, nameErr := validation.NormalizeUsername(record.Username)
+		nickname, nicknameErr := validation.NormalizeNickname(record.Nickname)
+		phone, phoneErr := validation.NormalizePhone(record.Phone)
 		email, emailErr := validation.NormalizeEmail(record.Email)
-		if nameErr != nil || emailErr != nil {
-			summary.Errors = append(summary.Errors, fmt.Sprintf("row %d: username and email are required", line))
+		if nameErr != nil || nicknameErr != nil || phoneErr != nil || emailErr != nil {
+			summary.Errors = append(summary.Errors, fmt.Sprintf("row %d: username, nickname, phone and email are required and valid", line))
 			summary.Skipped++
 			continue
 		}
@@ -86,6 +90,15 @@ func (s *UserImportExportService) ImportUsers(ctx context.Context, records []Use
 			summary.Skipped++
 			continue
 		}
+		exists, checkErr = s.userRepo.ExistsByPhone(ctx, phone)
+		if checkErr != nil {
+			return nil, apperrors.Wrap(apperrors.ErrCodeOperationDenied, "failed to check phone", checkErr)
+		}
+		if exists {
+			summary.Errors = append(summary.Errors, fmt.Sprintf("row %d: phone already exists: %s", line, phone))
+			summary.Skipped++
+			continue
+		}
 		exists, checkErr = s.userRepo.ExistsByEmail(ctx, email)
 		if checkErr != nil {
 			return nil, apperrors.Wrap(apperrors.ErrCodeOperationDenied, "failed to check email", checkErr)
@@ -104,7 +117,7 @@ func (s *UserImportExportService) ImportUsers(ctx context.Context, records []Use
 		}
 		now := time.Now()
 		user := &model.User{
-			Username: username, Email: email, PasswordHash: hash,
+			Username: username, Nickname: nickname, Phone: phone, Email: email, PasswordHash: hash,
 			Role: normalizedRole, Status: model.StatusActive,
 			ForcePasswordChange: true, ForceEmailChange: true, PasswordChangedAt: &now,
 		}
@@ -124,16 +137,16 @@ func (s *UserImportExportService) ImportUsers(ctx context.Context, records []Use
 
 // exportHeaderKeys 定义导出文件的列顺序；表头文案经 pkg/i18n 按请求
 // locale 解析（messages/*.json 中的 export.users.header.*）。
-var exportHeaderKeys = []string{"username", "email", "role", "status", "twoFactor", "lastLogin", "createdAt"}
+var exportHeaderKeys = []string{"username", "nickname", "phone", "email", "role", "status", "twoFactor", "createdAt"}
 
 // exportColumnWidths 与 exportHeaderKeys 一一对应的列宽（字符宽度）。
-var exportColumnWidths = []float64{20, 32, 14, 12, 14, 24, 24}
+var exportColumnWidths = []float64{20, 20, 16, 32, 14, 12, 14, 24}
 
 // templateHeaderKeys 定义导入模板的列顺序（与导入解析字段一致）。
-var templateHeaderKeys = []string{"username", "email", "role", "password"}
+var templateHeaderKeys = []string{"username", "nickname", "phone", "email", "role", "password"}
 
 // templateColumnWidths 与 templateHeaderKeys 一一对应的列宽。
-var templateColumnWidths = []float64{20, 32, 14, 24}
+var templateColumnWidths = []float64{20, 20, 16, 32, 14, 24}
 
 // ExportUsersExcel 将勾选的用户导出为 Excel 并返回文件字节。
 // 表头按 locale 本地化；role/status 等数据值保持原始枚举串，保证导出
@@ -153,13 +166,9 @@ func (s *UserImportExportService) ExportUsersExcel(ctx context.Context, userIDs 
 	rows := make([][]interface{}, 0, len(filtered))
 	for i := range filtered {
 		user := &filtered[i]
-		lastLogin := ""
-		if user.LastLoginAt != nil {
-			lastLogin = user.LastLoginAt.Format(time.RFC3339)
-		}
 		rows = append(rows, []interface{}{
-			user.Username, user.Email, string(user.Role), string(user.Status),
-			user.TwoFactorEnabled, lastLogin, user.CreatedAt.Format(time.RFC3339),
+			user.Username, user.Nickname, user.Phone, user.Email, string(user.Role), string(user.Status),
+			user.TwoFactorEnabled, user.CreatedAt.Format(time.RFC3339),
 		})
 	}
 
@@ -175,8 +184,8 @@ func (s *UserImportExportService) ExportUsersExcel(ctx context.Context, userIDs 
 // 示例 role 为原始枚举值；示例密码满足强度策略，模板可直接回导验证。
 func (s *UserImportExportService) BuildImportTemplate(locale string) ([]byte, *apperrors.AppError) {
 	rows := [][]interface{}{
-		{"alice", "alice@example.com", string(model.RoleViewer), "Vermilion-Otter-42"},
-		{"bob", "bob@example.com", string(model.RoleEditor), "Harbor-Piano-Sunset-9"},
+		{"alice", "Alice", "13800000001", "alice@example.com", string(model.RoleViewer), "Vermilion-Otter-42"},
+		{"bob", "Bob", "13800000002", "bob@example.com", string(model.RoleEditor), "Harbor-Piano-Sunset-9"},
 	}
 	data, err := buildExcel(localizedHeaders(locale, templateHeaderKeys), templateColumnWidths, rows)
 	if err != nil {

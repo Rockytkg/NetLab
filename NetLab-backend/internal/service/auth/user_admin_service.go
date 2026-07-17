@@ -27,14 +27,15 @@ func NewUserAdminService(userRepo *repository.UserRepository, logger *zap.Logger
 
 // AdminUserView 是返回给用户资源接口的安全视图。
 type AdminUserView struct {
-	ID          string  `json:"id"`
-	Username    string  `json:"username"`
-	Email       string  `json:"email"`
-	Avatar      string  `json:"avatar"`
-	Role        string  `json:"role"`
-	Status      string  `json:"status"`
-	LastLoginAt *string `json:"lastLoginAt"`
-	CreatedAt   string  `json:"createdAt"`
+	ID        string `json:"id"`
+	Username  string `json:"username"`
+	Nickname  string `json:"nickname"`
+	Phone     string `json:"phone"`
+	Email     string `json:"email"`
+	Avatar    string `json:"avatar"`
+	Role      string `json:"role"`
+	Status    string `json:"status"`
+	CreatedAt string `json:"createdAt"`
 }
 
 type UserListResult struct {
@@ -77,7 +78,7 @@ func (s *UserAdminService) ListUsers(ctx context.Context, page, size int, keywor
 	return &UserListResult{Items: items, Total: total, Page: page, Size: size}, nil
 }
 
-func (s *UserAdminService) CreateUser(ctx context.Context, username, email, role, password string) (*AdminUserView, *apperrors.AppError) {
+func (s *UserAdminService) CreateUser(ctx context.Context, username, nickname, phone, email, role, password string) (*AdminUserView, *apperrors.AppError) {
 	normalizedUsername, appErr := validation.NormalizeUsername(username)
 	if appErr != nil {
 		return nil, appErr
@@ -86,6 +87,14 @@ func (s *UserAdminService) CreateUser(ctx context.Context, username, email, role
 		return nil, apperrors.New(apperrors.ErrCodeOperationDenied, "superadmin username is reserved for the built-in super administrator")
 	}
 	normalizedEmail, appErr := validation.NormalizeEmail(email)
+	if appErr != nil {
+		return nil, appErr
+	}
+	normalizedNickname, appErr := validation.NormalizeNickname(nickname)
+	if appErr != nil {
+		return nil, appErr
+	}
+	normalizedPhone, appErr := validation.NormalizePhone(phone)
 	if appErr != nil {
 		return nil, appErr
 	}
@@ -106,12 +115,17 @@ func (s *UserAdminService) CreateUser(ctx context.Context, username, email, role
 	} else if exists {
 		return nil, apperrors.ErrEmailExists
 	}
+	if exists, err := s.userRepo.ExistsByPhone(ctx, normalizedPhone); err != nil {
+		return nil, apperrors.Wrap(apperrors.ErrCodeDuplicateEntry, "database error", err)
+	} else if exists {
+		return nil, apperrors.ErrDuplicateEntry
+	}
 	hash, err := crypto.HashPassword(password)
 	if err != nil {
 		return nil, apperrors.Wrap(apperrors.ErrCodeWeakPassword, "failed to hash password", err)
 	}
 	now := time.Now()
-	user := &model.User{Username: normalizedUsername, Email: normalizedEmail, PasswordHash: hash, Role: normalizedRole, Status: model.StatusActive, PasswordChangedAt: &now}
+	user := &model.User{Username: normalizedUsername, Nickname: normalizedNickname, Phone: normalizedPhone, Email: normalizedEmail, PasswordHash: hash, Role: normalizedRole, Status: model.StatusActive, PasswordChangedAt: &now}
 	if err := s.userRepo.Create(ctx, user); err != nil {
 		return nil, apperrors.Wrap(apperrors.ErrCodeOperationDenied, "failed to create user", err)
 	}
@@ -120,7 +134,7 @@ func (s *UserAdminService) CreateUser(ctx context.Context, username, email, role
 	return &view, nil
 }
 
-func (s *UserAdminService) UpdateUser(ctx context.Context, id, email, role, status string) *apperrors.AppError {
+func (s *UserAdminService) UpdateUser(ctx context.Context, id, nickname, phone, email, role, status string) *apperrors.AppError {
 	users, err := s.userRepo.FindByIDs(ctx, []string{id})
 	if err != nil {
 		return apperrors.Wrap(apperrors.ErrCodeOperationDenied, "database error", err)
@@ -129,6 +143,14 @@ func (s *UserAdminService) UpdateUser(ctx context.Context, id, email, role, stat
 		return apperrors.ErrUserNotFound
 	}
 	normalizedEmail, appErr := validation.NormalizeEmail(email)
+	if appErr != nil {
+		return appErr
+	}
+	normalizedNickname, appErr := validation.NormalizeNickname(nickname)
+	if appErr != nil {
+		return appErr
+	}
+	normalizedPhone, appErr := validation.NormalizePhone(phone)
 	if appErr != nil {
 		return appErr
 	}
@@ -145,7 +167,12 @@ func (s *UserAdminService) UpdateUser(ctx context.Context, id, email, role, stat
 	} else if existing != nil && strconv.FormatUint(existing.ID, 10) != id {
 		return apperrors.ErrEmailExists
 	}
-	if err := s.userRepo.UpdateManagedFields(ctx, id, normalizedEmail, normalizedRole, normalizedStatus); err != nil {
+	if existing, err := s.userRepo.FindByPhone(ctx, normalizedPhone); err != nil {
+		return apperrors.Wrap(apperrors.ErrCodeDuplicateEntry, "database error", err)
+	} else if existing != nil && strconv.FormatUint(existing.ID, 10) != id {
+		return apperrors.ErrDuplicateEntry
+	}
+	if err := s.userRepo.UpdateManagedFields(ctx, id, normalizedNickname, normalizedPhone, normalizedEmail, normalizedRole, normalizedStatus); err != nil {
 		return apperrors.Wrap(apperrors.ErrCodeOperationDenied, "failed to update user", err)
 	}
 	return nil
@@ -196,10 +223,5 @@ func (s *UserAdminService) BatchResetPassword(ctx context.Context, ids []string,
 }
 
 func toAdminUserView(u *model.User) AdminUserView {
-	view := AdminUserView{ID: strconv.FormatUint(u.ID, 10), Username: u.Username, Email: u.Email, Avatar: u.Avatar, Role: string(u.Role), Status: string(u.Status), CreatedAt: u.CreatedAt.Format("2006-01-02T15:04:05Z07:00")}
-	if u.LastLoginAt != nil {
-		value := u.LastLoginAt.Format("2006-01-02T15:04:05Z07:00")
-		view.LastLoginAt = &value
-	}
-	return view
+	return AdminUserView{ID: strconv.FormatUint(u.ID, 10), Username: u.Username, Nickname: u.Nickname, Phone: u.Phone, Email: u.Email, Avatar: u.Avatar, Role: string(u.Role), Status: string(u.Status), CreatedAt: u.CreatedAt.Format("2006-01-02T15:04:05Z07:00")}
 }

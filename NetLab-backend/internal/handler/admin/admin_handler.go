@@ -182,7 +182,7 @@ func (h *AdminHandler) CreateUser(c *gin.Context) {
 		response.Error(c, apperrors.New(apperrors.ErrCodeInvalidCode, "invalid parameters: "+err.Error()))
 		return
 	}
-	user, err := h.userAdminService.CreateUser(c.Request.Context(), params.Username, params.Email, params.Role, params.Password)
+	user, err := h.userAdminService.CreateUser(c.Request.Context(), params.Username, params.Nickname, params.Phone, params.Email, params.Role, params.Password)
 	if err != nil {
 		response.Error(c, err)
 		return
@@ -197,7 +197,7 @@ func (h *AdminHandler) UpdateUser(c *gin.Context) {
 		response.Error(c, apperrors.New(apperrors.ErrCodeInvalidCode, "invalid parameters: "+err.Error()))
 		return
 	}
-	if err := h.userAdminService.UpdateUser(c.Request.Context(), c.Param("id"), params.Email, params.Role, params.Status); err != nil {
+	if err := h.userAdminService.UpdateUser(c.Request.Context(), c.Param("id"), params.Nickname, params.Phone, params.Email, params.Role, params.Status); err != nil {
 		response.Error(c, err)
 		return
 	}
@@ -257,6 +257,8 @@ func (h *AdminHandler) ImportUsers(c *gin.Context) {
 	for i, user := range params.Users {
 		records[i] = authsvc.UserImportRecord{
 			Username: user.Username,
+			Nickname: user.Nickname,
+			Phone:    user.Phone,
 			Email:    user.Email,
 			Role:     user.Role,
 			Password: user.Password,

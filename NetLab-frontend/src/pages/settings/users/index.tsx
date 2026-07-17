@@ -68,7 +68,7 @@ function randomIndex(max: number) {
   return bytes[0] % max
 }
 
-/** 用户管理页：分页列表 + 批量改角色/重置密码/Excel 导入导出。 */
+/** 用户管理页：分页列表 + 批量改角色/重置密码/表格导入导出。 */
 export default function UsersPage() {
   const { t } = useTranslation(['settings', 'common'])
   const { token } = theme.useToken()
@@ -152,12 +152,22 @@ export default function UsersPage() {
       key: 'email',
     },
     {
+      title: t('settings:users.columns.nickname'),
+      dataIndex: 'nickname',
+      key: 'nickname',
+    },
+    {
+      title: t('settings:users.columns.phone'),
+      dataIndex: 'phone',
+      key: 'phone',
+    },
+    {
       title: t('settings:users.columns.role'),
       dataIndex: 'role',
       key: 'role',
       render: (val: string) => (
         <Tag color="blue">
-          {t(`settings:users.roles.${val}`, val)}
+          {val}
         </Tag>
       ),
     },
@@ -172,10 +182,10 @@ export default function UsersPage() {
       ),
     },
     {
-      title: t('settings:users.columns.lastLogin'),
-      dataIndex: 'lastLoginAt',
-      key: 'lastLoginAt',
-      render: (val: string | null) => (val ? new Date(val).toLocaleString() : '-'),
+      title: t('settings:users.columns.createdAt'),
+      dataIndex: 'createdAt',
+      key: 'createdAt',
+      render: (val: string) => new Date(val).toLocaleString(),
     },
     {
       title: t('settings:users.columns.actions'),
@@ -229,6 +239,8 @@ export default function UsersPage() {
       setCreateSaving(true)
       await adminApi.createUser({
         username: values.username.trim(),
+        nickname: values.nickname.trim(),
+        phone: values.phone.trim(),
         email: values.email.trim(),
         password: values.password,
         role: values.role,
@@ -252,6 +264,8 @@ export default function UsersPage() {
   const openEdit = (user: AdminUserView) => {
     setEditingUser(user)
     editForm.setFieldsValue({
+      nickname: user.nickname,
+      phone: user.phone,
       email: user.email,
       role: (ASSIGNABLE_ROLES.includes(user.role as UserRoleValue) ? user.role : 'viewer') as UserRoleValue,
       status: user.status,
@@ -265,6 +279,8 @@ export default function UsersPage() {
       const values = await editForm.validateFields()
       setEditSaving(true)
       await adminApi.updateUser(editingUser.id, {
+        nickname: values.nickname.trim(),
+        phone: values.phone.trim(),
         email: values.email,
         role: values.role,
         status: values.status,
@@ -334,7 +350,7 @@ export default function UsersPage() {
     beforeUpload: async (file) => {
       const ext = file.name.toLowerCase()
       if (!ext.endsWith('.xlsx') && !ext.endsWith('.xls') && !ext.endsWith('.csv')) {
-        message.warning(t('settings:users.invalidExcelFile'))
+        message.warning(t('settings:users.invalidImportFile'))
         return false
       }
       setImporting(true)
@@ -399,7 +415,7 @@ export default function UsersPage() {
           </Space>
           <Space wrap>
             <Can resource="user" action="import"><Button icon={<UploadOutlined />} onClick={() => setImportOpen(true)}>
-              {t('settings:users.importExcel')}
+              {t('settings:users.importUsers')}
             </Button></Can>
             <Select
               allowClear
@@ -427,7 +443,7 @@ export default function UsersPage() {
               style={{ width: 140 }}
               options={ASSIGNABLE_ROLES.map((value) => ({
                 value,
-                label: t(`settings:profile.role.${value}`, value),
+                label: value,
               }))}
             />
             <Input
@@ -496,6 +512,20 @@ export default function UsersPage() {
             <Input maxLength={64} autoComplete="username" />
           </Form.Item>
           <Form.Item
+            name="nickname"
+            label={t('settings:users.columns.nickname')}
+            rules={[{ required: true, message: t('settings:users.nicknameRequired') }]}
+          >
+            <Input maxLength={64} />
+          </Form.Item>
+          <Form.Item
+            name="phone"
+            label={t('settings:users.columns.phone')}
+            rules={[{ required: true, message: t('settings:users.phoneRequired') }, { pattern: /^1[3-9]\d{9}$/, message: t('settings:users.phoneInvalid') }]}
+          >
+            <Input maxLength={11} autoComplete="tel" />
+          </Form.Item>
+          <Form.Item
             name="email"
             label={t('settings:users.columns.email')}
             normalize={(value: string) => value?.trim()}
@@ -514,7 +544,7 @@ export default function UsersPage() {
             <Select
               options={ASSIGNABLE_ROLES.map((r) => ({
                 value: r,
-                label: t(`settings:profile.role.${r}`, r),
+                label: r,
               }))}
             />
           </Form.Item>
@@ -555,6 +585,20 @@ export default function UsersPage() {
       >
         <Form form={editForm} layout="vertical" requiredMark={false}>
           <Form.Item
+            name="nickname"
+            label={t('settings:users.columns.nickname')}
+            rules={[{ required: true, message: t('settings:users.nicknameRequired') }]}
+          >
+            <Input maxLength={64} />
+          </Form.Item>
+          <Form.Item
+            name="phone"
+            label={t('settings:users.columns.phone')}
+            rules={[{ required: true, message: t('settings:users.phoneRequired') }, { pattern: /^1[3-9]\d{9}$/, message: t('settings:users.phoneInvalid') }]}
+          >
+            <Input maxLength={11} autoComplete="tel" />
+          </Form.Item>
+          <Form.Item
             name="email"
             label={t('settings:users.columns.email')}
             rules={[
@@ -572,7 +616,7 @@ export default function UsersPage() {
             <Select
               options={ASSIGNABLE_ROLES.map((r) => ({
                 value: r,
-                label: t(`settings:profile.role.${r}`, r),
+                label: r,
               }))}
             />
           </Form.Item>
@@ -633,9 +677,9 @@ export default function UsersPage() {
         </Form>
       </Modal>
 
-      {/* Excel 导入 */}
+      {/* 用户导入 */}
       <Modal
-        title={t('settings:users.importExcel')}
+        title={t('settings:users.importUsers')}
         open={importOpen}
         onCancel={() => {
           setImportOpen(false)
@@ -644,14 +688,14 @@ export default function UsersPage() {
         footer={null}
       >
         <Space orientation="vertical" size={token.margin} style={{ width: '100%' }}>
-          <Alert type="info" showIcon title={t('settings:users.importExcelFormat')} />
+          <Alert type="info" showIcon title={t('settings:users.importUsersFormat')} />
           <Space.Compact block>
             <Can resource="user" action="import"><Button icon={<DownloadOutlined />} onClick={downloadTemplate} loading={templateDownloading}>
               {t('settings:users.downloadTemplate')}
             </Button></Can>
             <Can resource="user" action="import"><Upload {...uploadProps}>
               <Button type="primary" icon={<UploadOutlined />} loading={importing}>
-                {t('settings:users.importExcel')}
+                {t('settings:users.importUsers')}
               </Button>
             </Upload></Can>
           </Space.Compact>

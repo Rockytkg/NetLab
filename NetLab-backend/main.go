@@ -82,7 +82,7 @@ func main() {
 	// GORM AutoMigrate 只会新增缺失的列/表，绝不会删除或修改。
 	// 在所有环境中运行都是安全的。
 	if err := database.AutoMigrate(db); err != nil {
-		logger.Warn("Auto-migration warning", zap.Error(err))
+		logger.Fatal("Failed to migrate database schema", zap.Error(err))
 	}
 
 	// ── 初始化配置加密器 ─────────────────────────────────────────────

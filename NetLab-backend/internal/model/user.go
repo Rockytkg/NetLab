@@ -30,6 +30,8 @@ const (
 type User struct {
 	ID                  uint64     `gorm:"primaryKey;autoIncrement" json:"id"`
 	Username            string     `gorm:"type:varchar(64);uniqueIndex;not null" json:"username"`
+	Nickname            string     `gorm:"type:varchar(64);not null" json:"nickname"`
+	Phone               string     `gorm:"type:varchar(20);uniqueIndex;not null" json:"phone"`
 	Email               string     `gorm:"type:varchar(255);uniqueIndex;not null" json:"email"`
 	PasswordHash        string     `gorm:"type:varchar(255);not null" json:"-"`
 	Avatar              string     `gorm:"type:varchar(512)" json:"avatar"`
@@ -44,7 +46,6 @@ type User struct {
 	// ── 恢复码 ──
 	RecoveryCodes     []string   `gorm:"type:jsonb;default:'[]'" json:"-"`
 	PasswordChangedAt *time.Time `gorm:"type:timestamptz" json:"passwordChangedAt"`
-	LastLoginAt       *time.Time `gorm:"type:timestamptz" json:"lastLoginAt"`
 	CreatedAt         time.Time  `gorm:"type:timestamptz;not null;default:now()" json:"createdAt"`
 	UpdatedAt         time.Time  `gorm:"type:timestamptz;not null;default:now()" json:"updatedAt"`
 }
@@ -65,7 +66,7 @@ func (u *User) BeforeCreate(tx *gorm.DB) error {
 	return nil
 }
 
-func (u *User) IsActive() bool    { return u.Status == StatusActive }
+func (u *User) IsActive() bool     { return u.Status == StatusActive }
 func (u *User) IsLocked() bool     { return u.Status == StatusLocked }
 func (u *User) IsPrivileged() bool { return u.Role == RoleSuperAdmin || u.Role == RoleAdmin }
 func (u *User) IsSuperAdmin() bool { return u.Role == RoleSuperAdmin }
@@ -73,8 +74,8 @@ func (u *User) IsSuperAdmin() bool { return u.Role == RoleSuperAdmin }
 // ── TokenUser interface ──────────────────────────────────────────────────
 
 func (u *User) GetID() string       { return strconv.FormatUint(u.ID, 10) }
-func (u *User) GetUsername() string  { return u.Username }
-func (u *User) GetRole() string      { return string(u.Role) }
+func (u *User) GetUsername() string { return u.Username }
+func (u *User) GetRole() string     { return string(u.Role) }
 
 // ─── 恢复码 ──────────────────────────────────────────────────────────
 

@@ -30,7 +30,9 @@ export interface SMTPSettings {
   enabled: boolean
   host: string
   port: number
-  username: string
+	username: string
+	nickname: string
+	phone: string
   password: string
   from: string
   useTls: boolean
@@ -75,8 +77,7 @@ export interface AdminUserView {
   avatar: string
   role: string
   status: string
-	lastLoginAt?: string | null
-  createdAt: string
+	createdAt: string
 }
 
 /** 分页用户列表 */
@@ -98,14 +99,18 @@ export interface UserListParams {
 
 /** 单用户可编辑字段 */
 export interface UpdateUserParams {
-  email: string
+	nickname: string
+	phone: string
+	email: string
   role: string
   status: string
 }
 
 /** 单用户创建字段 */
 export interface CreateUserParams {
-  username: string
+	username: string
+	nickname: string
+	phone: string
   email: string
   role: string
   password: string
@@ -118,7 +123,9 @@ export interface ExportUsersParams {
 
 /** 批量导入用户记录 */
 export interface ImportUserParams {
-  username: string
+	username: string
+	nickname: string
+	phone: string
   email: string
   role?: string
   password?: string

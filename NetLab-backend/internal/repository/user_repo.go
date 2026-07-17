@@ -61,6 +61,17 @@ func (r *UserRepository) FindByEmail(ctx context.Context, email string) (*model.
 	return &user, nil
 }
 
+func (r *UserRepository) FindByPhone(ctx context.Context, phone string) (*model.User, error) {
+	var user model.User
+	if err := r.db.WithContext(ctx).Where("phone = ?", phone).First(&user).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &user, nil
+}
+
 // FindByUsernameOrEmail 通过用户名或邮箱获取用户（单次查询）。
 func (r *UserRepository) FindByUsernameOrEmail(ctx context.Context, username string) (*model.User, error) {
 	var user model.User
@@ -87,20 +98,15 @@ func (r *UserRepository) ExistsByEmail(ctx context.Context, email string) (bool,
 	return count > 0, err
 }
 
+func (r *UserRepository) ExistsByPhone(ctx context.Context, phone string) (bool, error) {
+	var count int64
+	err := r.db.WithContext(ctx).Model(&model.User{}).Where("phone = ?", phone).Count(&count).Error
+	return count > 0, err
+}
+
 // Update 更新用户字段。
 func (r *UserRepository) Update(ctx context.Context, user *model.User) error {
 	return r.db.WithContext(ctx).Save(user).Error
-}
-
-// UpdateLoginSuccess 记录一次成功登录。
-func (r *UserRepository) UpdateLoginSuccess(ctx context.Context, userID string) error {
-	now := time.Now()
-	return r.db.WithContext(ctx).Model(&model.User{}).
-		Where("id = ?", userID).
-		Updates(map[string]interface{}{
-			"last_login_at": now,
-			"updated_at":    now,
-		}).Error
 }
 
 // UpdatePassword 修改用户密码。
@@ -132,7 +138,7 @@ func (r *UserRepository) List(ctx context.Context, page, size int, keyword, stat
 	q := r.db.WithContext(ctx).Model(&model.User{})
 	if keyword != "" {
 		like := "%" + keyword + "%"
-		q = q.Where("username ILIKE ? OR email ILIKE ?", like, like)
+		q = q.Where("username ILIKE ? OR nickname ILIKE ? OR phone ILIKE ? OR email ILIKE ?", like, like, like, like)
 	}
 	if status != "" {
 		q = q.Where("status = ?", status)
@@ -155,10 +161,12 @@ func (r *UserRepository) List(ctx context.Context, page, size int, keyword, stat
 }
 
 // UpdateManagedFields 更新管理端允许编辑的用户字段。
-func (r *UserRepository) UpdateManagedFields(ctx context.Context, userID, email string, role model.UserRole, status model.UserStatus) error {
+func (r *UserRepository) UpdateManagedFields(ctx context.Context, userID, nickname, phone, email string, role model.UserRole, status model.UserStatus) error {
 	return r.db.WithContext(ctx).Model(&model.User{}).
 		Where("id = ?", userID).
 		Updates(map[string]interface{}{
+			"nickname":   nickname,
+			"phone":      phone,
 			"email":      email,
 			"role":       role,
 			"status":     status,

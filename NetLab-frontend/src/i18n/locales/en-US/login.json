@@ -13,7 +13,14 @@
   "welcome": "Welcome Back",
   "subtitle": "Enter your credentials to access the system",
   "username": "Username",
+  "nickname": "Nickname",
+  "phone": "Phone",
   "usernamePlaceholder": "Enter your username",
+  "nicknamePlaceholder": "Enter a nickname",
+  "nicknameRequired": "Please enter a nickname",
+  "phonePlaceholder": "Enter your phone number",
+  "phoneRequired": "Please enter your phone number",
+  "phoneInvalid": "Please enter a valid phone number",
   "password": "Password",
   "passwordPlaceholder": "Enter your password",
   "remember": "Remember me",
@@ -120,5 +127,3 @@
   "twoFactorRecoveryInvalid": "Recovery code invalid or already used",
   "twoFactorRecoverySubmit": "Sign in with recovery code"
 }
-
-

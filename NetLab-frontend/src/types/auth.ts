@@ -5,6 +5,8 @@ export type UserRole = 'super_admin' | 'admin' | 'editor' | 'viewer'
 export interface UserInfo {
   id: string
   username: string
+  nickname: string
+  phone: string
   avatar?: string
   email?: string
   role: UserRole
@@ -60,6 +62,8 @@ export interface CaptchaResult {
 
 export interface RegisterParams {
   username: string
+  nickname: string
+  phone: string
   email: string
   password: string
   confirmPassword: string

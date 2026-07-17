@@ -7,6 +7,7 @@ import {
   WechatOutlined,
   MailOutlined,
   UserOutlined,
+  PhoneOutlined,
   LockOutlined,
 } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
@@ -142,6 +143,8 @@ export default function OAuthSection({ providers, passkeyEnabled = false }: OAut
 
   const createAccount = async (values: {
     username: string
+    nickname: string
+    phone: string
     email: string
     password: string
     confirmPassword: string
@@ -234,6 +237,12 @@ export default function OAuthSection({ providers, passkeyEnabled = false }: OAut
                 <Form form={createForm} layout="vertical" requiredMark={false} onFinish={createAccount}>
                   <Form.Item name="username" label={t('username')} rules={[{ required: true, message: t('usernameRequired') }]}>
                     <Input prefix={<UserOutlined />} autoComplete="username" />
+                  </Form.Item>
+                  <Form.Item name="nickname" label={t('nickname')} rules={[{ required: true, message: t('nicknameRequired') }]}>
+                    <Input prefix={<UserOutlined />} maxLength={64} />
+                  </Form.Item>
+                  <Form.Item name="phone" label={t('phone')} rules={[{ required: true, message: t('phoneRequired') }, { pattern: /^1[3-9]\d{9}$/, message: t('phoneInvalid') }]}>
+                    <Input prefix={<PhoneOutlined />} maxLength={11} autoComplete="tel" />
                   </Form.Item>
                   <Form.Item name="email" label={t('email')} rules={[{ required: true, type: 'email', message: t('emailInvalid') }]}>
                     <Input prefix={<MailOutlined />} autoComplete="email" />

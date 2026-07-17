@@ -1,8 +1,8 @@
 package auth
 
 import (
-	"strconv"
 	"encoding/json"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
@@ -241,7 +241,7 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		}
 	}
 
-	if err := h.authService.Register(c.Request.Context(), params.Username, params.Email, params.Password, params.VerifyCode); err != nil {
+	if err := h.authService.Register(c.Request.Context(), params.Username, params.Nickname, params.Phone, params.Email, params.Password, params.VerifyCode); err != nil {
 		response.Error(c, err)
 		return
 	}
@@ -372,7 +372,7 @@ func (h *AuthHandler) ResetPassword(c *gin.Context) {
 	response.SuccessOK(c, dtoresponse.MessageResponse{Message: "password reset successful"})
 }
 
-// GetPasskeyRegisterOptions 处理 GET /api/auth/passkey/register-options
+// GetPasskeyRegisterOptions 处理 GET /api/auth/account/passkeys/register-options
 // @Summary      Get passkey registration options
 // @Description  Generate WebAuthn registration challenge for adding a passkey
 // @Tags         Passkey
@@ -380,7 +380,7 @@ func (h *AuthHandler) ResetPassword(c *gin.Context) {
 // @Security     BearerAuth
 // @Success      200  {object}  response.ApiResponse
 // @Failure      401  {object}  response.ApiResponse
-// @Router       /api/auth/passkey/register-options [get]
+// @Router       /api/auth/account/passkeys/register-options [get]
 func (h *AuthHandler) GetPasskeyRegisterOptions(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 	if userID == "" {
@@ -399,7 +399,7 @@ func (h *AuthHandler) GetPasskeyRegisterOptions(c *gin.Context) {
 	response.SuccessOK(c, gin.H{"publicKey": options.Response})
 }
 
-// VerifyPasskeyRegistration 处理 POST /api/auth/passkey/register
+// VerifyPasskeyRegistration 处理 POST /api/auth/account/passkeys
 // @Summary      Verify passkey registration
 // @Description  Submit WebAuthn attestation to complete passkey registration
 // @Tags         Passkey
@@ -409,7 +409,7 @@ func (h *AuthHandler) GetPasskeyRegisterOptions(c *gin.Context) {
 // @Param        body  body      object  true  "WebAuthn credential"
 // @Success      200   {object}  response.ApiResponse{data=dtoresponse.MessageResponse}
 // @Failure      400   {object}  response.ApiResponse
-// @Router       /api/auth/passkey/register [post]
+// @Router       /api/auth/account/passkeys [post]
 func (h *AuthHandler) VerifyPasskeyRegistration(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 	if userID == "" {
@@ -491,14 +491,14 @@ func (h *AuthHandler) VerifyPasskeyAuth(c *gin.Context) {
 	response.SuccessOK(c, loginResultToDTO(result))
 }
 
-// ListPasskeys 处理 GET /api/auth/passkey/list
+// ListPasskeys 处理 GET /api/auth/account/passkeys
 // @Summary      List passkeys
 // @Description  Return the authenticated user's registered passkeys
 // @Tags         Passkey
 // @Produce      json
 // @Security     BearerAuth
 // @Success      200  {object}  response.ApiResponse
-// @Router       /api/auth/passkey/list [get]
+// @Router       /api/auth/account/passkeys [get]
 func (h *AuthHandler) ListPasskeys(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 	if userID == "" {
@@ -514,7 +514,7 @@ func (h *AuthHandler) ListPasskeys(c *gin.Context) {
 	response.SuccessOK(c, gin.H{"passkeys": list})
 }
 
-// DeletePasskey 处理 DELETE /api/auth/passkey/:id
+// DeletePasskey 处理 DELETE /api/auth/account/passkeys/:id
 // @Summary      Delete passkey
 // @Description  Remove one of the authenticated user's passkeys (requires email verification code)
 // @Tags         Passkey
@@ -523,7 +523,7 @@ func (h *AuthHandler) ListPasskeys(c *gin.Context) {
 // @Param        id          path      string  true  "Passkey ID"
 // @Param        verifyCode  query     string  true  "Email verification code"
 // @Success      200  {object}  response.ApiResponse{data=dtoresponse.MessageResponse}
-// @Router       /api/auth/passkey/{id} [delete]
+// @Router       /api/auth/account/passkeys/{id} [delete]
 func (h *AuthHandler) DeletePasskey(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 	if userID == "" {
@@ -818,7 +818,7 @@ func (h *AuthHandler) OAuthCreateAccount(c *gin.Context) {
 		response.Error(c, apperrors.New(apperrors.ErrCodeInvalidCode, "invalid request parameters: "+err.Error()))
 		return
 	}
-	result, appErr := h.oauthService.CreateAccountForPending(c.Request.Context(), params.PendingToken, params.Username, params.Email, params.Password, params.VerifyCode)
+	result, appErr := h.oauthService.CreateAccountForPending(c.Request.Context(), params.PendingToken, params.Username, params.Nickname, params.Phone, params.Email, params.Password, params.VerifyCode)
 	if appErr != nil {
 		response.Error(c, appErr)
 		return
@@ -1016,6 +1016,8 @@ func userInfoToDTO(info *authsvc.UserInfoResult) dtoresponse.UserInfo {
 	return dtoresponse.UserInfo{
 		ID:                  info.ID,
 		Username:            info.Username,
+		Nickname:            info.Nickname,
+		Phone:               info.Phone,
 		Avatar:              info.Avatar,
 		Email:               info.Email,
 		Role:                info.Role,
@@ -1063,6 +1065,8 @@ func userModelToResult(u *model.User) *authsvc.UserInfoResult {
 	return &authsvc.UserInfoResult{
 		ID:                  strconv.FormatUint(u.ID, 10),
 		Username:            u.Username,
+		Nickname:            u.Nickname,
+		Phone:               u.Phone,
 		Avatar:              u.Avatar,
 		Email:               u.Email,
 		Role:                string(u.Role),

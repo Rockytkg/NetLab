@@ -35,11 +35,11 @@ func TestNormalizeUserIDs(t *testing.T) {
 func TestLocalizedExportHeaders(t *testing.T) {
 	initTestI18N(t)
 	en := localizedHeaders("en-US", exportHeaderKeys)
-	if en[0] != "Username" || en[4] != "2FA Enabled" {
+	if en[0] != "Username" || en[2] != "Phone" || en[6] != "2FA Enabled" {
 		t.Fatalf("unexpected en headers: %v", en)
 	}
 	zh := localizedHeaders("zh-CN", exportHeaderKeys)
-	if zh[0] != "用户名" || zh[6] != "创建时间" {
+	if zh[0] != "用户名" || zh[2] != "手机号" || zh[7] != "创建时间" {
 		t.Fatalf("unexpected zh headers: %v", zh)
 	}
 }

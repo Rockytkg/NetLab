@@ -100,13 +100,8 @@
   "profile": {
     "subtitle": "Manage your account profile, password, passkeys, and linked third-party accounts.",
     "username": "Username",
-    "email": "Email",
-    "role": {
-      "super_admin": "Super Administrator",
-      "admin": "Administrator",
-      "editor": "Editor",
-      "viewer": "Viewer"
-    }
+    "phone": "Phone",
+    "email": "Email"
   },
   "account": {
     "codeLabel": "Email Verification Code",
@@ -158,10 +153,12 @@
     "subtitle": "Manage platform users: create, edit, reset passwords, and batch import/export.",
     "columns": {
       "username": "Username",
+      "nickname": "Nickname",
+      "phone": "Phone",
       "email": "Email",
       "role": "Role",
       "status": "Status",
-      "lastLogin": "Last Login",
+      "createdAt": "Created At",
       "actions": "Actions"
     },
     "status": {
@@ -169,28 +166,26 @@
       "disabled": "Disabled",
       "locked": "Locked"
     },
-    "roles": {
-      "admin": "Administrator",
-      "editor": "Editor",
-      "viewer": "Viewer"
-    },
     "delete": "Delete Users",
     "addUser": "Add User",
     "editUser": "Edit User",
     "resetPassword": "Reset Password",
-    "importExcel": "Import Excel",
-    "importExcelFormat": "Upload an .xlsx, .xls, or .csv file. The first row must contain username, email, role, and password headers in English or Chinese; role defaults to viewer when empty. The file is parsed in the browser.",
+    "importUsers": "Import Users",
+    "importUsersFormat": "Fill in the user information according to the template. The first row must contain username, nickname, phone, email, role, and password headers; enter one user per row. Role defaults to viewer when empty.",
     "export": "Export Users",
     "exportSuccess": "Export successful",
-    "invalidExcelFile": "Please upload an .xlsx, .xls, or .csv file",
+    "invalidImportFile": "Please upload a valid user import file",
     "invalidImportData": "The import file is invalid. Check its headers and data rows.",
     "downloadTemplate": "Download Import Template",
-    "searchPlaceholder": "Search username or email",
+    "searchPlaceholder": "Search username, nickname, phone, or email",
     "statusFilter": "Filter Status",
     "roleFilter": "Filter Role",
     "selectedCount": "{{count}} selected",
     "total": "{{total}} users",
     "usernameRequired": "Please enter a username",
+    "nicknameRequired": "Please enter a nickname",
+    "phoneRequired": "Please enter a phone number",
+    "phoneInvalid": "Please enter a valid phone number",
     "usernameLength": "Username must be 3-64 characters",
     "usernameInvalid": "Username may contain only letters, numbers, underscores, and hyphens",
     "emailRequired": "Please enter an email",

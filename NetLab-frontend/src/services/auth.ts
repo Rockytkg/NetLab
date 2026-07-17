@@ -108,7 +108,7 @@ export const authApi = {
 
   /** 获取注册 Passkey 的 challenge */
   getPasskeyRegisterOptions(): Promise<PasskeyRegisterOptions> {
-    return request.get('/auth/passkey/register-options')
+    return request.get('/auth/account/passkeys/register-options')
   },
 
   /** 验证并注册新的 Passkey（credential 为原始 WebAuthn attestation） */
@@ -117,7 +117,7 @@ export const authApi = {
     verifyCode: string
     credential: Record<string, unknown>
   }): Promise<{ message: string }> {
-    return request.post('/auth/passkey/register', payload)
+    return request.post('/auth/account/passkeys', payload)
   },
 
   /** 获取 Passkey 登录的 challenge 及会话 ID */
@@ -135,12 +135,12 @@ export const authApi = {
 
   /** 列出当前用户已注册的 passkey */
   listPasskeys(): Promise<{ passkeys: PasskeyInfo[] }> {
-    return request.get('/auth/passkey/list')
+    return request.get('/auth/account/passkeys')
   },
 
   /** 删除一个 passkey（需邮箱验证码） */
   deletePasskey(id: string, verifyCode: string): Promise<{ message: string }> {
-    return request.delete(`/auth/passkey/${id}`, {
+    return request.delete(`/auth/account/passkeys/${id}`, {
       params: { verifyCode },
     })
   },
