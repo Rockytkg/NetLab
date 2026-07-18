@@ -73,6 +73,8 @@ export interface PasskeyInfo {
 export interface AdminUserView {
   id: string
   username: string
+  nickname: string
+  phone: string
   email: string
   role: string
   roleIdentifier: string
@@ -123,13 +125,27 @@ export interface ExportUsersParams {
   userIds: string[]
 }
 
+/** 后端返回的用户导出数据，表格文件由前端生成。 */
+export interface AdminUserExportView {
+  username: string
+  nickname: string
+  phone: string
+  email: string
+  roleId: string
+  roleIdentifier: string
+  roleName: string
+  status: string
+  createdAt: string
+}
+
 /** 批量导入用户记录 */
 export interface ImportUserParams {
 	username: string
 	nickname: string
 	phone: string
   email: string
-  role: string
+	roleId: string
+	roleIdentifier: string
   password: string
 }
 

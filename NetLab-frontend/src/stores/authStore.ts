@@ -115,7 +115,7 @@ export const useAuthStore = create<AuthState>()(
             userInfo.permissions = []
           }
         }
-        return state as AuthState
+        return state as unknown as AuthState
       },
       partialize: (state) => ({
         accessToken: state.accessToken,

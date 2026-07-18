@@ -163,7 +163,7 @@ export default function ForgotPasswordModal({ open, onClose }: ForgotPasswordMod
   const [verifyLoading, setVerifyLoading] = useState(false)
   const [resetLoading, setResetLoading] = useState(false)
   const [cooldown, setCooldown] = useState(0)
-  const timerRef = useRef<ReturnType<typeof setInterval>>()
+  const timerRef = useRef<ReturnType<typeof setInterval> | undefined>(undefined)
 
   // ── 打开/关闭时重置 ──
   const handleClose = useCallback(() => {

@@ -168,7 +168,7 @@ func main() {
 	}
 
 	userAdminService := authsvc.NewUserAdminService(userRepo, logger, rbacService)
-	importExportService := authsvc.NewUserImportExportService(userRepo, logger, rbacService)
+	importService := authsvc.NewUserImportService(userRepo, logger)
 
 	// ── 初始化处理器 ─────────────────────────────────────────────────
 	twoFactorService := authsvc.NewTwoFactorService(userRepo, tokenRepo, tokenService, configService, logger)
@@ -176,7 +176,7 @@ func main() {
 	authHandler := auth.NewAuthHandler(
 		authService, verificationService, passwordService, passkeyService, tokenService, oauthService, twoFactorService, captchaMgr, rbacService, logger,
 	)
-	adminHandler := admin.NewAdminHandler(adminService, userAdminService, importExportService, emailSender, logger)
+	adminHandler := admin.NewAdminHandler(adminService, userAdminService, importService, emailSender, logger)
 	rHandler := rbacHandler.NewHandler(rbacService)
 
 	// ── 初始化限流器 ─────────────────────────────────────────────────

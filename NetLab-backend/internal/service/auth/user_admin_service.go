@@ -46,16 +46,17 @@ type AdminUserView struct {
 	CreatedAt        string `json:"createdAt"`
 }
 
-// AdminUserExportView 是导出接口专用视图，不包含两步验证状态。
+// AdminUserExportView 是导出接口专用视图，由前端生成表格文件。
 type AdminUserExportView struct {
-	ID        string `json:"id"`
-	Username  string `json:"username"`
-	Nickname  string `json:"nickname"`
-	Phone     string `json:"phone"`
-	Email     string `json:"email"`
-	Role      string `json:"role"`
-	Status    string `json:"status"`
-	CreatedAt string `json:"createdAt"`
+	Username       string `json:"username"`
+	Nickname       string `json:"nickname"`
+	Phone          string `json:"phone"`
+	Email          string `json:"email"`
+	RoleID         string `json:"roleId"`
+	RoleIdentifier string `json:"roleIdentifier"`
+	RoleName       string `json:"roleName"`
+	Status         string `json:"status"`
+	CreatedAt      string `json:"createdAt"`
 }
 
 type UserListResult struct {
@@ -114,7 +115,11 @@ func (s *UserAdminService) ExportUsersData(ctx context.Context, ids []string) ([
 	items := make([]AdminUserExportView, 0, len(ids))
 	for _, id := range ids {
 		if user, ok := byID[strings.TrimSpace(id)]; ok {
-			items = append(items, AdminUserExportView{ID: strconv.FormatUint(user.ID, 10), Username: user.Username, Nickname: user.Nickname, Phone: user.Phone, Email: user.Email, Role: s.roleName(string(user.Role)), Status: string(user.Status), CreatedAt: user.CreatedAt.Format("2006-01-02T15:04:05Z07:00")})
+			roleIdentifier := user.RoleIdentifier
+			if roleIdentifier == "" {
+				roleIdentifier = string(user.Role)
+			}
+			items = append(items, AdminUserExportView{Username: user.Username, Nickname: user.Nickname, Phone: user.Phone, Email: user.Email, RoleID: strconv.FormatUint(user.RoleID, 10), RoleIdentifier: roleIdentifier, RoleName: user.RoleName, Status: string(user.Status), CreatedAt: user.CreatedAt.Format("2006-01-02T15:04:05Z07:00")})
 		}
 	}
 	return items, nil

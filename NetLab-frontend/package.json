@@ -6,10 +6,11 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "typecheck": "tsc --noEmit",
     "lint": "oxlint",
     "preview": "vite preview",
     "i18n:check": "node scripts/i18n-check.cjs",
-    "check": "pnpm run i18n:check && pnpm lint && pnpm build"
+    "check": "pnpm run i18n:check && pnpm typecheck && pnpm lint && pnpm build"
   },
   "dependencies": {
     "@ant-design/icons": "^6.3.2",

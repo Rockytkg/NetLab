@@ -203,9 +203,25 @@ func (r *UserRepository) FindByIDs(ctx context.Context, ids []string) ([]model.U
 	if len(ids) == 0 {
 		return nil, nil
 	}
-	var users []model.User
-	if err := r.db.WithContext(ctx).Where("id IN ?", ids).Find(&users).Error; err != nil {
+	type userWithRole struct {
+		model.User
+		RoleIdentifier string `gorm:"column:role_identifier"`
+		RoleName       string `gorm:"column:role_name"`
+	}
+	var rows []userWithRole
+	if err := r.db.WithContext(ctx).
+		Table("nb_users AS u").
+		Select("u.*, r.role AS role_identifier, r.role_name AS role_name").
+		Joins("LEFT JOIN nb_roles AS r ON r.id = u.role_id").
+		Where("u.id IN ?", ids).
+		Find(&rows).Error; err != nil {
 		return nil, err
+	}
+	users := make([]model.User, len(rows))
+	for i, row := range rows {
+		users[i] = row.User
+		users[i].RoleIdentifier = row.RoleIdentifier
+		users[i].RoleName = row.RoleName
 	}
 	return users, nil
 }
@@ -234,6 +250,15 @@ func (r *UserRepository) roleID(ctx context.Context, role model.UserRole) (uint6
 		return 0, err
 	}
 	return roleModel.ID, nil
+}
+
+// FindRoleByID 查找角色 ID 对应的角色。
+func (r *UserRepository) FindRoleByID(ctx context.Context, id uint64) (*model.Role, error) {
+	var role model.Role
+	if err := r.db.WithContext(ctx).Where("id = ?", id).First(&role).Error; err != nil {
+		return nil, err
+	}
+	return &role, nil
 }
 
 // BatchUpdatePassword 批量重置用户密码为同一哈希，并清除锁定状态。

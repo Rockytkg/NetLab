@@ -1,10 +1,7 @@
 package admin
 
 import (
-	"fmt"
-	"net/http"
 	"strconv"
-	"time"
 
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
@@ -21,21 +18,21 @@ import (
 
 // AdminHandler 处理系统设置与用户资源端点，访问由 RBAC 权限控制。
 type AdminHandler struct {
-	adminService        *authsvc.AdminService
-	userAdminService    *authsvc.UserAdminService
-	importExportService *authsvc.UserImportExportService
-	mailer              *mailer.Provider
-	logger              *zap.Logger
+	adminService     *authsvc.AdminService
+	userAdminService *authsvc.UserAdminService
+	importService    *authsvc.UserImportService
+	mailer           *mailer.Provider
+	logger           *zap.Logger
 }
 
 // NewAdminHandler 创建一个新的 AdminHandler。
-func NewAdminHandler(adminService *authsvc.AdminService, userAdminService *authsvc.UserAdminService, importExportService *authsvc.UserImportExportService, mailerProvider *mailer.Provider, logger *zap.Logger) *AdminHandler {
+func NewAdminHandler(adminService *authsvc.AdminService, userAdminService *authsvc.UserAdminService, importService *authsvc.UserImportService, mailerProvider *mailer.Provider, logger *zap.Logger) *AdminHandler {
 	return &AdminHandler{
-		adminService:        adminService,
-		userAdminService:    userAdminService,
-		importExportService: importExportService,
-		mailer:              mailerProvider,
-		logger:              logger,
+		adminService:     adminService,
+		userAdminService: userAdminService,
+		importService:    importService,
+		mailer:           mailerProvider,
+		logger:           logger,
 	}
 }
 
@@ -256,15 +253,16 @@ func (h *AdminHandler) ImportUsers(c *gin.Context) {
 	records := make([]authsvc.UserImportRecord, len(params.Users))
 	for i, user := range params.Users {
 		records[i] = authsvc.UserImportRecord{
-			Username: user.Username,
-			Nickname: user.Nickname,
-			Phone:    user.Phone,
-			Email:    user.Email,
-			Role:     user.Role,
-			Password: user.Password,
+			Username:       user.Username,
+			Nickname:       user.Nickname,
+			Phone:          user.Phone,
+			Email:          user.Email,
+			RoleID:         user.RoleID,
+			RoleIdentifier: user.RoleIdentifier,
+			Password:       user.Password,
 		}
 	}
-	summary, appErr := h.importExportService.ImportUsers(c.Request.Context(), records)
+	summary, appErr := h.importService.ImportUsers(c.Request.Context(), records)
 	if appErr != nil {
 		response.Error(c, appErr)
 		return
@@ -272,35 +270,17 @@ func (h *AdminHandler) ImportUsers(c *gin.Context) {
 	response.SuccessOK(c, summary)
 }
 
-// xlsxContentType 是 .xlsx 文件的标准 MIME 类型。
-const xlsxContentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-
-// ExportUsers 处理 POST /api/users/export。
-// 仅导出请求体中勾选的用户；Excel 构建成功后才写响应头，避免出错时
-// 向已声明为 xlsx 的响应写入 JSON 错误导致下载损坏文件。
+// ExportUsers 处理 POST /api/users/export，返回前端生成表格所需的 JSON 数据。
 func (h *AdminHandler) ExportUsers(c *gin.Context) {
 	var params request.ExportUsersParams
 	if err := c.ShouldBindJSON(&params); err != nil {
 		response.Error(c, apperrors.New(apperrors.ErrCodeInvalidCode, "invalid parameters: "+err.Error()))
 		return
 	}
-	data, appErr := h.importExportService.ExportUsersExcel(c.Request.Context(), params.UserIDs, contextkeys.GetLocale(c))
+	data, appErr := h.userAdminService.ExportUsersData(c.Request.Context(), params.UserIDs)
 	if appErr != nil {
 		response.Error(c, appErr)
 		return
 	}
-	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=users-%s.xlsx", time.Now().Format("20060102-150405")))
-	c.Data(http.StatusOK, xlsxContentType, data)
-}
-
-// DownloadImportTemplate 处理 GET /api/users/import-template。
-// 返回按请求 locale 本地化表头的 xlsx 导入模板。
-func (h *AdminHandler) DownloadImportTemplate(c *gin.Context) {
-	data, appErr := h.importExportService.BuildImportTemplate(contextkeys.GetLocale(c))
-	if appErr != nil {
-		response.Error(c, appErr)
-		return
-	}
-	c.Header("Content-Disposition", "attachment; filename=netlab-users-template.xlsx")
-	c.Data(http.StatusOK, xlsxContentType, data)
+	response.SuccessOK(c, data)
 }

@@ -14,6 +14,7 @@ import type {
   UserListParams,
   UpdateUserParams,
   CreateUserParams,
+  AdminUserExportView,
 } from '@/types/settings'
 
 /** 触发浏览器将 Blob 保存为本地文件。 */
@@ -26,6 +27,15 @@ function saveBlob(blob: Blob, filename: string) {
   a.click()
   document.body.removeChild(a)
   URL.revokeObjectURL(url)
+}
+
+function saveWorkbook(rows: unknown[][], headers: string[], filename: string, widths: number[]) {
+  const worksheet = XLSX.utils.aoa_to_sheet([headers, ...rows])
+  worksheet['!cols'] = widths.map((wch) => ({ wch }))
+  const workbook = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(workbook, worksheet, 'Users')
+  const bytes = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' })
+  saveBlob(new Blob([bytes], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), filename)
 }
 
 /**
@@ -95,20 +105,23 @@ export const adminApi = {
     return request.put('/users/reset-password', { userIds, newPassword })
   },
 
-  /** 导出勾选的用户为 Excel 文件（触发浏览器下载） */
-  async exportUsers(params: ExportUsersParams): Promise<void> {
-    const response = await request.post('/users/export', params, {
-      responseType: 'blob',
-    })
-    saveBlob(response as unknown as Blob, `netlab-users-${new Date().toISOString().slice(0, 10)}.xlsx`)
+  /** 获取导出数据并由浏览器生成 Excel 文件。 */
+  async exportUsers(params: ExportUsersParams, headers: string[]): Promise<void> {
+    // request 的响应拦截器已解包 API 信封，但其 Axios 类型声明保留了原始响应形状。
+    const users = await request.post('/users/export', params) as unknown as AdminUserExportView[]
+    const rows = users.map((user) => [
+      user.username, user.nickname, user.phone, user.email, user.roleId,
+      user.roleIdentifier, user.roleName, user.status, user.createdAt,
+    ])
+    saveWorkbook(rows, headers, `netlab-users-${new Date().toISOString().slice(0, 10)}.xlsx`, [20, 20, 16, 32, 12, 18, 20, 12, 24])
   },
 
-  /** 下载本地化表头的用户导入模板（xlsx） */
-  async downloadImportTemplate(): Promise<void> {
-    const response = await request.get('/users/import-template', {
-      responseType: 'blob',
-    })
-    saveBlob(response as unknown as Blob, 'netlab-users-template.xlsx')
+  /** 在浏览器生成用户导入模板。 */
+  downloadImportTemplate(headers: string[]): void {
+    saveWorkbook([
+      ['alice', 'Alice', '13800000001', 'alice@example.com', '', 'viewer', 'Vermilion-Otter-42'],
+      ['bob', 'Bob', '13800000002', 'bob@example.com', '', 'editor', 'Harbor-Piano-Sunset-9'],
+    ], headers, 'netlab-users-template.xlsx', [20, 20, 16, 32, 12, 18, 24])
   },
 
   /** 在浏览器解析 xlsx/xls/csv，再提交后端约定的 JSON。 */
@@ -119,50 +132,18 @@ export const adminApi = {
 
     const rows = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, defval: '', raw: false })
     if (rows.length < 2) throw new Error('import file has no data rows')
-    const headers = (rows[0] ?? []).map((value) => normalizeImportHeader(String(value)))
-    const indexes = {
-      username: headers.indexOf('username'),
-      nickname: headers.indexOf('nickname'),
-      phone: headers.indexOf('phone'),
-      email: headers.indexOf('email'),
-      role: headers.indexOf('role'),
-      password: headers.indexOf('password'),
-    }
-    if (indexes.username < 0 || indexes.nickname < 0 || indexes.phone < 0 || indexes.email < 0) {
-      throw new Error('username, nickname, phone and email columns are required')
-    }
-
     const users: ImportUserParams[] = rows.slice(1).map((row) => ({
-      username: cell(row, indexes.username),
-      nickname: cell(row, indexes.nickname),
-      phone: cell(row, indexes.phone),
-      email: cell(row, indexes.email),
-      role: cell(row, indexes.role),
-      password: cell(row, indexes.password),
-    })).filter((user) => user.username || user.email || user.role || user.password)
+      username: cell(row, 0),
+      nickname: cell(row, 1),
+      phone: cell(row, 2),
+      email: cell(row, 3),
+      roleId: cell(row, 4),
+      roleIdentifier: cell(row, 5),
+      password: cell(row, 6),
+    })).filter((user) => user.username || user.email || user.roleId || user.roleIdentifier || user.password)
     if (users.length === 0) throw new Error('import file has no data rows')
     return request.post('/users/import', { users })
   },
-}
-
-function normalizeImportHeader(value: string) {
-  let header = value.replace(/^\uFEFF/, '').trim().toLowerCase()
-  const suffixIndex = header.search(/[ \u3000(（]/)
-  if (suffixIndex > 0) header = header.slice(0, suffixIndex).trim()
-  return ({
-    username: 'username',
-    '\u7528\u6237\u540d': 'username',
-    nickname: 'nickname',
-    '\u6635\u79f0': 'nickname',
-    phone: 'phone',
-    '\u624b\u673a\u53f7': 'phone',
-    email: 'email',
-    '\u90ae\u7bb1': 'email',
-    role: 'role',
-    '\u89d2\u8272': 'role',
-    password: 'password',
-    '\u5bc6\u7801': 'password',
-  } as Record<string, string>)[header] ?? header
 }
 
 function cell(row: unknown[], index: number) {

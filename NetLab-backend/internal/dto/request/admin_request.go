@@ -92,10 +92,11 @@ type ImportUsersParams struct {
 
 // ImportUserParams 是单条待导入用户数据。表格文件由前端解析后传入。
 type ImportUserParams struct {
-	Username string `json:"username" binding:"required,max=64"`
-	Nickname string `json:"nickname" binding:"required,max=64"`
-	Phone    string `json:"phone" binding:"required,max=20"`
-	Email    string `json:"email" binding:"required,max=255"`
-	Role     string `json:"role" binding:"required,max=64"`
-	Password string `json:"password" binding:"required,max=72"`
+	Username       string `json:"username" binding:"required,max=64"`
+	Nickname       string `json:"nickname" binding:"required,max=64"`
+	Phone          string `json:"phone" binding:"required,max=20"`
+	Email          string `json:"email" binding:"required,max=255"`
+	RoleID         string `json:"roleId" binding:"omitempty,numeric"`
+	RoleIdentifier string `json:"roleIdentifier" binding:"omitempty,max=64"`
+	Password       string `json:"password" binding:"required,max=72"`
 }

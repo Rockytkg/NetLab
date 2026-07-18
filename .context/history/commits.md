@@ -1,6 +1,23 @@
 # 提交历史
 
-> 自动生成于 2026-07-18 10:33:16
+> 自动生成于 2026-07-18 12:00:00
+
+## 2026-07-18 — ♻️ refactor(admin): Excel 导入导出从前端生成，移除后端 excelize 依赖
+
+- **类型**: refactor
+- **分支**: main
+- **文件数**: 19 (+202/-300)
+- **决策**:
+  - Excel 文件生成从后端 Go（excelize/v2）迁移至前端 TypeScript（xlsx 库），后端导出接口改为返回 JSON 数据
+  - UserImportExportService 重构为 UserImportService，专注导入业务逻辑，移除 Excel 构建能力
+  - /users/export 返回 AdminUserExportView JSON 数组，不再生成二进制；移除 /users/import-template 接口
+  - 导入角色字段从扁平 role 字符串重构为 roleId（数字 ID）+ roleIdentifier（标识符）双字段
+  - FindByIDs 联表 JOIN nb_roles 以填充 RoleIdentifier/RoleName，新增 FindRoleByID 方法
+  - 前端 adminApi.exportUsers 使用 xlsx 库的 aoa_to_sheet 在浏览器构建工作簿，模板由 adminApi.downloadImportTemplate 在客户端生成
+  - 导入解析简化为按列索引读取，移除 normalizeImportHeader 表头名称标准化逻辑
+  - 新增 typecheck 脚本（tsc --noEmit），加入 check 流水线
+  - 修复 useRef 泛型类型，authStore persist partialize 返回类型断言
+  - 新增 OperationsFilter 和 DEVICE_STATUS_CONFIG 类型
 
 ## 2026-07-18 — 角色从扁平字符串重构为关系化 Role 表
 

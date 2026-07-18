@@ -83,6 +83,8 @@ type User struct {
 	Avatar              string     `gorm:"type:varchar(512)" json:"avatar"`
 	RoleID              uint64     `gorm:"column:role_id;not null;index" json:"roleId"`
 	Role                UserRole   `gorm:"-" json:"-"`
+	RoleIdentifier      string     `gorm:"-" json:"-"`
+	RoleName            string     `gorm:"-" json:"-"`
 	Status              UserStatus `gorm:"type:varchar(16);not null;default:'active'" json:"status"`
 	ForcePasswordChange bool       `gorm:"type:boolean;not null;default:false" json:"forcePasswordChange"`
 	ForceEmailChange    bool       `gorm:"type:boolean;not null;default:false" json:"forceEmailChange"`

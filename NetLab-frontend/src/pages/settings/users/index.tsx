@@ -228,7 +228,17 @@ export default function UsersPage() {
     setExporting(true)
     try {
       const params: ExportUsersParams = { userIds: selectedUsers.map((u) => u.id) }
-      await adminApi.exportUsers(params)
+      await adminApi.exportUsers(params, [
+        t('settings:users.columns.username'),
+        t('settings:users.columns.nickname'),
+        t('settings:users.columns.phone'),
+        t('settings:users.columns.email'),
+        t('settings:users.columns.roleId'),
+        t('settings:users.columns.roleIdentifier'),
+        t('settings:users.columns.roleName'),
+        t('settings:users.columns.status'),
+        t('settings:users.columns.createdAt'),
+      ])
       message.success(t('settings:users.exportSuccess'))
     } catch {
       // 拦截器已提示错误
@@ -347,7 +357,15 @@ export default function UsersPage() {
   const downloadTemplate = async () => {
     setTemplateDownloading(true)
     try {
-      await adminApi.downloadImportTemplate()
+      adminApi.downloadImportTemplate([
+        t('settings:users.columns.username'),
+        t('settings:users.columns.nickname'),
+        t('settings:users.columns.phone'),
+        t('settings:users.columns.email'),
+        t('settings:users.columns.roleId'),
+        t('settings:users.columns.roleIdentifier'),
+        t('settings:password'),
+      ])
     } catch {
       // 拦截器已提示错误
     } finally {

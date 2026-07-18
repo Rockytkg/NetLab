@@ -29,7 +29,7 @@ export default function RegisterForm({ onBack }: RegisterFormProps) {
   const [captchaId, setCaptchaId] = useState<string | null>(null)
   const [captchaImage, setCaptchaImage] = useState<string | null>(null)
   const [captchaLoading, setCaptchaLoading] = useState(false)
-  const timerRef = useRef<ReturnType<typeof setInterval>>()
+  const timerRef = useRef<ReturnType<typeof setInterval> | undefined>(undefined)
   const [form] = Form.useForm()
 
   const fetchCaptcha = useCallback(async () => {
