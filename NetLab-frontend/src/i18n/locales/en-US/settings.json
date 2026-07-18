@@ -239,6 +239,41 @@
     "importDone": "Imported {{created}} users successfully",
     "importResult": "Import finished: {{created}} created, {{skipped}} skipped"
   },
+  "loginLogs": {
+    "searchPlaceholder": "Search username or IP",
+    "statusAll": "All Statuses",
+    "typeAll": "All Methods",
+    "total": "{{total}} records",
+    "status": {
+      "success": "Success",
+      "failed": "Failed",
+      "pending": "Pending 2FA"
+    },
+    "type": {
+      "password": "Password",
+      "twoFactor": "Two-Factor",
+      "recovery": "Recovery Code",
+      "passkey": "Passkey",
+      "oauth": "Third-party Login"
+    },
+    "exportSelected": "Export Selected",
+    "deleteSelected": "Delete Selected",
+    "deleteConfirmTitle": "Confirm Log Deletion",
+    "deleteConfirm": "Delete the selected {{count}} login log(s)? This cannot be undone.",
+    "deleted": "Deleted {{count}} log(s)",
+    "columns": {
+      "time": "Time",
+      "username": "Username",
+      "type": "Method",
+      "status": "Status",
+      "ip": "IP Address",
+      "os": "OS",
+      "browser": "Browser",
+      "location": "Location",
+      "fingerprint": "Browser Fingerprint",
+      "userAgent": "User-Agent"
+    }
+  },
   "roles": {
     "addRole": "Add Role",
     "editRole": "Edit Role",
@@ -275,6 +310,10 @@
     "permissionNames": {
       "auth": {
         "read": "Read current account"
+      },
+      "log": {
+        "read": "View login logs",
+        "delete": "Delete login logs"
       },
       "rbac": {
         "read": "View roles and permissions",

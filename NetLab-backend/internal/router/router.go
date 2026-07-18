@@ -11,6 +11,7 @@ import (
 	"netlab-backend/config"
 	"netlab-backend/internal/handler/admin"
 	"netlab-backend/internal/handler/auth"
+	loghandler "netlab-backend/internal/handler/log"
 	rbacHandler "netlab-backend/internal/handler/rbac"
 	"netlab-backend/internal/middleware"
 	"netlab-backend/internal/permission"
@@ -25,6 +26,7 @@ type RouterConfig struct {
 	AuthHandler   *auth.AuthHandler
 	AdminHandler  *admin.AdminHandler
 	RBACHandler   *rbacHandler.Handler
+	LogHandler    *loghandler.Handler
 	AuthService   *authsvc.AuthService
 	TokenService  *authsvc.TokenService
 	CryptoService *authsvc.CryptoService
@@ -335,6 +337,19 @@ func Setup(cfg RouterConfig) *gin.Engine {
 						cfg.RBACHandler.ListAllPermissions,
 					)
 				}
+			}
+
+			// ── 日志查询 ──
+			if cfg.LogHandler != nil {
+				logsGroup := authenticated.Group("/logs")
+				logsGroup.GET("/logins",
+					cfg.limitStandard("logs-login-list"),
+					middleware.RequirePermission(cfg.Authorizer, permission.LogRead),
+					cfg.LogHandler.ListLoginLogs)
+				logsGroup.DELETE("/logins",
+					cfg.limitModerate("logs-login-delete"),
+					middleware.RequirePermission(cfg.Authorizer, permission.LogDelete),
+					cfg.LogHandler.DeleteLoginLogs)
 			}
 
 			// ── 按资源划分的受保护路由 ──

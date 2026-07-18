@@ -60,6 +60,7 @@ func AutoMigrate(db *gorm.DB) error {
 		&model.Role{},
 		&model.Permission{},
 		&model.RolePermission{},
+		&model.LoginLog{},
 	}
 
 	if err := db.AutoMigrate(models...); err != nil {

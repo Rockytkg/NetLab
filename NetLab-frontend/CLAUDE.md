@@ -1,12 +1,12 @@
 [根目录](../CLAUDE.md) > **NetLab-frontend**
 
-# NetLab Frontend — Development Constitution
+# NetLab Frontend -- Development Constitution
 
 > **Product**: 网络管理中心前端  
 > **Domain**: 真实网络设备纳管、SNMP 监控、Syslog 日志、RADIUS 认证审计、告警与运维模板  
 > **Stack**: React 19 · TypeScript 6 · Ant Design 6.x · Vite 8 · Zustand 5 · React Router 7 · i18next  
 > **Design Doc**: `docs/ui-redesign-proposal.md`  
-> **Last Updated**: 2026-07-18
+> **Last Updated**: 2026-07-19
 
 ---
 
@@ -18,6 +18,7 @@ NetLab is no longer modeled as a simulator/lab product. Frontend architecture mu
 |--------|---------------|-------------|
 | Operations overview | `/dashboard` | `src/pages/dashboard/` |
 | System/account settings | `/settings/**` | `src/pages/settings/` |
+| Login audit (Phase 1.5) | `/settings/login-logs` | `src/pages/settings/login-logs/` |
 
 Planned operations domains (device groups, device inventory, topology, observability, operations templates) had placeholder pages that were removed in the 2026-07-18 cleanup; they will be rebuilt with real data sources in Phase 2/3 under `/device-groups`, `/device-library`, `/devices/:deviceId/topology`, `/observability`, and `/operations-templates`.
 
@@ -92,7 +93,7 @@ Active namespaces:
 | `login` | Login, register, forgot-password, passkey, OAuth, 2FA |
 | `menu` | Navigation labels and route menu text |
 | `operations` | Device groups, inventory, topology, monitoring, Syslog, RADIUS, alerts, templates |
-| `settings` | System and account settings |
+| `settings` | System and account settings, login logs, roles |
 
 Rules:
 
@@ -118,6 +119,14 @@ src/
 │   ├── dashboard/
 │   ├── account/
 │   ├── settings/
+│   │   ├── account/       # Profile, passkey, OAuth, 2FA, email, password panels
+│   │   ├── panels/        # Beian, Security, SMTP, OAuth admin panels
+│   │   ├── users/         # User management page
+│   │   ├── roles/         # RBAC role management page
+│   │   ├── login-logs/    # Login audit log page (NEW)
+│   │   ├── components/    # Shared settings components
+│   │   ├── context.ts
+│   │   └── index.tsx
 │   └── error/
 ├── router/
 ├── stores/
@@ -125,13 +134,38 @@ src/
 │   ├── authStore.ts
 │   └── operationsStore.ts
 ├── services/
+│   ├── request.ts         # Axios instance with interceptors
+│   ├── auth.ts            # Auth API (login, register, etc.)
+│   ├── authSecurity.ts    # Security-related auth APIs
+│   ├── account.ts         # Account management APIs
+│   ├── admin.ts           # System settings + user admin APIs
+│   ├── rbac.ts            # RBAC APIs
+│   └── log.ts             # Login log APIs (NEW)
 ├── hooks/
+│   ├── useAuth.ts
+│   ├── usePasskey.ts
+│   ├── useI18n.ts
+│   ├── useResolvedTheme.ts
+│   └── usePermission.ts
 ├── types/
 │   ├── auth.ts
 │   ├── api.ts
 │   ├── i18n.ts
 │   ├── operations.ts
-│   └── settings.ts
+│   ├── settings.ts
+│   └── log.ts             # Login log DTOs (NEW)
+├── utils/
+│   ├── crypto.ts          # HMAC-SHA256 signing
+│   ├── auth-flow.ts       # Token refresh, retry queue
+│   ├── auth-normalize.ts  # Auth data normalization
+│   ├── password-strength.ts
+│   ├── i18n-bridge.ts
+│   ├── message-bridge.ts
+│   ├── avatar.ts
+│   ├── constants.ts
+│   ├── fingerprint.ts     # Browser fingerprint via FingerprintJS (NEW)
+│   ├── clientInfo.ts      # OS/browser detection via UA-Parser (NEW)
+│   └── xlsx.ts           # Browser-side Excel export (NEW)
 └── i18n/locales/{zh-CN,en-US}/
     ├── common.json
     ├── login.json
@@ -167,6 +201,8 @@ Use these as canonical route contracts (currently registered):
 /settings/oauth
 /settings/profile
 /settings/users
+/settings/roles
+/settings/login-logs   # (NEW) 登录审计日志
 ```
 
 Reserved for Phase 2+ (re-add pages together with real data sources; do not repurpose these paths):
@@ -193,7 +229,23 @@ Legacy routes are redirects only:
 
 ---
 
-## 8. Quality Checklist
+## 8. Client Environment Detection (Login Audit)
+
+The frontend collects client environment info for login audit logging. Two utilities initialize at app startup:
+
+| Utility | Library | Data Collected | Headers Sent |
+|---------|---------|---------------|-------------|
+| `utils/fingerprint.ts` | FingerprintJS | Browser fingerprint (visitor ID) | `X-Browser-Fingerprint` |
+| `utils/clientInfo.ts` | ua-parser-js with Client Hints | OS name + version + architecture, Browser name + major version | `X-Client-OS`, `X-Client-Browser` |
+
+Both utilities are:
+- Module-level singletons (init once, cache result)
+- Fail-silent (errors never propagate to calling code)
+- Used by the `AuthHandler` login flows to record login audit logs (back-end stores in `nb_login_logs`)
+
+---
+
+## 9. Quality Checklist
 
 Before considering work complete:
 
@@ -205,25 +257,28 @@ Before considering work complete:
 [ ] New operations UI uses operations-domain naming
 [ ] New routes are registered in router, SideMenu, and HeaderBar title mapping
 [ ] Legacy lab/simulator wording is not introduced
+[ ] New utils have proper error handling (fail-silent pattern for capability-optional features)
 ```
 
 ---
 
-## 9. Roadmap
+## 10. Roadmap
 
 | Phase | Status | Scope |
 |-------|--------|-------|
 | Phase 1 | Done | Layout shell, auth, theme, i18n, operations information architecture |
+| Phase 1.5 | Done | Login audit log page, browser fingerprint + client info detection, browser-side Excel export |
 | Phase 2 | Planned | Device inventory, site/group management, device onboarding |
 | Phase 3 | Planned | SNMP polling, interface metrics, Syslog ingestion/search |
 | Phase 4 | Planned | RADIUS audit, alert policies, notification workflows, responsive operations workspace |
 
 ---
 
-## 10. Changelog
+## 11. Changelog
 
 | Date | Change |
 |------|--------|
+| 2026-07-19 | Added login audit log page (pages/settings/login-logs), services/log.ts, types/log.ts; added client environment detection utils (utils/fingerprint.ts using FingerprintJS, utils/clientInfo.ts using ua-parser-js); added browser-side xlsx export utility (utils/xlsx.ts); added /settings/login-logs route; added loginLogs menu item and i18n keys (menu + settings namespaces); updated file organization chart |
 | 2026-07-18 | Removed unrouted placeholder pages (device-groups, device-library, devices/topology, observability, operations-templates, help) plus their dedicated CSS (device-groups.css, topology.css) and dead types (OperationsFilter, DEVICE_STATUS_CONFIG); routing/structure docs now reflect current state |
 | 2026-07-18 | Added breadcrumb navigation to root CLAUDE.md; added changelog section |
 | 2026-07-14 | Original frontend development constitution created |

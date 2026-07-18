@@ -24,6 +24,8 @@ const (
 	UserUpdate    = "user.update"
 	UserDelete    = "user.delete"
 	UserImport    = "user.import"
+	LogRead       = "log.read"
+	LogDelete     = "log.delete"
 )
 
 // Catalog is the single source of truth for permissions that can be assigned.
@@ -39,4 +41,6 @@ var Catalog = []Definition{
 	{Resource: "user", Action: "update", Description: "Update users"},
 	{Resource: "user", Action: "delete", Description: "Delete users"},
 	{Resource: "user", Action: "import", Description: "Import users"},
+	{Resource: "log", Action: "read", Description: "View login logs"},
+	{Resource: "log", Action: "delete", Description: "Delete login logs"},
 }

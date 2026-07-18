@@ -4,6 +4,7 @@
   "settings": "Settings",
   "userManagement": "User Management",
   "roleManagement": "Role Management",
+  "loginLogs": "Login Logs",
   "profile": "Profile",
   "home": "Home"
 }

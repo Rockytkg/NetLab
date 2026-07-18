@@ -18,6 +18,7 @@ import (
 	"netlab-backend/internal/database"
 	"netlab-backend/internal/handler/admin"
 	"netlab-backend/internal/handler/auth"
+	loghandler "netlab-backend/internal/handler/log"
 	rbacHandler "netlab-backend/internal/handler/rbac"
 	"netlab-backend/internal/mailer"
 	"netlab-backend/internal/middleware"
@@ -25,6 +26,7 @@ import (
 	"netlab-backend/internal/router"
 	authsvc "netlab-backend/internal/service/auth"
 	sysconfig "netlab-backend/internal/service/config"
+	logsvc "netlab-backend/internal/service/log"
 	"netlab-backend/internal/service/rbac"
 	"netlab-backend/pkg/captcha"
 	"netlab-backend/pkg/crypto"
@@ -114,6 +116,7 @@ func main() {
 	passkeyRepo := repository.NewPasskeyRepository(db)
 	bindingRepo := repository.NewOAuthBindingRepository(db)
 	configRepo := repository.NewConfigRepository(db)
+	loginLogRepo := repository.NewLoginLogRepository(db)
 
 	// ── 初始化运行时配置服务 ─────────────────────────────────────────
 	configService := sysconfig.NewService(configRepo, configCipher, rdb)
@@ -162,6 +165,8 @@ func main() {
 		logger.Warn("Seed admin user warning", zap.Error(err))
 	}
 
+	loginLogService := logsvc.NewService(loginLogRepo, userRepo, rbacService, logger)
+
 	userAdminService := authsvc.NewUserAdminService(userRepo, logger, rbacService)
 	importService := authsvc.NewUserImportService(userRepo, logger)
 
@@ -169,10 +174,11 @@ func main() {
 	twoFactorService := authsvc.NewTwoFactorService(userRepo, tokenRepo, tokenService, configService, logger)
 
 	authHandler := auth.NewAuthHandler(
-		authService, verificationService, passwordService, passkeyService, tokenService, oauthService, twoFactorService, captchaMgr, rbacService, logger,
+		authService, verificationService, passwordService, passkeyService, tokenService, oauthService, twoFactorService, captchaMgr, rbacService, loginLogService, logger,
 	)
 	adminHandler := admin.NewAdminHandler(adminService, userAdminService, importService, emailSender, logger)
 	rHandler := rbacHandler.NewHandler(rbacService)
+	logHandler := loghandler.NewHandler(loginLogService)
 
 	// ── 初始化限流器 ─────────────────────────────────────────────────
 	var rateLimiter *middleware.RateLimiter
@@ -187,6 +193,7 @@ func main() {
 		AuthHandler:   authHandler,
 		AdminHandler:  adminHandler,
 		RBACHandler:   rHandler,
+		LogHandler:    logHandler,
 		AuthService:   authService,
 		TokenService:  tokenService,
 		CryptoService: cryptoService,

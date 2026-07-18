@@ -9,7 +9,7 @@ NetLab is a Network Management Center for real network operations. It uses a Rea
 | Layer | Stack | Directory |
 |-------|-------|-----------|
 | Frontend | React 19 · TypeScript 6 · Ant Design 6.x · Vite 8 · Zustand 5 · React Router 7 · i18next | `NetLab-frontend/` |
-| Backend | Go 1.25 · Gin · GORM · PostgreSQL · Redis · JWT · Zap · Casbin | `NetLab-backend/` |
+| Backend | Go 1.25 · Gin · GORM · PostgreSQL · Redis · JWT · Zap | `NetLab-backend/` |
 
 **Detailed frontend conventions** (component patterns, CSS architecture, i18n rules, design tokens) are in `NetLab-frontend/CLAUDE.md`. Read that file before working on any frontend code.
 
@@ -23,6 +23,7 @@ graph TD
     A --> C["NetLab-backend"];
     B --> D["src/components"];
     B --> E["src/pages"];
+    B --> E1["src/pages/settings/login-logs"];
     B --> F["src/stores"];
     B --> G["src/services"];
     B --> H["src/hooks"];
@@ -31,7 +32,9 @@ graph TD
     B --> K["src/router"];
     C --> L["config/"];
     C --> M["internal/handler"];
+    C --> M1["internal/handler/log"];
     C --> N["internal/service"];
+    C --> N1["internal/service/log"];
     C --> O["internal/repository"];
     C --> P["internal/model"];
     C --> Q["internal/middleware"];
@@ -82,14 +85,16 @@ NetLab/
 │   │   ├── assets/css/          # Page/component-owned CSS files
 │   │   ├── components/          # layout/, auth/, common/
 │   │   ├── pages/               # login/, dashboard/, account/, settings/, error/
+│   │   │   ├── settings/login-logs/  # Login audit log page (Phase 1.5)
+│   │   │   └── settings/roles/       # RBAC role management page
 │   │   ├── router/              # Single-file route config (React Router 7)
 │   │   ├── stores/              # Zustand: appStore, authStore, operationsStore
-│   │   ├── services/            # Axios instance + API service objects (auth, admin, rbac, authSecurity, request)
+│   │   ├── services/            # Axios instance + API service objects (auth, admin, rbac, authSecurity, account, log, request)
 │   │   ├── hooks/               # useAuth, usePasskey, useI18n, useResolvedTheme, usePermission
 │   │   ├── theme/               # Ant Design theme configuration
 │   │   ├── i18n/                # i18next init + zh-CN/en-US locale JSONs (5 namespaces)
-│   │   ├── types/               # TypeScript DTOs (auth, api, i18n, operations, settings)
-│   │   └── utils/               # crypto, auth-flow, auth-normalize, password-strength, i18n-bridge, etc.
+│   │   ├── types/               # TypeScript DTOs (auth, api, i18n, log, operations, settings)
+│   │   └── utils/               # crypto, auth-flow, auth-normalize, password-strength, fingerprint, clientInfo, xlsx, i18n-bridge, etc.
 │   └── docs/                    # api-for-ai-agents.md, ui-redesign-proposal.md
 └── NetLab-backend/              # Go API server
     ├── CLAUDE.md                # Backend module documentation (READ FIRST)
@@ -97,20 +102,23 @@ NetLab/
     ├── config/config.go         # Viper-based env config (all structs + Load())
     ├── internal/
     │   ├── router/              # Gin route setup with rate-limited endpoint groups
-    │   ├── middleware/           # auth (JWT/Casbin), cors, i18n, ratelimit, recovery, requestid, signature
+    │   ├── middleware/           # auth (JWT), cors, i18n, ratelimit, recovery, requestid, signature
     │   ├── handler/
     │   │   ├── auth/            # AuthHandler: login, register, passkey, OAuth, 2FA, account management
     │   │   ├── admin/           # AdminHandler: system settings, user CRUD, batch operations, import/export
-    │   │   └── rbac/            # Handler: role/permission CRUD
+    │   │   ├── rbac/            # Handler: role/permission CRUD
+    │   │   └── log/             # LogHandler: login log list/delete (NEW)
     │   ├── service/
     │   │   ├── auth/            # Auth, crypto, token, password, verification, passkey, OAuth, 2FA, admin, user-admin, import
-    │   │   ├── rbac/            # Casbin enforcer, role/permission CRUD, policy seeding
-    │   │   └── config/          # Runtime config service (DB-backed, cached)
-    │   ├── repository/          # Data access: user, token (Redis), passkey, oauth_binding, config, one_time_token
-    │   ├── model/               # GORM models: user, passkey, role, permission, role_permission, system_config, oauth_binding
-    │   ├── dto/                 # request/response DTOs for auth, admin, rbac
+    │   │   ├── rbac/            # Custom RBAC: role/permission CRUD, policy seeding, permission reconciliation
+    │   │   ├── config/          # Runtime config service (DB-backed, cached)
+    │   │   └── log/             # Login log service: async recording, role-filtered list/delete (NEW)
+    │   ├── repository/          # Data access: user, token (Redis), passkey, oauth_binding, config, one_time_token, login_log
+    │   ├── model/               # GORM models: user, passkey, role, permission, role_permission, system_config, oauth_binding, login_log
+    │   ├── dto/                 # request/response DTOs for auth, admin, rbac, log
     │   ├── database/            # PostgreSQL + Redis connection setup + auto-migration + seed functions
     │   ├── mailer/              # Email sender (hot-loads SMTP from config service)
+    │   ├── permission/          # Authoritative permission registry (log.read, log.delete added) (NEW)
     │   ├── contextkeys/         # Gin context key constants
     │   └── validation/          # Request validation + password strength rules
     ├── pkg/
@@ -149,29 +157,33 @@ All endpoints return `{ code: number, data: T, message: string }`. Success codes
 
 2. **Public endpoints** (`/auth/refresh`, `/auth/captcha`, `/auth/send-code`, passkey/OAuth flows): Optional JWT auth -- attaches user info if a valid token is present but does not reject unauthenticated requests.
 
-3. **Authenticated endpoints** (`/auth/userinfo`, `/auth/logout`, passkey registration, account management, admin routes): `RequireAuth` middleware enforces valid JWT + blacklist check. Admin/mutation routes additionally require `RequireRBAC` middleware (Casbin enforcer).
+3. **Authenticated endpoints** (`/auth/userinfo`, `/auth/logout`, passkey registration, account management, admin routes, log routes): `RequireAuth` middleware enforces valid JWT + blacklist check. Admin/mutation routes additionally require `RequirePermission` middleware (custom RBAC).
 
 4. **Token refresh**: Access tokens expire in 15 min, refresh tokens in 7 days. The frontend proactively refreshes 5 min before expiry and retries on 401 with a queue to prevent concurrent refresh storms.
+
+5. **Login audit logging**: All login flows (password, passkey, OAuth, 2FA, recovery) record async login logs with client fingerprint, OS/browser info, and IP. The `LoginLog` table (`nb_login_logs`) stores records with role-level visibility controls.
 
 ### Rate Limiting Tiers
 
 | Tier | Limit | Endpoints |
 |------|-------|-----------|
 | Very strict | 3 req/min per IP | `/auth/send-code`, account email code |
-| Strict | 5 req/min per IP | `/auth/login`, `/auth/reset-password`, `/auth/refresh`, passkey verify, OAuth bind/create, 2FA login, change-password, SMTP test, user import |
-| Moderate | 15 req/min per IP | `/auth/register`, `/auth/captcha`, passkey/OAuth, `/auth/config`, profile update, settings write, user CRUD |
-| Standard | 60 req/min per IP | `/auth/userinfo`, `/auth/logout`, passkey registration/list, RBAC read, settings read, user list/export |
+| Strict | 5 req/min per IP | `/auth/login`, `/auth/reset-password`, `/auth/refresh`, passkey verify, OAuth bind/create, 2FA login, change-password, change-email, SMTP test, user import |
+| Moderate | 15 req/min per IP | `/auth/register`, `/auth/captcha`, passkey/OAuth, `/auth/config`, profile update, settings write, user CRUD, role CRUD, log delete |
+| Standard | 60 req/min per IP | `/auth/userinfo`, `/auth/logout`, passkey registration/list, RBAC read, settings read, user list/export, log list |
 | Global | 100 req/min per IP | All routes (applied before endpoint-specific limits) |
 
 ### Middleware Chain (execution order)
 
 ```
-RequestID -> CORS -> Recovery -> I18N -> GlobalRateLimit -> [OptionalAuth | RequireAuth] -> [RequireRBAC] -> [Signature] -> [EndpointRateLimit] -> Handler
+RequestID -> CORS -> Recovery -> I18N -> GlobalRateLimit -> [OptionalAuth | RequireAuth] -> [RequirePermission] -> [Signature] -> [EndpointRateLimit] -> Handler
 ```
 
-### RBAC (Casbin)
+### RBAC (Custom, no Casbin)
 
-Uses `casbin/casbin/v3` with GORM adapter. Built-in roles: super_admin, admin, editor, viewer. Policies stored in `nb_policies` table, synced from `nb_roles` + `nb_permissions` + `nb_role_permissions` tables. Built-in resources: user, device, alert, syslog, setting, dashboard, audit_log, group, rbac, auth.
+Uses custom Role/Permission models with database-backed authorization. Casbin has been removed; the `nb_policies` table is dropped during AutoMigrate. Built-in roles: super_admin, admin. Permissions are defined in `internal/permission/permission.go` as the single source of truth. The permission table is reconciled at startup.
+
+Built-in resources: auth, user, rbac, setting, **log** (NEW).
 
 ### Database Tables (GORM AutoMigrate)
 
@@ -179,12 +191,12 @@ Uses `casbin/casbin/v3` with GORM adapter. Built-in roles: super_admin, admin, e
 |-------|-------|---------|
 | `nb_users` | User | User accounts (username, email, phone unique, role FK) |
 | `nb_passkeys` | Passkey | WebAuthn credentials |
-| `nb_roles` | Role | Role definitions (super_admin, admin, editor, viewer) |
+| `nb_roles` | Role | Role definitions (super_admin, admin) |
 | `nb_permissions` | Permission | Fine-grained resource:action permissions |
 | `nb_role_permissions` | RolePermission | Many-to-many role-permission mapping |
 | `nb_system_configs` | SystemConfig | Key-value runtime config (SMTP, OAuth, security, beian) |
-| `nb_policies` | (Casbin) | Casbin RBAC policies (sub, obj, act) |
 | `nb_oauth_bindings` | OAuthBinding | OAuth provider-to-user bindings |
+| `nb_login_logs` | LoginLog | Login audit trail with client fingerprint, OS/browser, IP (NEW) |
 
 ## Frontend-Backend Contract
 
@@ -202,6 +214,16 @@ Note: `CONFIG_ENCRYPTION_KEY` (backend-only) is the AES-256-GCM master key for e
 ### API Base URL
 
 The frontend proxies `/api` to the backend. Set `VITE_API_BASE_URL` in `.env.local` to the backend address (default: `http://localhost:8080/api`).
+
+### Client Info Headers (Login Audit)
+
+The frontend sends client environment info via custom headers during login, used for login audit logging:
+
+| Header | Source | Content |
+|--------|--------|---------|
+| `X-Browser-Fingerprint` | `utils/fingerprint.ts` (FingerprintJS) | 32-char hex visitor ID |
+| `X-Client-OS` | `utils/clientInfo.ts` (UA-Parser with Client Hints) | e.g. "Windows 11 (amd64)" |
+| `X-Client-Browser` | `utils/clientInfo.ts` (UA-Parser with Client Hints) | e.g. "Chrome 126" |
 
 ## Infrastructure
 
@@ -222,7 +244,8 @@ PostgreSQL runs on port 5432 (user: `netlab`, db: `netlab`). Redis runs on port 
 
 | Phase | Status | Scope |
 |-------|--------|-------|
-| Phase 1 | Done | Layout shell, theme, routing, i18n, auth, RBAC, dashboard device-group list, placeholder pages |
+| Phase 1 | Done | Layout shell, theme, routing, i18n, auth, RBAC, dashboard, settings pages, login audit logging |
+| Phase 1.5 | Done | Login audit log (frontend page + backend API + async recording) |
 | Phase 2 | Planned | Device inventory, site/group management, device details, real network topology view |
 | Phase 3 | Planned | SNMP polling, metric trends, interface monitoring, Syslog ingestion and search |
 | Phase 4 | Planned | RADIUS authentication/auditing, alert policies, notification workflows, responsive operations workspace |
@@ -241,5 +264,6 @@ PostgreSQL runs on port 5432 (user: `netlab`, db: `netlab`). Redis runs on port 
 
 | Date | Change |
 |------|--------|
-| 2026-07-18 | Added Mermaid module structure diagram; added backend module CLAUDE.md with full API/route/RBAC/auth documentation; updated repository structure to reflect RBAC additions and backend reorganization (handler/rbac, handler/admin, service/rbac, mailer, validation, contextkeys); updated rate limiting tiers and middleware chain; updated DB tables list; added changelog section; added breadcrumb navigation in frontend and backend CLAUDE.md |
+| 2026-07-19 | Added login audit log module (backend: handler/log, service/log, repository/login_log_repo, model/login_log, dto/response/log_response, permission: log.read/log.delete; frontend: pages/settings/login-logs, services/log.ts, types/log.ts, utils/fingerprint.ts, utils/clientInfo.ts, utils/xlsx.ts); updated RBAC section to reflect Casbin removal and new permission.go registry; added nb_login_logs table; updated index.json with file counts and coverage; added client info headers contract |
+| 2026-07-18 | Added Mermaid module structure diagram; added backend module CLAUDE.md with full API/route/RBAC/auth documentation; updated repository structure to reflect RBAC additions and backend reorganization; updated rate limiting tiers and middleware chain; updated DB tables list; added changelog section; added breadcrumb navigation in frontend and backend CLAUDE.md |
 | (earlier) | Initial CLAUDE.md created with project overview, architecture, and development conventions |

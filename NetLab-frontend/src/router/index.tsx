@@ -25,6 +25,7 @@ const OAuthPanel = lazy(() => import('@/pages/settings/panels/OAuthPanel'))
 const SettingsProfilePage = lazy(() => import('@/pages/settings/profile'))
 const UsersPage = lazy(() => import('@/pages/settings/users'))
 const RolesPage = lazy(() => import('@/pages/settings/roles'))
+const LoginLogsPage = lazy(() => import('@/pages/settings/login-logs'))
 
 const router = createBrowserRouter([
   // ── 公开路由 ──
@@ -96,6 +97,7 @@ const router = createBrowserRouter([
       { path: '/settings/profile', element: <SettingsProfilePage /> },
       { path: '/settings/users', element: <UsersPage /> },
       { path: '/settings/roles', element: <RolesPage /> },
+      { path: '/settings/login-logs', element: <LoginLogsPage /> },
     ],
   },
 ])

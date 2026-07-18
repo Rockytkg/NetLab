@@ -49,6 +49,7 @@ const ADMIN_RESOURCES = [
   { resource: 'setting', menuTitleKey: 'settings' },
   { resource: 'user', menuTitleKey: 'userManagement' },
   { resource: 'rbac', menuTitleKey: 'roleManagement' },
+  { resource: 'log', menuTitleKey: 'loginLogs' },
 ] as const
 
 /** 账户相关的资源节点（不属于系统管理菜单）。 */
@@ -60,7 +61,7 @@ interface PermissionTreeProps {
   onChange: (value: string[]) => void
 }
 
-/** 权限树：按左侧菜单层级（系统管理 > 系统设置/用户管理/角色管理）分组展示权限。 */
+/** 权限树：按左侧菜单层级（系统管理 > 系统设置/用户管理/角色管理/登录日志）分组展示权限。 */
 function PermissionTree({ permissions, value, onChange }: PermissionTreeProps) {
   const { t } = useTranslation(['settings', 'menu'])
   const permissionCodes = useMemo(() => new Set(permissions.map((item) => item.code)), [permissions])

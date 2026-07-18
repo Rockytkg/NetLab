@@ -31,6 +31,16 @@ Use TypeScript with React function components. Keep one component per file, use 
 
 Go code must be `gofmt`/`go fmt` formatted. Keep HTTP parsing in handlers, business logic in services, and GORM/Redis access in repositories. Test files use Go’s standard `*_test.go` naming.
 
+## Permissions & Menu Conventions
+
+RBAC permissions use `resource.action` keys (e.g. `log.read`). When adding a new permission, update all of these together:
+
+- Backend `internal/permission/permission.go`: add the constant and a `Catalog` entry (synced into the database at startup; builtin superadmin/admin get all permissions automatically).
+- Frontend `src/i18n/locales/{zh-CN,en-US}/settings.json`: add a `roles.permissionNames.<resource>.<action>` entry in both locales.
+- Frontend `src/pages/settings/roles/index.tsx` (`ADMIN_RESOURCES` / `ACCOUNT_RESOURCES`): place the resource in the permission tree so it mirrors the sidebar menu hierarchy exactly — 系统管理 (administration) > 系统设置 (setting) / 用户管理 (user) / 角色管理 (rbac) / 登录日志 (log). Every future permission must follow this sidebar-aligned grouping.
+- Frontend `src/components/layout/SideMenu.tsx`: gate each menu item individually with `can('<resource>.<action>')` and show a menu group only when at least one of its child permissions is present.
+- New protected pages render a 403 `Result` when the user lacks the read permission (see `settings/users`, `settings/login-logs`).
+
 ## Testing Guidelines
 
 Backend tests use Go’s built-in test framework and live beside package code, such as `pkg/captcha/captcha_test.go` and `pkg/crypto/*_test.go`. Add table-driven tests for new backend logic where practical. The frontend currently relies on `pnpm check`; add focused tests only when introducing a frontend test framework.

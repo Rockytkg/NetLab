@@ -12,6 +12,8 @@ import {
   decodeJwtPayload,
 } from '@/utils/crypto'
 import { createAuthSignatureHeaders } from './authSecurity'
+import { getFingerprint } from '@/utils/fingerprint'
+import { getClientInfo } from '@/utils/clientInfo'
 import {
   HTTP_ERROR_I18N_MAP,
   BUSINESS_ERROR_I18N_MAP,
@@ -121,6 +123,24 @@ request.interceptors.request.use(
       // X-User-Language 携带用户的明确偏好，在后端优先级
       // 高于浏览器注入的 Accept-Language。
       config.headers['X-User-Language'] = locale
+    }
+
+    // ── 2.5 浏览器指纹与客户端信息（登录日志） ───────────────
+    // 仅对 auth 接口附加，后端据此记录登录日志的指纹与客户端环境。
+    if (config.headers && config.url?.startsWith('/auth/')) {
+      const fp = getFingerprint()
+      if (fp) {
+        config.headers['X-Browser-Fingerprint'] = fp
+      }
+      const info = getClientInfo()
+      if (info) {
+        if (info.os) {
+          config.headers['X-Client-OS'] = info.os
+        }
+        if (info.browser) {
+          config.headers['X-Client-Browser'] = info.browser
+        }
+      }
     }
 
     // ── 3. 请求追踪 ID ──────────────────────────────────

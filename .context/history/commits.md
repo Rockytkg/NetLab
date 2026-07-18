@@ -1,6 +1,21 @@
 # 提交历史
 
-> 自动生成于 2026-07-18 14:15:00
+> 自动生成于 2026-07-19 00:00:37
+
+## 2026-07-19 — ✨ feat: 实现登录审计日志模块
+
+- **类型**: feat
+- **分支**: main
+- **文件数**: 33 (+1404/-45)
+- **决策**:
+  - 登录日志使用异步 goroutine 写入，不阻塞认证主流程；请求上下文在异步前快照以避免 goroutine 中 ctx 取消
+  - 日志记录注入所有登录入口（密码/Passkey/OAuth/2FA）的 handler 层，统一调用 recordLogin 辅助方法
+  - 前端浏览器指纹使用 FingerprintJS（stability: 3 实现页面级稳定指纹），OS/浏览器信息使用 ua-parser-js + User-Agent Client Hints
+  - 自定义请求头 X-Browser-Fingerprint/X-Client-OS/X-Client-Browser 仅对 /auth/* 接口附加，Axios 拦截器实现
+  - Excel 导出在前端浏览器端使用 xlsx 库生成，遵循此前 admin 导出迁移的架构决策
+  - nb_login_logs 表使用角色可见性过滤：super_admin 可见全部，其他角色仅可见同 rank 及以下用户的记录
+  - AutoMigrate 包含 LoginLog 模型，CREATE TABLE IF NOT EXISTS 语义保证幂等
+- **测试**: login_log_service_test.go 覆盖 LoginLogService 的异步记录与分页查询逻辑
 
 ## 2026-07-18 — ♻️ refactor: 权限注册表提取、OAuth 绑定内联化与设置页路由重构
 

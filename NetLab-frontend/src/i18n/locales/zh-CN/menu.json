@@ -4,6 +4,7 @@
   "settings": "系统设置",
   "userManagement": "用户管理",
   "roleManagement": "角色管理",
+  "loginLogs": "登录日志",
   "profile": "个人中心",
   "home": "首页"
 }

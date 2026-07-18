@@ -172,7 +172,7 @@ func Load() (*Config, error) {
 
 	v.SetDefault("CORS_ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:5173")
 	v.SetDefault("CORS_ALLOWED_METHODS", "GET,POST,PUT,DELETE,OPTIONS")
-	v.SetDefault("CORS_ALLOWED_HEADERS", "Authorization,Content-Type,X-Request-Id,X-Signature,X-Timestamp,Accept-Language,X-User-Language")
+	v.SetDefault("CORS_ALLOWED_HEADERS", "Authorization,Content-Type,X-Request-Id,X-Signature,X-Timestamp,Accept-Language,X-User-Language,X-Browser-Fingerprint,X-Client-OS,X-Client-Browser")
 
 	// 验证码渲染尺寸。前端在登录框内以 32px 高度展示该图片，
 	// 因此源图按 2 倍（64px）渲染，可在高分屏上获得清晰的整数倍缩放；

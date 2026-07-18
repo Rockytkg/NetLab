@@ -4,6 +4,7 @@ import { Menu, theme } from 'antd'
 import {
   ControlOutlined,
   DashboardOutlined,
+  HistoryOutlined,
   SafetyCertificateOutlined,
   SettingOutlined,
   TeamOutlined,
@@ -23,7 +24,9 @@ export default function SideMenu({ collapsed }: SideMenuProps) {
   const { token } = theme.useToken()
   const { can } = usePermission()
 	const canReadSettings = can('setting.read')
+	const canReadUsers = can('user.read')
 	const canReadRbac = can('rbac.read')
+	const canReadLogs = can('log.read')
 
   type MenuItem = Required<MenuProps>['items'][number]
   const rootSubmenuKeys = ['administration']
@@ -35,23 +38,31 @@ export default function SideMenu({ collapsed }: SideMenuProps) {
         icon: <DashboardOutlined />,
         label: t('dashboard'),
       },
-      ...(canReadSettings
+      ...(canReadSettings || canReadUsers || canReadRbac || canReadLogs
         ? [
             {
               key: 'administration',
               icon: <SettingOutlined />,
               label: t('administration'),
               children: [
-                {
-                  key: '/settings',
-                  icon: <ControlOutlined />,
-                  label: t('settings'),
-                },
-                {
-                  key: '/settings/users',
-                  icon: <TeamOutlined />,
-                  label: t('userManagement'),
-                },
+                ...(canReadSettings
+                  ? [
+                      {
+                        key: '/settings',
+                        icon: <ControlOutlined />,
+                        label: t('settings'),
+                      },
+                    ]
+                  : []),
+                ...(canReadUsers
+                  ? [
+                      {
+                        key: '/settings/users',
+                        icon: <TeamOutlined />,
+                        label: t('userManagement'),
+                      },
+                    ]
+                  : []),
                 ...(canReadRbac
                   ? [
                       {
@@ -61,12 +72,21 @@ export default function SideMenu({ collapsed }: SideMenuProps) {
                       },
                     ]
                   : []),
+                ...(canReadLogs
+                  ? [
+                      {
+                        key: '/settings/login-logs',
+                        icon: <HistoryOutlined />,
+                        label: t('loginLogs'),
+                      },
+                    ]
+                  : []),
               ],
             } as MenuItem,
           ]
         : []),
     ],
-    [canReadSettings, canReadRbac, t],
+    [canReadSettings, canReadUsers, canReadRbac, canReadLogs, t],
   )
 
   const leafKeys = useMemo(() => {

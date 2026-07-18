@@ -3,6 +3,7 @@ package auth
 import (
 	"encoding/json"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
@@ -13,9 +14,20 @@ import (
 	"netlab-backend/internal/middleware"
 	"netlab-backend/internal/model"
 	authsvc "netlab-backend/internal/service/auth"
+	logsvc "netlab-backend/internal/service/log"
 	"netlab-backend/pkg/apperrors"
 	"netlab-backend/pkg/captcha"
 	"netlab-backend/pkg/response"
+)
+
+// 前端上报客户端信息的自定义请求头。
+const (
+	// headerBrowserFingerprint 是前端上报浏览器指纹的自定义请求头。
+	headerBrowserFingerprint = "X-Browser-Fingerprint"
+	// headerClientOS 是前端上报操作系统信息的自定义请求头（如 "Windows 11 (amd64)"）。
+	headerClientOS = "X-Client-OS"
+	// headerClientBrowser 是前端上报浏览器信息的自定义请求头（如 "Chrome 126"）。
+	headerClientBrowser = "X-Client-Browser"
 )
 
 // AuthHandler 处理认证相关端点的 HTTP 请求。
@@ -29,6 +41,7 @@ type AuthHandler struct {
 	twoFactorService *authsvc.TwoFactorService
 	captchaMgr       *captcha.Manager
 	permLister       PermissionLister
+	loginLogSvc      *logsvc.Service
 	logger           *zap.Logger
 }
 
@@ -50,6 +63,7 @@ func NewAuthHandler(
 	twoFactorService *authsvc.TwoFactorService,
 	captchaMgr *captcha.Manager,
 	permLister PermissionLister,
+	loginLogSvc *logsvc.Service,
 	logger *zap.Logger,
 ) *AuthHandler {
 	return &AuthHandler{
@@ -62,6 +76,7 @@ func NewAuthHandler(
 		twoFactorService: twoFactorService,
 		captchaMgr:       captchaMgr,
 		permLister:       permLister,
+		loginLogSvc:      loginLogSvc,
 		logger:           logger,
 	}
 }
@@ -88,11 +103,13 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	config, _ := h.authService.GetSystemConfig(c.Request.Context())
 	if config != nil && config.CaptchaEnabled {
 		if params.CaptchaID == "" || params.CaptchaCode == "" {
+			h.recordLogin(c, params.Username, nil, model.LoginTypePassword, model.LoginStatusFailed)
 			response.Error(c, apperrors.New(apperrors.ErrCodeInvalidCode, "captcha is required"))
 			return
 		}
 		ok, err := h.captchaMgr.Verify(params.CaptchaID, params.CaptchaCode)
 		if err != nil || !ok {
+			h.recordLogin(c, params.Username, nil, model.LoginTypePassword, model.LoginStatusFailed)
 			response.Error(c, apperrors.ErrInvalidCode)
 			return
 		}
@@ -100,8 +117,16 @@ func (h *AuthHandler) Login(c *gin.Context) {
 
 	result, appErr := h.authService.Login(c.Request.Context(), params.Username, params.Password)
 	if appErr != nil {
+		h.recordLogin(c, params.Username, nil, model.LoginTypePassword, model.LoginStatusFailed)
 		response.Error(c, appErr)
 		return
+	}
+
+	if result.RequiresTwoFactor {
+		// 密码校验通过、等待两步验证：记为中间态 pending
+		h.recordLogin(c, result.User.Username, parseUserID(result.User.ID), model.LoginTypePassword, model.LoginStatusPending)
+	} else {
+		h.recordLogin(c, result.User.Username, parseUserID(result.User.ID), model.LoginTypePassword, model.LoginStatusSuccess)
 	}
 
 	h.applyRoleInfo(result.User)
@@ -513,10 +538,12 @@ func (h *AuthHandler) VerifyPasskeyAuth(c *gin.Context) {
 
 	result, appErr := h.passkeyService.FinishLogin(c.Request.Context(), body.SessionID, body.Credential)
 	if appErr != nil {
+		h.recordLogin(c, "", nil, model.LoginTypePasskey, model.LoginStatusFailed)
 		response.Error(c, appErr)
 		return
 	}
 
+	h.recordLogin(c, result.User.Username, parseUserID(result.User.ID), model.LoginTypePasskey, model.LoginStatusSuccess)
 	h.applyRoleInfo(result.User)
 	response.SuccessOK(c, loginResultToDTO(result))
 }
@@ -825,10 +852,16 @@ func (h *AuthHandler) OAuthCallback(c *gin.Context) {
 
 	result, appErr := h.oauthService.HandleCallback(c.Request.Context(), params.Provider, params.Code, params.State)
 	if appErr != nil {
+		h.recordLogin(c, "", nil, model.LoginTypeOAuth, model.LoginStatusFailed)
 		response.Error(c, appErr)
 		return
 	}
 
+	// 待绑定本地账号属于中间交互态（随后由 bind-existing / create-account 完成登录），
+	// 此处不产生最终登录结果，不记录日志。
+	if result.PendingOAuthBinding == nil && result.User != nil {
+		h.recordLogin(c, result.User.Username, parseUserID(result.User.ID), model.LoginTypeOAuth, model.LoginStatusSuccess)
+	}
 	h.applyRoleInfo(result.User)
 	response.SuccessOK(c, loginResultToDTO(result))
 }
@@ -1155,6 +1188,34 @@ func containsQueryParam(rawURL string) bool {
 	return false
 }
 
+// recordLogin 记录一条登录日志。异步写入，失败不影响登录主流程。
+// OS 与 Browser 由前端解析后通过请求头上报，服务端不做 User-Agent 解析。
+func (h *AuthHandler) recordLogin(c *gin.Context, username string, userID *uint64, loginType, status string) {
+	if h.loginLogSvc == nil {
+		return
+	}
+	h.loginLogSvc.Record(logsvc.LoginLogEntry{
+		UserID:      userID,
+		Username:    strings.TrimSpace(username),
+		LoginType:   loginType,
+		Status:      status,
+		IP:          c.ClientIP(),
+		UserAgent:   c.GetHeader("User-Agent"),
+		Fingerprint: c.GetHeader(headerBrowserFingerprint),
+		OS:          c.GetHeader(headerClientOS),
+		Browser:     c.GetHeader(headerClientBrowser),
+	})
+}
+
+// parseUserID 将字符串形式的用户 ID 解析为 uint64 指针；解析失败返回 nil。
+func parseUserID(id string) *uint64 {
+	uid, err := strconv.ParseUint(id, 10, 64)
+	if err != nil {
+		return nil
+	}
+	return &uid
+}
+
 // BeginTwoFactorSetup handles POST /api/auth/2fa/setup
 // @Summary      Begin two-factor setup
 // @Description  Generate a TOTP secret and QR code for binding an authenticator app
@@ -1256,9 +1317,11 @@ func (h *AuthHandler) VerifyTwoFactorLogin(c *gin.Context) {
 	}
 	result, appErr := h.twoFactorService.VerifyLogin(c.Request.Context(), params.TwoFactorToken, params.Code)
 	if appErr != nil {
+		h.recordLogin(c, "", nil, model.LoginTypeTwoFactor, model.LoginStatusFailed)
 		response.Error(c, appErr)
 		return
 	}
+	h.recordLogin(c, result.User.Username, parseUserID(result.User.ID), model.LoginTypeTwoFactor, model.LoginStatusSuccess)
 	h.applyRoleInfo(result.User)
 	response.SuccessOK(c, loginResultToDTO(result))
 }
@@ -1281,9 +1344,11 @@ func (h *AuthHandler) VerifyRecoveryLogin(c *gin.Context) {
 	}
 	result, appErr := h.twoFactorService.VerifyLoginWithRecovery(c.Request.Context(), params.TwoFactorToken, params.RecoveryCode)
 	if appErr != nil {
+		h.recordLogin(c, "", nil, model.LoginTypeRecovery, model.LoginStatusFailed)
 		response.Error(c, appErr)
 		return
 	}
+	h.recordLogin(c, result.User.Username, parseUserID(result.User.ID), model.LoginTypeRecovery, model.LoginStatusSuccess)
 	h.applyRoleInfo(result.User)
 	response.SuccessOK(c, loginResultToDTO(result))
 }

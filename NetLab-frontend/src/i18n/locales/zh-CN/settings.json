@@ -239,6 +239,41 @@
     "importDone": "成功导入 {{created}} 个用户",
     "importResult": "导入完成：成功 {{created}} 个，跳过 {{skipped}} 个"
   },
+  "loginLogs": {
+    "searchPlaceholder": "搜索用户名或 IP",
+    "statusAll": "全部状态",
+    "typeAll": "全部方式",
+    "total": "共 {{total}} 条记录",
+    "status": {
+      "success": "成功",
+      "failed": "失败",
+      "pending": "待二次验证"
+    },
+    "type": {
+      "password": "密码登录",
+      "twoFactor": "二次验证",
+      "recovery": "恢复码",
+      "passkey": "通行密钥",
+      "oauth": "第三方登录"
+    },
+    "exportSelected": "导出选中",
+    "deleteSelected": "删除选中",
+    "deleteConfirmTitle": "确认删除日志",
+    "deleteConfirm": "确定删除选中的 {{count}} 条登录日志吗？此操作不可撤销。",
+    "deleted": "已删除 {{count}} 条日志",
+    "columns": {
+      "time": "时间",
+      "username": "用户名",
+      "type": "登录方式",
+      "status": "状态",
+      "ip": "IP 地址",
+      "os": "操作系统",
+      "browser": "浏览器",
+      "location": "归属地",
+      "fingerprint": "浏览器指纹",
+      "userAgent": "User-Agent"
+    }
+  },
   "roles": {
     "addRole": "新增角色",
     "editRole": "编辑角色",
@@ -275,6 +310,10 @@
     "permissionNames": {
       "auth": {
         "read": "读取当前账户"
+      },
+      "log": {
+        "read": "查看登录日志",
+        "delete": "删除登录日志"
       },
       "rbac": {
         "read": "查看角色与权限",
