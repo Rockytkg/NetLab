@@ -1,5 +1,5 @@
 /** 用户角色 */
-export type UserRole = 'super_admin' | 'admin' | 'editor' | 'viewer'
+export type UserRole = string
 
 /** 用户信息 */
 export interface UserInfo {
@@ -10,7 +10,7 @@ export interface UserInfo {
   avatar?: string
   email?: string
   role: string
-  roleIdentifier: UserRole
+  roleName: string
   roleId?: string
   permissions: string[]
   twoFactorEnabled?: boolean

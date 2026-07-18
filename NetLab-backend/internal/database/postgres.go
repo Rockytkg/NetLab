@@ -63,7 +63,12 @@ func AutoMigrate(db *gorm.DB) error {
 		&model.RolePermission{},
 	}
 
-	return db.AutoMigrate(models...)
+	if err := db.AutoMigrate(models...); err != nil {
+		return err
+	}
+	// Casbin 持久化已被有意移除；应用现在仅以规范化的
+	// 角色/权限表作为唯一授权数据源。
+	return db.Exec("DROP TABLE IF EXISTS nb_policies").Error
 }
 
 // SeedDefaultConfigs 在默认系统配置不存在时插入它们。
@@ -115,7 +120,7 @@ func SeedDefaultAdmin(db *gorm.DB) error {
 		return nil
 	}
 
-	// 创建超级管理员 superadmin（role: super_admin）
+	// 创建隐藏运维用户 superadmin（role: superadmin）
 	saHash, err := crypto.HashPassword("superadmin")
 	if err != nil {
 		return fmt.Errorf("hash superadmin password: %w", err)

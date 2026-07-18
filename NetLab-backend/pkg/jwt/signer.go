@@ -8,6 +8,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
+// Signer 抽象 JWT 的签名与校验算法（HS256 或 RS256）。
 type Signer interface {
 	Sign(claims *Claims, secret []byte) (string, error)
 	Verify(tokenString string, claims *Claims, secret []byte) (*Claims, error)
@@ -72,6 +73,7 @@ func (s *rs256Signer) Verify(tokenString string, claims *Claims, _ []byte) (*Cla
 	return parsed, nil
 }
 
+// NewSigner 按配置的算法创建对应的 Signer 实现。
 func NewSigner(mode, privateKeyPath, publicKeyPath string) (Signer, error) {
 	switch mode {
 	case "", "HS256":

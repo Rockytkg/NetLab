@@ -11,9 +11,9 @@ import (
 
 const oneTimeTokenPrefix = "ott:"
 
-// StoreOneTimeToken stores a short-lived opaque token payload and returns the
-// plaintext token that should be sent to the client. Redis keys contain only a
-// hash of the token, so a key dump does not reveal usable credentials.
+// StoreOneTimeToken 存储一个短时效的不透明 token 载荷，并返回应发送给
+// 客户端的明文 token。Redis 键只包含 token 的哈希，因此键转储不会泄露
+// 可用凭据。
 func (r *TokenRepository) StoreOneTimeToken(ctx context.Context, namespace string, payload []byte, ttl time.Duration) (string, error) {
 	token, err := crypto.GenerateRandomBase64URL(32)
 	if err != nil {
@@ -25,8 +25,8 @@ func (r *TokenRepository) StoreOneTimeToken(ctx context.Context, namespace strin
 	return token, nil
 }
 
-// ConsumeOneTimeToken atomically reads and deletes a token payload. It returns
-// an empty slice when the token is missing or expired.
+// ConsumeOneTimeToken 原子地读取并删除 token 载荷。
+// token 不存在或已过期时返回空切片。
 func (r *TokenRepository) ConsumeOneTimeToken(ctx context.Context, namespace, token string) ([]byte, error) {
 	if token == "" {
 		return nil, nil
@@ -38,8 +38,8 @@ func (r *TokenRepository) ConsumeOneTimeToken(ctx context.Context, namespace, to
 	return raw, err
 }
 
-// PeekOneTimeToken reads a token payload without consuming it. Use only when a
-// multi-step flow must allow retries; successful completion should consume it.
+// PeekOneTimeToken 读取 token 载荷但不消费。仅在多步流程必须允许重试时
+// 使用；流程成功完成后应显式消费该 token。
 func (r *TokenRepository) PeekOneTimeToken(ctx context.Context, namespace, token string) ([]byte, error) {
 	if token == "" {
 		return nil, nil
@@ -51,7 +51,7 @@ func (r *TokenRepository) PeekOneTimeToken(ctx context.Context, namespace, token
 	return raw, err
 }
 
-// DeleteOneTimeToken removes a token without reading its payload.
+// DeleteOneTimeToken 删除 token 而不读取其载荷。
 func (r *TokenRepository) DeleteOneTimeToken(ctx context.Context, namespace, token string) error {
 	if token == "" {
 		return nil

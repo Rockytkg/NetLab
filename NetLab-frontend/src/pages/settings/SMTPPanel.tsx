@@ -71,7 +71,7 @@ export default function SMTPPanel({ value, onSaved }: SMTPPanelProps) {
 
   const actions = (
     <Space wrap>
-      <Can resource="setting" action="update"><Button size="middle" type="primary" htmlType="submit" loading={saving} icon={<SaveOutlined />}>
+      <Can permission="setting.update"><Button size="middle" type="primary" htmlType="submit" loading={saving} icon={<SaveOutlined />}>
         {saving ? t('settings:saving') : t('settings:save')}
       </Button></Can>
     </Space>
@@ -168,7 +168,7 @@ export default function SMTPPanel({ value, onSaved }: SMTPPanelProps) {
                           placeholder={t('settings:smtp.testRecipientPlaceholder')}
                           allowClear
                         />
-                        <Can resource="setting" action="update"><Button
+                        <Can permission="setting.update"><Button
                           size="middle"
                           icon={<SendOutlined />}
                           loading={testing}

@@ -392,7 +392,7 @@ func (s *OAuthService) CreateAccountForPending(ctx context.Context, pendingToken
 		Email:             email,
 		PasswordHash:      hash,
 		Avatar:            oauthUser.AvatarURL,
-		Role:              model.RoleViewer,
+		Role:              model.UserRole("viewer"),
 		Status:            model.StatusActive,
 		PasswordChangedAt: &now,
 	}

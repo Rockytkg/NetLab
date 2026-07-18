@@ -7,7 +7,7 @@ import type {
 } from '@/types/settings'
 
 /**
- * RBAC 权限管理接口，访问控制由 rbac:read / rbac:write 决定。
+ * 角色管理接口，权限编码使用稳定的 resource.action 格式。
  */
 export const rbacApi = {
   /** 获取所有角色列表 */
@@ -21,13 +21,13 @@ export const rbacApi = {
   },
 
   /** 创建自定义角色 */
-  createRole(role: string, roleName: string, description?: string): Promise<RoleView> {
-    return request.post('/rbac/roles', { role, roleName, description })
+  createRole(role: string, roleName: string, description?: string, permissions: string[] = []): Promise<RoleView> {
+    return request.post('/rbac/roles', { role, roleName, description, permissions })
   },
 
   /** 更新角色名称和描述 */
-  updateRole(id: string, role: string, roleName: string, description?: string): Promise<MessageResponse> {
-    return request.put(`/rbac/roles/${id}`, { role, roleName, description })
+  updateRole(id: string, roleName: string, description?: string): Promise<MessageResponse> {
+    return request.put(`/rbac/roles/${id}`, { roleName, description })
   },
 
   /** 删除角色 */
@@ -41,8 +41,8 @@ export const rbacApi = {
   },
 
   /** 覆盖设置角色的权限集 */
-  setRolePermissions(id: string, permissionIds: string[]): Promise<MessageResponse> {
-    return request.put(`/rbac/roles/${id}/permissions`, { permissionIds })
+  setRolePermissions(id: string, permissions: string[]): Promise<MessageResponse> {
+    return request.put(`/rbac/roles/${id}/permissions`, { permissions })
   },
 
   /** 获取所有可用权限目录 */

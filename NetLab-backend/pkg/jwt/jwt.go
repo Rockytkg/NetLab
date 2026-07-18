@@ -168,8 +168,8 @@ func (m *Manager) parseToken(tokenString string, secret []byte) (*Claims, error)
 	return claims, nil
 }
 
-// SessionValidator validates the Redis-backed single active login session.
+// SessionValidator 校验基于 Redis 的单活跃登录会话。
 type SessionValidator interface {
-	// IsSessionActive returns true only when sid is the user's current session.
+	// IsSessionActive 仅当 sid 是用户当前会话时返回 true。
 	IsSessionActive(ctx context.Context, userID, sessionID string) (bool, error)
 }

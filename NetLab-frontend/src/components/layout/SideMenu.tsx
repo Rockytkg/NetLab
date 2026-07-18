@@ -21,7 +21,7 @@ export default function SideMenu({ collapsed }: SideMenuProps) {
   const location = useLocation()
   const { token } = theme.useToken()
   const { can } = usePermission()
-  const canReadSettings = can('setting', 'read')
+	const canReadSettings = can('setting.read')
 
   type MenuItem = Required<MenuProps>['items'][number]
   const rootSubmenuKeys = ['administration']

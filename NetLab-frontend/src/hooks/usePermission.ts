@@ -11,7 +11,6 @@ export function usePermission() {
   const permissionSet = useMemo(() => new Set(permissions), [permissions])
 
   return {
-    can: (resource: string, action: string) =>
-      permissionSet.has('*:*') || permissionSet.has(`${resource}:${action}`),
+    can: (permission: string) => permissionSet.has(permission),
   }
 }

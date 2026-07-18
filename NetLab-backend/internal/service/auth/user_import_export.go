@@ -29,13 +29,13 @@ func NewUserImportService(userRepo *repository.UserRepository, logger *zap.Logge
 
 // UserImportRecord 是前端解析表格后提交的一条用户记录。
 type UserImportRecord struct {
-	Username       string
-	Nickname       string
-	Phone          string
-	Email          string
-	RoleID         string
-	RoleIdentifier string
-	Password       string
+	Username string
+	Nickname string
+	Phone    string
+	Email    string
+	RoleID   string
+	Role     string
+	Password string
 }
 
 // ImportUsers 从 JSON 记录批量导入用户。表格解析不在后端执行。
@@ -58,7 +58,7 @@ func (s *UserImportService) ImportUsers(ctx context.Context, records []UserImpor
 			continue
 		}
 
-		role, roleErr := s.resolveRole(ctx, record.RoleID, record.RoleIdentifier)
+		role, roleErr := s.resolveRole(ctx, record.RoleID, record.Role)
 		if roleErr != nil {
 			summary.Errors = append(summary.Errors, fmt.Sprintf("row %d: %s", line, roleErr.Message))
 			summary.Skipped++
@@ -133,11 +133,11 @@ func (s *UserImportService) ImportUsers(ctx context.Context, records []UserImpor
 	return summary, nil
 }
 
-func (s *UserImportService) resolveRole(ctx context.Context, roleID, roleIdentifier string) (string, *apperrors.AppError) {
+func (s *UserImportService) resolveRole(ctx context.Context, roleID, role string) (string, *apperrors.AppError) {
 	roleID = strings.TrimSpace(roleID)
-	roleIdentifier = strings.TrimSpace(roleIdentifier)
-	if roleID == "" && roleIdentifier == "" {
-		return "", apperrors.New(apperrors.ErrCodeInvalidRequest, "roleId or roleIdentifier is required")
+	role = strings.TrimSpace(role)
+	if roleID == "" && role == "" {
+		return "", apperrors.New(apperrors.ErrCodeInvalidRequest, "roleId or role is required")
 	}
 	if roleID != "" {
 		id, err := strconv.ParseUint(roleID, 10, 64)
@@ -150,5 +150,5 @@ func (s *UserImportService) resolveRole(ctx context.Context, roleID, roleIdentif
 		}
 		return role.Role, nil
 	}
-	return roleIdentifier, nil
+	return role, nil
 }

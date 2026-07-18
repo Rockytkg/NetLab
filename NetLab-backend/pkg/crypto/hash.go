@@ -31,7 +31,7 @@ func SHA256Hex(input string) string {
 	return hex.EncodeToString(h[:])
 }
 
-// SHA256Base64URL returns a compact URL-safe SHA-256 digest without padding.
+// SHA256Base64URL 返回紧凑的 URL 安全无填充 SHA-256 摘要。
 func SHA256Base64URL(input string) string {
 	h := sha256.Sum256([]byte(input))
 	return base64.RawURLEncoding.EncodeToString(h[:])

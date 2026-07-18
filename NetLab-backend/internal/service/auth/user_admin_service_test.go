@@ -11,7 +11,7 @@ import (
 func TestToAdminUserViewDoesNotExposeAdminFlag(t *testing.T) {
 	view := toAdminUserView(&model.User{
 		ID: 1, Username: "viewer", Email: "viewer@example.com",
-		Role: model.RoleViewer, Status: model.StatusActive,
+		Role: model.UserRole("viewer"), Status: model.StatusActive,
 		CreatedAt: time.Unix(0, 0).UTC(),
 	})
 	payload, err := json.Marshal(view)

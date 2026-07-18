@@ -32,6 +32,7 @@ import {
 } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import { adminApi } from '@/services/admin'
+import { rbacApi } from '@/services/rbac'
 import { usePermission } from '@/hooks/usePermission'
 import Can from '@/components/auth/Can'
 import { createPasswordStrengthRule } from '@/utils/password-strength'
@@ -39,8 +40,7 @@ import type { AdminUserView, CreateUserParams, ExportUsersParams, ImportSummary,
 
 const { Text } = Typography
 
-const ASSIGNABLE_ROLES = ['admin', 'editor', 'viewer'] as const
-type UserRoleValue = (typeof ASSIGNABLE_ROLES)[number]
+type UserRoleValue = string
 type CreateUserFormValues = Omit<CreateUserParams, 'role'> & { role: UserRoleValue }
 type UpdateUserFormValues = Omit<UpdateUserParams, 'role'> & { role: UserRoleValue }
 
@@ -74,7 +74,8 @@ export default function UsersPage() {
   const { token } = theme.useToken()
   const { message, modal } = App.useApp()
   const { can } = usePermission()
-  const canReadUsers = can('user', 'read')
+  const canReadUsers = can('user.read')
+  const [assignableRoles, setAssignableRoles] = useState<string[]>(['admin'])
 
   const [data, setData] = useState<AdminUserView[]>([])
   const [total, setTotal] = useState(0)
@@ -128,6 +129,10 @@ export default function UsersPage() {
     load()
   }, [load])
 
+  useEffect(() => {
+    rbacApi.listRoles().then((roles) => setAssignableRoles(roles.map((role) => role.role))).catch(() => undefined)
+  }, [])
+
   // 数据范围由后端 RBAC 资源权限控制。
   const selectedUsers = useMemo(
     () => data.filter((u) => selectedRowKeys.includes(u.id)),
@@ -162,9 +167,9 @@ export default function UsersPage() {
       key: 'phone',
     },
     {
-      title: t('settings:users.columns.role'),
-      dataIndex: 'role',
-      key: 'role',
+      title: t('settings:users.columns.roleName'),
+      dataIndex: 'roleName',
+      key: 'roleName',
       render: (val: string) => (
         <Tag color="blue">
           {val}
@@ -203,7 +208,7 @@ export default function UsersPage() {
       fixed: 'right',
       render: (_, record) => (
         <Space size={token.marginXXS}>
-          <Can resource="user" action="update">
+          <Can permission="user.update">
             <Button
               type="text"
               size="small"
@@ -234,7 +239,7 @@ export default function UsersPage() {
         t('settings:users.columns.phone'),
         t('settings:users.columns.email'),
         t('settings:users.columns.roleId'),
-        t('settings:users.columns.roleIdentifier'),
+        t('settings:users.columns.role'),
         t('settings:users.columns.roleName'),
         t('settings:users.columns.status'),
         t('settings:users.columns.createdAt'),
@@ -249,7 +254,7 @@ export default function UsersPage() {
 
   const openCreate = () => {
     createForm.resetFields()
-    createForm.setFieldsValue({ role: 'viewer' })
+    createForm.setFieldsValue({ role: assignableRoles[0] ?? 'admin' })
     setCreateOpen(true)
   }
 
@@ -287,7 +292,7 @@ export default function UsersPage() {
       nickname: user.nickname,
       phone: user.phone,
       email: user.email,
-      role: (ASSIGNABLE_ROLES.includes(user.roleIdentifier as UserRoleValue) ? user.roleIdentifier : 'viewer') as UserRoleValue,
+      role: user.role,
       status: user.status,
       disableTwoFactor: undefined,
     })
@@ -363,7 +368,7 @@ export default function UsersPage() {
         t('settings:users.columns.phone'),
         t('settings:users.columns.email'),
         t('settings:users.columns.roleId'),
-        t('settings:users.columns.roleIdentifier'),
+        t('settings:users.columns.role'),
         t('settings:password'),
       ])
     } catch {
@@ -415,13 +420,13 @@ export default function UsersPage() {
           wrap
         >
           <Space wrap>
-            <Can resource="user" action="create"><Button type="primary" icon={<UserAddOutlined />} onClick={openCreate}>
+            <Can permission="user.create"><Button type="primary" icon={<UserAddOutlined />} onClick={openCreate}>
               {t('settings:users.addUser')}
             </Button></Can>
-            <Can resource="user" action="update"><Button icon={<KeyOutlined />} disabled={!hasSelection} onClick={() => setPwOpen(true)}>
+            <Can permission="user.update"><Button icon={<KeyOutlined />} disabled={!hasSelection} onClick={() => setPwOpen(true)}>
               {t('settings:users.resetPassword')}
             </Button></Can>
-            <Can resource="user" action="read"><Button
+            <Can permission="user.read"><Button
               icon={<DownloadOutlined />}
               disabled={!hasSelection}
               loading={exporting}
@@ -429,7 +434,7 @@ export default function UsersPage() {
             >
               {t('settings:users.export')}
             </Button></Can>
-            <Can resource="user" action="delete"><Button
+            <Can permission="user.delete"><Button
               danger
               icon={<DeleteOutlined />}
               disabled={!hasSelection}
@@ -444,7 +449,7 @@ export default function UsersPage() {
             )}
           </Space>
           <Space wrap>
-            <Can resource="user" action="import"><Button icon={<UploadOutlined />} onClick={() => setImportOpen(true)}>
+            <Can permission="user.import"><Button icon={<UploadOutlined />} onClick={() => setImportOpen(true)}>
               {t('settings:users.importUsers')}
             </Button></Can>
             <Select
@@ -471,7 +476,7 @@ export default function UsersPage() {
               }}
               placeholder={t('settings:users.roleFilter')}
               style={{ width: 140 }}
-              options={ASSIGNABLE_ROLES.map((value) => ({
+              options={assignableRoles.map((value) => ({
                 value,
                 label: value,
               }))}
@@ -572,7 +577,7 @@ export default function UsersPage() {
             rules={[{ required: true, message: t('settings:users.roleRequired') }]}
           >
             <Select
-              options={ASSIGNABLE_ROLES.map((r) => ({
+              options={assignableRoles.map((r) => ({
                 value: r,
                 label: r,
               }))}
@@ -644,7 +649,7 @@ export default function UsersPage() {
             rules={[{ required: true, message: t('settings:users.roleRequired') }]}
           >
             <Select
-              options={ASSIGNABLE_ROLES.map((r) => ({
+              options={assignableRoles.map((r) => ({
                 value: r,
                 label: r,
               }))}
@@ -736,10 +741,10 @@ export default function UsersPage() {
         <Space orientation="vertical" size={token.margin} style={{ width: '100%' }}>
           <Alert type="info" showIcon title={t('settings:users.importUsersFormat')} />
           <Space.Compact block>
-            <Can resource="user" action="import"><Button icon={<DownloadOutlined />} onClick={downloadTemplate} loading={templateDownloading}>
+            <Can permission="user.import"><Button icon={<DownloadOutlined />} onClick={downloadTemplate} loading={templateDownloading}>
               {t('settings:users.downloadTemplate')}
             </Button></Can>
-            <Can resource="user" action="import"><Upload {...uploadProps}>
+            <Can permission="user.import"><Upload {...uploadProps}>
               <Button type="primary" icon={<UploadOutlined />} loading={importing}>
                 {t('settings:users.importUsers')}
               </Button>

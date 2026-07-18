@@ -82,7 +82,7 @@ export default function SecurityPanel({ value, onSaved }: SecurityPanelProps) {
         </Form.Item>
         <Divider style={{ marginBlock: token.marginLG }} />
         <Form.Item style={{ marginBottom: 0 }}>
-          <Can resource="setting" action="update"><Button size="middle" type="primary" htmlType="submit" loading={saving} icon={<SaveOutlined />}>
+          <Can permission="setting.update"><Button size="middle" type="primary" htmlType="submit" loading={saving} icon={<SaveOutlined />}>
             {saving ? t('settings:saving') : t('settings:save')}
           </Button></Can>
         </Form.Item>

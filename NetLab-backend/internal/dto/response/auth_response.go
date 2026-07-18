@@ -11,6 +11,7 @@ type UserInfo struct {
 	Avatar              string   `json:"avatar,omitempty"`
 	Email               string   `json:"email,omitempty"`
 	Role                string   `json:"role"`
+	RoleName            string   `json:"roleName"`
 	RoleID              string   `json:"roleId,omitempty"`
 	Permissions         []string `json:"permissions"`
 	TwoFactorEnabled    bool     `json:"twoFactorEnabled"`
@@ -18,6 +19,7 @@ type UserInfo struct {
 	HasPasskey          bool     `json:"hasPasskey"`
 }
 
+// SecurityActions 描述登录后要求用户完成的强制安全动作。
 type SecurityActions struct {
 	RequirePasswordChange bool   `json:"requirePasswordChange"`
 	RequireEmailChange    bool   `json:"requireEmailChange"`
@@ -25,6 +27,7 @@ type SecurityActions struct {
 	Reason                string `json:"reason,omitempty"`
 }
 
+// PendingOAuthBinding 是 OAuth 登录后待绑定本地账号的会话信息。
 type PendingOAuthBinding struct {
 	Token    string `json:"token"`
 	Provider string `json:"provider"`

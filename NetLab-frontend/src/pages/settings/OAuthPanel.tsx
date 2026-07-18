@@ -110,7 +110,7 @@ function ProviderCard({ provider, onSaved }: ProviderCardProps) {
         </Form.Item>
         <Divider style={{ marginBlock: token.margin }} />
         <Form.Item style={{ marginBottom: 0 }}>
-          <Can resource="setting" action="update"><Button size="middle" type="primary" htmlType="submit" loading={saving} icon={<SaveOutlined />}>
+          <Can permission="setting.update"><Button size="middle" type="primary" htmlType="submit" loading={saving} icon={<SaveOutlined />}>
             {saving ? t('settings:saving') : t('settings:oauth.save', { provider: provider.name })}
           </Button></Can>
         </Form.Item>

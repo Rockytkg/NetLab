@@ -77,6 +77,7 @@ type ChangePasswordParams struct {
 	ConfirmPassword string `json:"confirmPassword" binding:"required,eqfield=NewPassword"`
 }
 
+// CompleteSecurityUpdateParams 是 POST /auth/account/security-update 的请求体。
 type CompleteSecurityUpdateParams struct {
 	NewPassword     string `json:"newPassword" binding:"required,min=8,max=72"`
 	ConfirmPassword string `json:"confirmPassword" binding:"required,eqfield=NewPassword"`
@@ -101,12 +102,14 @@ type ChangeEmailParams struct {
 	VerifyCode string `json:"verifyCode" binding:"required,len=6"`
 }
 
+// OAuthBindExistingParams 是 POST /auth/oauth/bind-existing 的请求体。
 type OAuthBindExistingParams struct {
 	PendingToken string `json:"pendingToken" binding:"required"`
 	Account      string `json:"account" binding:"required,max=255"`
 	VerifyCode   string `json:"verifyCode" binding:"required,len=6"`
 }
 
+// OAuthCreateAccountParams 是 POST /auth/oauth/create-account 的请求体。
 type OAuthCreateAccountParams struct {
 	PendingToken    string `json:"pendingToken" binding:"required"`
 	Username        string `json:"username" binding:"required,min=3,max=64"`
@@ -118,29 +121,29 @@ type OAuthCreateAccountParams struct {
 	VerifyCode      string `json:"verifyCode" binding:"required,len=6"`
 }
 
-// EnableTwoFactorParams is the request body of POST /auth/2fa/enable.
+// EnableTwoFactorParams 是 POST /auth/2fa/enable 的请求体。
 type EnableTwoFactorParams struct {
 	Code string `json:"code" binding:"required,len=6"`
 }
 
-// DisableTwoFactorParams is the request body of POST /auth/2fa/disable.
+// DisableTwoFactorParams 是 POST /auth/2fa/disable 的请求体。
 type DisableTwoFactorParams struct {
 	VerifyCode string `json:"verifyCode" binding:"required,len=6"`
 }
 
-// VerifyTwoFactorParams is the request body of POST /auth/login/2fa.
+// VerifyTwoFactorParams 是 POST /auth/login/2fa 的请求体。
 type VerifyTwoFactorParams struct {
 	TwoFactorToken string `json:"twoFactorToken" binding:"required"`
 	Code           string `json:"code" binding:"required,len=6"`
 }
 
-// RecoveryLoginParams is the request body of POST /auth/login/recovery.
+// RecoveryLoginParams 是 POST /auth/login/recovery 的请求体。
 type RecoveryLoginParams struct {
 	TwoFactorToken string `json:"twoFactorToken" binding:"required"`
 	RecoveryCode   string `json:"recoveryCode" binding:"required"`
 }
 
-// PreferredAuthMethodParams is the request body of PUT /auth/account/preferred-auth-method.
+// PreferredAuthMethodParams 是 PUT /auth/account/preferred-auth-method 的请求体。
 type PreferredAuthMethodParams struct {
 	Method string `json:"method" binding:"required,oneof=totp passkey"`
 }

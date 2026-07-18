@@ -40,11 +40,11 @@ func testConfigService(t *testing.T, maxAgeDays int) *sysconfig.Service {
 func baseSecurityUser() *model.User {
 	now := time.Now()
 	return &model.User{
-		ID: 1,
+		ID:                1,
 		Username:          "user",
 		Email:             "user@example.com",
 		PasswordHash:      "hash",
-		Role:              model.RoleViewer,
+		Role:              model.UserRole("viewer"),
 		PasswordChangedAt: &now,
 	}
 }

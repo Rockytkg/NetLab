@@ -107,9 +107,9 @@ export default function SettingsProfilePage() {
                 {userInfo?.nickname || '-'}
               </Title>
               <Space size={token.marginXS} wrap>
-                {userInfo?.role && (
+                {(userInfo?.roleName || userInfo?.role) && (
                   <Tag color="blue">
-                    {userInfo.role}
+                    {userInfo.roleName || userInfo.role}
                   </Tag>
                 )}
               </Space>

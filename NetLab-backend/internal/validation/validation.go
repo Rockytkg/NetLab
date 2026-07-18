@@ -21,14 +21,18 @@ var (
 )
 
 const (
+	// PasswordMinLength 密码最小长度（按字符/rune 计）。
 	PasswordMinLength = 8
-	PasswordMaxBytes  = 72
+	// PasswordMaxBytes 密码最大字节数（对齐 bcrypt 72 字节硬上限）。
+	PasswordMaxBytes = 72
 )
 
+// Invalid 构造一个「参数无效」的应用错误（错误码为 ErrCodeInvalidCode）。
 func Invalid(message string) *apperrors.AppError {
 	return apperrors.New(apperrors.ErrCodeInvalidCode, message)
 }
 
+// NormalizeEmail 规范化并校验邮箱地址（去空白、转小写、格式校验）。
 func NormalizeEmail(email string) (string, *apperrors.AppError) {
 	value := strings.ToLower(strings.TrimSpace(email))
 	if value == "" {
@@ -44,6 +48,7 @@ func NormalizeEmail(email string) (string, *apperrors.AppError) {
 	return value, nil
 }
 
+// NormalizeUsername 规范化并校验用户名（3-64 位，仅限字母、数字、下划线和连字符）。
 func NormalizeUsername(username string) (string, *apperrors.AppError) {
 	value := strings.TrimSpace(username)
 	if len(value) < 3 || len(value) > 64 {
@@ -55,6 +60,7 @@ func NormalizeUsername(username string) (string, *apperrors.AppError) {
 	return value, nil
 }
 
+// NormalizeNickname 规范化并校验昵称（非空且不超过 64 个字符）。
 func NormalizeNickname(nickname string) (string, *apperrors.AppError) {
 	value := strings.TrimSpace(nickname)
 	if value == "" || utf8.RuneCountInString(value) > 64 {
@@ -63,6 +69,7 @@ func NormalizeNickname(nickname string) (string, *apperrors.AppError) {
 	return value, nil
 }
 
+// NormalizePhone 规范化并校验手机号（中国大陆 11 位手机号格式）。
 func NormalizePhone(phone string) (string, *apperrors.AppError) {
 	value := strings.TrimSpace(phone)
 	if !phonePattern.MatchString(value) {
@@ -98,6 +105,7 @@ func ValidatePassword(password string) *apperrors.AppError {
 	return nil
 }
 
+// NormalizeVerifyCode 规范化并校验邮箱验证码格式（6 位数字）。
 func NormalizeVerifyCode(code string) (string, *apperrors.AppError) {
 	value := strings.TrimSpace(code)
 	if len(value) != 6 {
@@ -111,23 +119,28 @@ func NormalizeVerifyCode(code string) (string, *apperrors.AppError) {
 	return value, nil
 }
 
+// NormalizeRole 规范化并校验角色标识：superadmin 始终保留不可用，admin 仅在
+// allowAdmin 为 true 时放行，其余按自定义角色格式（2-64 位字母、数字、下划线或连字符）校验。
 func NormalizeRole(role string, allowAdmin bool) (model.UserRole, *apperrors.AppError) {
 	value := strings.TrimSpace(role)
-	switch model.UserRole(value) {
-	case model.RoleEditor, model.RoleViewer:
-		return model.UserRole(value), nil
-	case model.RoleAdmin:
-		if !allowAdmin {
-			return "", apperrors.New(apperrors.ErrCodeOperationDenied, "admin role is protected")
-		}
-		return model.RoleAdmin, nil
-	case model.RoleSuperAdmin:
-		return "", apperrors.New(apperrors.ErrCodeOperationDenied, "super admin role is reserved for the built-in admin account")
-	default:
+	if value == string(model.RoleSuperAdmin) || value == "superadmin" {
+		return "", apperrors.New(apperrors.ErrCodeOperationDenied, "superadmin role is reserved")
+	}
+	if value == string(model.RoleAdmin) && !allowAdmin {
+		return "", apperrors.New(apperrors.ErrCodeOperationDenied, "admin role is protected")
+	}
+	if len(value) < 2 || len(value) > 64 {
 		return "", Invalid("invalid role: " + value)
 	}
+	for _, r := range value {
+		if !(r == '_' || r == '-' || r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9') {
+			return "", Invalid("invalid role: " + value)
+		}
+	}
+	return model.UserRole(value), nil
 }
 
+// NormalizeStatus 规范化并校验用户状态（active/disabled/locked）。
 func NormalizeStatus(status string) (model.UserStatus, *apperrors.AppError) {
 	value := strings.TrimSpace(status)
 	switch model.UserStatus(value) {

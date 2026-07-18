@@ -155,11 +155,7 @@ func main() {
 	adminService := authsvc.NewAdminService(configService, passkeyService)
 
 	// ── 初始化 RBAC ──────────────────────────────────────────────────
-	enforcer, err := rbac.NewEnforcer(db)
-	if err != nil {
-		logger.Fatal("Failed to initialize RBAC enforcer", zap.Error(err))
-	}
-	rbacService, err := rbac.NewService(db, enforcer, logger)
+	rbacService, err := rbac.NewService(db, logger)
 	if err != nil {
 		logger.Fatal("Failed to initialize RBAC service", zap.Error(err))
 	}
@@ -198,7 +194,7 @@ func main() {
 		JWTManager:    tokenService.JWTManager(),
 		SessionStore:  tokenRepo,
 		RateLimiter:   rateLimiter,
-		Enforcer:      rbacService.Enforcer(),
+		Authorizer:    rbacService,
 	})
 
 	// ── 启动服务器并支持优雅关闭 ─────────────────────────────────────

@@ -2,13 +2,13 @@ package auth
 
 import (
 	"bytes"
-	"strconv"
 	"context"
 	cryptorand "crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
 	"image/png"
+	"strconv"
 	"strings"
 	"time"
 

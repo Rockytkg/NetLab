@@ -61,6 +61,7 @@ func (r *UserRepository) FindByEmail(ctx context.Context, email string) (*model.
 	return &user, nil
 }
 
+// FindByPhone 通过手机号获取用户。
 func (r *UserRepository) FindByPhone(ctx context.Context, phone string) (*model.User, error) {
 	var user model.User
 	if err := r.db.WithContext(ctx).Where("phone = ?", phone).First(&user).Error; err != nil {
@@ -98,6 +99,7 @@ func (r *UserRepository) ExistsByEmail(ctx context.Context, email string) (bool,
 	return count > 0, err
 }
 
+// ExistsByPhone 检查手机号是否已被占用。
 func (r *UserRepository) ExistsByPhone(ctx context.Context, phone string) (bool, error) {
 	var count int64
 	err := r.db.WithContext(ctx).Model(&model.User{}).Where("phone = ?", phone).Count(&count).Error
@@ -205,13 +207,13 @@ func (r *UserRepository) FindByIDs(ctx context.Context, ids []string) ([]model.U
 	}
 	type userWithRole struct {
 		model.User
-		RoleIdentifier string `gorm:"column:role_identifier"`
-		RoleName       string `gorm:"column:role_name"`
+		Role     string `gorm:"column:role"`
+		RoleName string `gorm:"column:role_name"`
 	}
 	var rows []userWithRole
 	if err := r.db.WithContext(ctx).
 		Table("nb_users AS u").
-		Select("u.*, r.role AS role_identifier, r.role_name AS role_name").
+		Select("u.*, r.role AS role, r.role_name AS role_name").
 		Joins("LEFT JOIN nb_roles AS r ON r.id = u.role_id").
 		Where("u.id IN ?", ids).
 		Find(&rows).Error; err != nil {
@@ -220,7 +222,7 @@ func (r *UserRepository) FindByIDs(ctx context.Context, ids []string) ([]model.U
 	users := make([]model.User, len(rows))
 	for i, row := range rows {
 		users[i] = row.User
-		users[i].RoleIdentifier = row.RoleIdentifier
+		users[i].Role = model.UserRole(row.Role)
 		users[i].RoleName = row.RoleName
 	}
 	return users, nil

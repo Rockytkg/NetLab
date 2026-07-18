@@ -1,9 +1,9 @@
 package middleware
 
 import (
+	"context"
 	"strings"
 
-	"github.com/casbin/casbin/v3"
 	"github.com/gin-gonic/gin"
 
 	"netlab-backend/pkg/apperrors"
@@ -14,13 +14,14 @@ import (
 const (
 	// ContextKeyUserID 存储已认证用户的 ID。
 	ContextKeyUserID = "user_id"
-	// ContextKeyUserRole 存储已认证用户的角色。
+	// ContextKeyUserRole 存储已认证用户的主角色 ID。
 	ContextKeyUserRole = "user_role"
-	// ContextKeyResource 存储当前请求对应的 RBAC 资源名。
-	ContextKeyResource = "rbac_resource"
-	// ContextKeyAction 存储当前请求对应的 RBAC 操作。
-	ContextKeyAction = "rbac_action"
 )
+
+// Authorizer 是路由授权所需的最小接口，具体实现由 RBAC 服务提供。
+type Authorizer interface {
+	Allow(context.Context, string, string) bool
+}
 
 // AuthConfig 配置认证中间件的行为。
 type AuthConfig struct {
@@ -52,8 +53,8 @@ func Auth(jwtManager *pkgjwt.Manager, tokenStore pkgjwt.SessionValidator, cfg Au
 			return
 		}
 
-		// Redis-backed session state is part of authentication. Fail closed on
-		// Redis errors so revoked or replaced sessions cannot slip through.
+		// Redis 中的会话状态是认证的一部分。Redis 出错时按失败关闭（fail closed）
+		// 处理，确保已吊销或被替换的会话不会漏过校验。
 		if tokenStore != nil {
 			active, err := tokenStore.IsSessionActive(c.Request.Context(), claims.UserID, claims.SessionID)
 			if err != nil || !active {
@@ -84,38 +85,19 @@ func OptionalAuth(jwtManager *pkgjwt.Manager, tokenStore pkgjwt.SessionValidator
 	return Auth(jwtManager, tokenStore, AuthConfig{Required: false})
 }
 
-// Authorize uses Casbin to enforce an explicit RBAC resource/action decision.
-func Authorize(enforcer *casbin.Enforcer) gin.HandlerFunc {
+// RequirePermission 创建一个 RBAC 鉴权中间件，校验稳定的
+// resource.action 权限码；无授权器或权限码为空时拒绝请求。
+func RequirePermission(authorizer Authorizer, permission string) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		if enforcer == nil {
+		if authorizer == nil || permission == "" {
 			response.Error(c, apperrors.ErrOperationDenied)
 			return
 		}
-
-		role := GetUserRole(c)
-		resource := GetResource(c)
-		action := GetAction(c)
-		if resource == "" || action == "" {
-			response.Error(c, apperrors.ErrOperationDenied)
-			return
-		}
-
-		allowed, err := enforcer.Enforce(role, resource, action)
-		if err == nil && allowed {
+		if authorizer.Allow(c.Request.Context(), GetUserRole(c), permission) {
 			c.Next()
 			return
 		}
 		response.Error(c, apperrors.ErrOperationDenied)
-	}
-}
-
-// RequireRBAC 标注并立即执行当前路由的 RBAC 权限检查。
-// 该中间件必须同时完成标注和校验，避免全局中间件早于路由中间件执行。
-func RequireRBAC(enforcer *casbin.Enforcer, resource, action string) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		c.Set(ContextKeyResource, resource)
-		c.Set(ContextKeyAction, action)
-		Authorize(enforcer)(c)
 	}
 }
 
@@ -139,26 +121,8 @@ func GetUserRole(c *gin.Context) string {
 	return ""
 }
 
-// GetResource 从 context 中获取当前请求的 RBAC 资源名。
-func GetResource(c *gin.Context) string {
-	if v, exists := c.Get(ContextKeyResource); exists {
-		if s, ok := v.(string); ok {
-			return s
-		}
-	}
-	return ""
-}
-
-// GetAction 从 context 中获取当前请求的 RBAC 操作。
-func GetAction(c *gin.Context) string {
-	if v, exists := c.Get(ContextKeyAction); exists {
-		if s, ok := v.(string); ok {
-			return s
-		}
-	}
-	return ""
-}
-
+// extractBearerToken 从 Authorization 请求头中提取 Bearer token；
+// 头缺失或格式不合法时返回空字符串。
 func extractBearerToken(c *gin.Context) string {
 	authHeader := c.GetHeader("Authorization")
 	if authHeader == "" {

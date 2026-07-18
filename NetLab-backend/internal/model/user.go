@@ -10,11 +10,12 @@ import (
 	"gorm.io/gorm"
 )
 
-// RecoveryCodes is the JSONB representation of a user's hashed recovery codes.
-// PostgreSQL drivers return JSONB values as []byte, so the type must explicitly
-// implement sql.Scanner instead of relying on GORM's default slice mapping.
+// RecoveryCodes 是用户恢复码哈希列表的 JSONB 表示。
+// PostgreSQL 驱动以 []byte 返回 JSONB 值，因此该类型必须显式实现
+// sql.Scanner，而不能依赖 GORM 默认的切片映射。
 type RecoveryCodes []string
 
+// Scan 实现 sql.Scanner，将数据库中的 JSONB 值解码为恢复码列表。
 func (r *RecoveryCodes) Scan(value any) error {
 	if value == nil {
 		*r = RecoveryCodes{}
@@ -46,6 +47,7 @@ func (r *RecoveryCodes) Scan(value any) error {
 	return nil
 }
 
+// Value 实现 driver.Valuer，将恢复码列表编码为 JSONB 存储值。
 func (r RecoveryCodes) Value() (driver.Value, error) {
 	if r == nil {
 		return []byte("[]"), nil
@@ -57,19 +59,22 @@ func (r RecoveryCodes) Value() (driver.Value, error) {
 type UserRole string
 
 const (
-	RoleSuperAdmin UserRole = "super_admin"
-	RoleAdmin      UserRole = "admin"
-	RoleEditor     UserRole = "editor"
-	RoleViewer     UserRole = "viewer"
+	// RoleSuperAdmin 超级管理员角色标识。
+	RoleSuperAdmin UserRole = "superadmin"
+	// RoleAdmin 管理员角色标识。
+	RoleAdmin UserRole = "admin"
 )
 
 // UserStatus 表示账户状态。
 type UserStatus string
 
 const (
-	StatusActive   UserStatus = "active"
+	// StatusActive 账户正常可用。
+	StatusActive UserStatus = "active"
+	// StatusDisabled 账户已被管理员禁用。
 	StatusDisabled UserStatus = "disabled"
-	StatusLocked   UserStatus = "locked"
+	// StatusLocked 账户已被锁定（如多次登录失败）。
+	StatusLocked UserStatus = "locked"
 )
 
 // User 表示一个用户账户。
@@ -83,7 +88,6 @@ type User struct {
 	Avatar              string     `gorm:"type:varchar(512)" json:"avatar"`
 	RoleID              uint64     `gorm:"column:role_id;not null;index" json:"roleId"`
 	Role                UserRole   `gorm:"-" json:"-"`
-	RoleIdentifier      string     `gorm:"-" json:"-"`
 	RoleName            string     `gorm:"-" json:"-"`
 	Status              UserStatus `gorm:"type:varchar(16);not null;default:'active'" json:"status"`
 	ForcePasswordChange bool       `gorm:"type:boolean;not null;default:false" json:"forcePasswordChange"`
@@ -99,6 +103,7 @@ type User struct {
 	UpdatedAt         time.Time     `gorm:"type:timestamptz;not null;default:now()" json:"updatedAt"`
 }
 
+// TableName 指定 User 的数据库表名。
 func (User) TableName() string { return "nb_users" }
 
 // BeforeCreate 在创建前设置默认值。
@@ -106,7 +111,7 @@ func (u *User) BeforeCreate(tx *gorm.DB) error {
 	if u.RoleID == 0 {
 		role := u.Role
 		if role == "" {
-			role = RoleViewer
+			role = UserRole("viewer")
 		}
 		var roleModel Role
 		if err := tx.Where("role = ?", role).First(&roleModel).Error; err != nil {
@@ -124,6 +129,7 @@ func (u *User) BeforeCreate(tx *gorm.DB) error {
 	return nil
 }
 
+// AfterFind 在查询后按 RoleID 回填角色标识（Role 字段不落库）。
 func (u *User) AfterFind(tx *gorm.DB) error {
 	if u.RoleID == 0 {
 		return nil
@@ -136,16 +142,24 @@ func (u *User) AfterFind(tx *gorm.DB) error {
 	return nil
 }
 
+// IsActive 报告账户是否处于正常可用状态。
 func (u *User) IsActive() bool { return u.Status == StatusActive }
 
-// ── TokenUser interface ──────────────────────────────────────────────────
+// ── TokenUser 接口实现 ───────────────────────────────────────────────────
 
-func (u *User) GetID() string       { return strconv.FormatUint(u.ID, 10) }
+// GetID 返回用户 ID 的字符串形式（用于 JWT 载荷）。
+func (u *User) GetID() string { return strconv.FormatUint(u.ID, 10) }
+
+// GetUsername 返回用户名（用于 JWT 载荷）。
 func (u *User) GetUsername() string { return u.Username }
-func (u *User) GetRole() string     { return strconv.FormatUint(u.RoleID, 10) }
+
+// GetRole 返回角色 ID 的字符串形式（用于 JWT 载荷与 RBAC 鉴权）。
+func (u *User) GetRole() string { return strconv.FormatUint(u.RoleID, 10) }
 
 // ─── 恢复码 ──────────────────────────────────────────────────────────
 
+// ConsumeRecoveryCode 消费一个恢复码：若哈希匹配则从列表中移除并返回 true。
+// 调用方需在返回 true 后持久化用户以完成一次性消费。
 func (u *User) ConsumeRecoveryCode(codeHash string) bool {
 	for i, h := range u.RecoveryCodes {
 		if h == codeHash {

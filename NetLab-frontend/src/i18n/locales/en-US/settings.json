@@ -158,7 +158,6 @@
       "email": "Email",
       "role": "Role",
       "roleId": "Role ID",
-      "roleIdentifier": "Role Identifier",
       "roleName": "Role Name",
       "status": "Status",
       "twoFactor": "Two-Factor",

@@ -10,16 +10,17 @@ import (
 	"netlab-backend/internal/model"
 )
 
-// PasskeyRepository handles WebAuthn credentials in the dedicated passkey table.
+// PasskeyRepository 负责专用 passkey 表中 WebAuthn 凭证的数据访问。
 type PasskeyRepository struct {
 	db *gorm.DB
 }
 
+// NewPasskeyRepository 创建一个新的 PasskeyRepository。
 func NewPasskeyRepository(db *gorm.DB) *PasskeyRepository {
 	return &PasskeyRepository{db: db}
 }
 
-// FindByCredentialID finds the user that owns a credential.
+// FindByCredentialID 查找拥有指定凭证的用户。
 func (r *PasskeyRepository) FindByCredentialID(ctx context.Context, credentialID string) (*model.User, error) {
 	var user model.User
 	err := r.db.WithContext(ctx).
@@ -36,6 +37,7 @@ func (r *PasskeyRepository) FindByCredentialID(ctx context.Context, credentialID
 	return &user, nil
 }
 
+// HasPasskey 报告用户是否已注册至少一个通行密钥。
 func (r *PasskeyRepository) HasPasskey(ctx context.Context, userID uint64) (bool, error) {
 	var count int64
 	err := r.db.WithContext(ctx).Model(&model.Passkey{}).
@@ -44,7 +46,7 @@ func (r *PasskeyRepository) HasPasskey(ctx context.Context, userID uint64) (bool
 	return count > 0, err
 }
 
-// Save creates a new credential for a user.
+// Save 为用户创建一条新的 WebAuthn 凭证记录。
 func (r *PasskeyRepository) Save(ctx context.Context, userID uint64, credentialID, credentialJSON, name string, signCount uint32) error {
 	return r.db.WithContext(ctx).Create(&model.Passkey{
 		UserID:       userID,
@@ -55,6 +57,7 @@ func (r *PasskeyRepository) Save(ctx context.Context, userID uint64, credentialI
 	}).Error
 }
 
+// PasskeyInfo 是通行密钥的列表展示信息。
 type PasskeyInfo struct {
 	ID         string
 	Name       string
@@ -62,12 +65,13 @@ type PasskeyInfo struct {
 	LastUsedAt *time.Time
 }
 
+// CredentialData 承载一条凭证的原始数据及其数据库 ID。
 type CredentialData struct {
 	CredentialID string
 	Credential   string
 }
 
-// GetCredentials returns all credentials for a user for WebAuthn registration/login.
+// GetCredentials 返回用户的全部凭证，用于 WebAuthn 注册/登录流程。
 func (r *PasskeyRepository) GetCredentials(ctx context.Context, userID uint64) ([]CredentialData, error) {
 	var rows []CredentialData
 	err := r.db.WithContext(ctx).Model(&model.Passkey{}).
@@ -78,7 +82,7 @@ func (r *PasskeyRepository) GetCredentials(ctx context.Context, userID uint64) (
 	return rows, err
 }
 
-// List returns passkey metadata ordered by creation time.
+// List 返回用户的通行密钥元数据，按创建时间排序。
 func (r *PasskeyRepository) List(ctx context.Context, userID uint64) ([]PasskeyInfo, error) {
 	var rows []model.Passkey
 	if err := r.db.WithContext(ctx).Model(&model.Passkey{}).
@@ -100,7 +104,7 @@ func (r *PasskeyRepository) List(ctx context.Context, userID uint64) ([]PasskeyI
 	return result, nil
 }
 
-// DeleteByCredentialID removes only the selected credential owned by the user.
+// DeleteByCredentialID 仅删除该用户名下选定的凭证。
 func (r *PasskeyRepository) DeleteByCredentialID(ctx context.Context, userID uint64, credentialID string) (int64, error) {
 	result := r.db.WithContext(ctx).
 		Where("user_id = ? AND credential_id = ?", userID, credentialID).
@@ -108,6 +112,7 @@ func (r *PasskeyRepository) DeleteByCredentialID(ctx context.Context, userID uin
 	return result.RowsAffected, result.Error
 }
 
+// UpdateSignCount 更新凭证的签名计数器（防重放检测）。
 func (r *PasskeyRepository) UpdateSignCount(ctx context.Context, credentialID string, signCount uint32, credentialJSON string, lastUsed time.Time) error {
 	return r.db.WithContext(ctx).Model(&model.Passkey{}).
 		Where("credential_id = ?", credentialID).

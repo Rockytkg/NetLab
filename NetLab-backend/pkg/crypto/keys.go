@@ -29,7 +29,7 @@ func GenerateRandomKeyHex() (string, error) {
 	return hex.EncodeToString(key), nil
 }
 
-// GenerateRandomBase64URL returns a compact URL-safe random identifier.
+// GenerateRandomBase64URL 返回紧凑的 URL 安全随机标识符。
 func GenerateRandomBase64URL(size int) (string, error) {
 	if size <= 0 {
 		return "", fmt.Errorf("invalid random size: %d", size)
@@ -41,7 +41,7 @@ func GenerateRandomBase64URL(size int) (string, error) {
 	return base64.RawURLEncoding.EncodeToString(key), nil
 }
 
-// GenerateNumericCode returns a zero-padded cryptographically random decimal code.
+// GenerateNumericCode 返回定长零填充的加密安全随机数字码。
 func GenerateNumericCode(digits int) (string, error) {
 	if digits <= 0 || digits > 18 {
 		return "", fmt.Errorf("invalid code length: %d", digits)

@@ -45,7 +45,7 @@ type UpdateOAuthParams struct {
 // BatchUpdateRoleParams 是 PUT /api/users/role 的请求体。
 type BatchUpdateRoleParams struct {
 	UserIDs []string `json:"userIds" binding:"required,min=1,dive,numeric"`
-	Role    string   `json:"role" binding:"required,oneof=admin editor viewer"`
+	Role    string   `json:"role" binding:"required,min=2,max=64"`
 }
 
 // UpdateUserParams 是 PUT /api/users/:id 的请求体。
@@ -53,7 +53,7 @@ type UpdateUserParams struct {
 	Nickname         string `json:"nickname" binding:"required,max=64"`
 	Phone            string `json:"phone" binding:"required"`
 	Email            string `json:"email" binding:"required,email,max=255"`
-	Role             string `json:"role" binding:"required,oneof=admin editor viewer"`
+	Role             string `json:"role" binding:"required,min=2,max=64"`
 	Status           string `json:"status" binding:"required,oneof=active disabled locked"`
 	DisableTwoFactor bool   `json:"disableTwoFactor"`
 }
@@ -64,7 +64,7 @@ type CreateUserParams struct {
 	Nickname string `json:"nickname" binding:"required,max=64"`
 	Phone    string `json:"phone" binding:"required"`
 	Email    string `json:"email" binding:"required,email,max=255"`
-	Role     string `json:"role" binding:"required,oneof=admin editor viewer"`
+	Role     string `json:"role" binding:"required,min=2,max=64"`
 	Password string `json:"password" binding:"required,min=8,max=72"`
 }
 
@@ -92,11 +92,11 @@ type ImportUsersParams struct {
 
 // ImportUserParams 是单条待导入用户数据。表格文件由前端解析后传入。
 type ImportUserParams struct {
-	Username       string `json:"username" binding:"required,max=64"`
-	Nickname       string `json:"nickname" binding:"required,max=64"`
-	Phone          string `json:"phone" binding:"required,max=20"`
-	Email          string `json:"email" binding:"required,max=255"`
-	RoleID         string `json:"roleId" binding:"omitempty,numeric"`
-	RoleIdentifier string `json:"roleIdentifier" binding:"omitempty,max=64"`
-	Password       string `json:"password" binding:"required,max=72"`
+	Username string `json:"username" binding:"required,max=64"`
+	Nickname string `json:"nickname" binding:"required,max=64"`
+	Phone    string `json:"phone" binding:"required,max=20"`
+	Email    string `json:"email" binding:"required,max=255"`
+	RoleID   string `json:"roleId" binding:"omitempty,numeric"`
+	Role     string `json:"role" binding:"omitempty,max=64"`
+	Password string `json:"password" binding:"required,max=72"`
 }

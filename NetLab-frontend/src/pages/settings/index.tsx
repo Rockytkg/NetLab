@@ -46,7 +46,7 @@ export default function SettingsPage() {
   const { token } = theme.useToken()
   const screens = useBreakpoint()
   const { can } = usePermission()
-  const canReadSettings = can('setting', 'read')
+	const canReadSettings = can('setting.read')
 
   const [settings, setSettings] = useState<AdminSettings | null>(null)
   const [loading, setLoading] = useState(true)

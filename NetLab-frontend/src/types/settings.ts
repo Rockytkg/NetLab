@@ -77,7 +77,7 @@ export interface AdminUserView {
   phone: string
   email: string
   role: string
-  roleIdentifier: string
+  roleName: string
   status: string
 	 twoFactorEnabled: boolean
 	createdAt: string
@@ -132,7 +132,7 @@ export interface AdminUserExportView {
   phone: string
   email: string
   roleId: string
-  roleIdentifier: string
+  role: string
   roleName: string
   status: string
   createdAt: string
@@ -145,7 +145,7 @@ export interface ImportUserParams {
 	phone: string
   email: string
 	roleId: string
-	roleIdentifier: string
+	role: string
   password: string
 }
 
@@ -169,6 +169,9 @@ export interface RoleView {
   role: string
   roleName: string
   description?: string
+  type: 'builtin' | 'custom'
+  managementLevel: number
+  hidden: boolean
 	permissions?: PermissionRef[]
   createdAt: string
   updatedAt: string
@@ -176,14 +179,14 @@ export interface RoleView {
 
 /** 权限简洁引用 */
 export interface PermissionRef {
-  id: string
+  code: string
   resource: string
   action: string
 }
 
 /** 权限详细视图 */
 export interface PermissionView {
-  id: string
+  code: string
   resource: string
   action: string
   description?: string

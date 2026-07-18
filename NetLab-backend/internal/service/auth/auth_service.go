@@ -193,7 +193,7 @@ func (s *AuthService) Register(ctx context.Context, username, nickname, phone, e
 		Phone:             phone,
 		Email:             email,
 		PasswordHash:      passwordHash,
-		Role:              model.RoleViewer,
+		Role:              model.UserRole("viewer"),
 		Status:            model.StatusActive,
 		PasswordChangedAt: &now,
 	}
@@ -223,8 +223,8 @@ func (s *AuthService) GetUserInfo(ctx context.Context, userID string) (*model.Us
 	return user, nil
 }
 
-// CompleteRequiredSecurityUpdate updates mandatory account fields before the
-// user can enter the application.
+// CompleteRequiredSecurityUpdate 在用户进入应用前完成强制的账户安全更新
+// （修改初始/过期密码，必要时一并换绑邮箱），更新后清除强制标记并吊销活跃会话。
 func (s *AuthService) CompleteRequiredSecurityUpdate(ctx context.Context, userID, newPassword, newEmail, verifyCode string) (*model.User, *apperrors.AppError) {
 	user, err := s.userRepo.FindByID(ctx, userID)
 	if err != nil || user == nil {
@@ -409,7 +409,7 @@ type UserInfoResult struct {
 	Avatar              string
 	Email               string
 	Role                string
-	RoleIdentifier      string
+	RoleName            string
 	RoleID              string
 	Permissions         []string
 	TwoFactorEnabled    bool
@@ -426,7 +426,7 @@ func userToInfo(u *model.User) *UserInfoResult {
 		Avatar:              u.Avatar,
 		Email:               u.Email,
 		Role:                string(u.Role),
-		RoleIdentifier:      string(u.Role),
+		RoleName:            u.RoleName,
 		RoleID:              strconv.FormatUint(u.RoleID, 10),
 		TwoFactorEnabled:    u.TwoFactorEnabled,
 		PreferredAuthMethod: u.PreferredAuthMethod,

@@ -2,7 +2,7 @@ package model
 
 import "time"
 
-// Passkey stores one WebAuthn credential owned by a user.
+// Passkey 存储用户拥有的一条 WebAuthn 凭证。
 type Passkey struct {
 	ID           uint64     `gorm:"primaryKey;autoIncrement" json:"id"`
 	UserID       uint64     `gorm:"not null;index" json:"userId"`
@@ -15,4 +15,5 @@ type Passkey struct {
 	UpdatedAt    time.Time  `gorm:"type:timestamptz;not null;default:now()" json:"updatedAt"`
 }
 
+// TableName 指定 Passkey 的数据库表名。
 func (Passkey) TableName() string { return "nb_passkeys" }

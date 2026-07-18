@@ -34,7 +34,7 @@ type AuthHandler struct {
 
 // PermissionLister 提供通过角色名查询权限键列表的能力。
 type PermissionLister interface {
-	PermKeysForRoleID(roleID string) []string
+	PermissionKeysForRoleID(roleID string) []string
 	RoleNameForID(roleID string) string
 	RoleNameForIdentifier(identifier string) string
 }
@@ -566,7 +566,17 @@ func (h *AuthHandler) ChangePassword(c *gin.Context) {
 	response.SuccessOK(c, dtoresponse.MessageResponse{Message: "password changed"})
 }
 
-// CompleteSecurityUpdate 处理强制账户安全更新。
+// CompleteSecurityUpdate 处理 POST /api/auth/account/security-update
+// @Summary      完成安全更新
+// @Description  完成强制安全更新（修改密码/邮箱），通常由管理员重置密码后首次登录触发
+// @Tags         Account
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        body  body      request.CompleteSecurityUpdateParams  true  "安全更新参数"
+// @Success      200   {object}  response.ApiResponse{data=dtoresponse.UserInfo}
+// @Failure      400   {object}  response.ApiResponse
+// @Router       /api/auth/account/security-update [post]
 func (h *AuthHandler) CompleteSecurityUpdate(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 	if userID == "" {
@@ -789,6 +799,16 @@ func (h *AuthHandler) OAuthCallback(c *gin.Context) {
 	response.SuccessOK(c, loginResultToDTO(result))
 }
 
+// OAuthBindExisting 处理 POST /api/auth/oauth/bind-existing
+// @Summary      绑定已有账号
+// @Description  将待绑定的第三方 OAuth 身份绑定到已有本地账号
+// @Tags         Auth
+// @Accept       json
+// @Produce      json
+// @Param        body  body      request.OAuthBindExistingParams  true  "绑定参数"
+// @Success      200   {object}  response.ApiResponse{data=dtoresponse.LoginResult}
+// @Failure      400   {object}  response.ApiResponse
+// @Router       /api/auth/oauth/bind-existing [post]
 func (h *AuthHandler) OAuthBindExisting(c *gin.Context) {
 	var params request.OAuthBindExistingParams
 	if err := c.ShouldBindJSON(&params); err != nil {
@@ -804,6 +824,16 @@ func (h *AuthHandler) OAuthBindExisting(c *gin.Context) {
 	response.SuccessOK(c, loginResultToDTO(result))
 }
 
+// OAuthCreateAccount 处理 POST /api/auth/oauth/create-account
+// @Summary      创建新账号并绑定
+// @Description  为待绑定的第三方 OAuth 身份创建新的本地账号并完成登录
+// @Tags         Auth
+// @Accept       json
+// @Produce      json
+// @Param        body  body      request.OAuthCreateAccountParams  true  "创建账号参数"
+// @Success      200   {object}  response.ApiResponse{data=dtoresponse.LoginResult}
+// @Failure      400   {object}  response.ApiResponse
+// @Router       /api/auth/oauth/create-account [post]
 func (h *AuthHandler) OAuthCreateAccount(c *gin.Context) {
 	var params request.OAuthCreateAccountParams
 	if err := c.ShouldBindJSON(&params); err != nil {
@@ -953,6 +983,7 @@ func (h *AuthHandler) UnbindOAuth(c *gin.Context) {
 }
 
 // GetSystemConfig 处理 GET /api/auth/config
+// @Summary      获取系统公开配置
 // @Description  Returns public system config (registration status, available OAuth providers, etc.)
 // @Tags         Auth
 // @Produce      json
@@ -993,6 +1024,7 @@ func (h *AuthHandler) GetSystemConfig(c *gin.Context) {
 
 // ─── 辅助函数 ────────────────────────────────────────────────────────
 
+// userInfoToDTO 将 UserInfoResult 转换为 API 响应的 DTO。
 func userInfoToDTO(info *authsvc.UserInfoResult) dtoresponse.UserInfo {
 	if info == nil {
 		return dtoresponse.UserInfo{}
@@ -1009,6 +1041,7 @@ func userInfoToDTO(info *authsvc.UserInfoResult) dtoresponse.UserInfo {
 		Avatar:              info.Avatar,
 		Email:               info.Email,
 		Role:                info.Role,
+		RoleName:            info.RoleName,
 		RoleID:              info.RoleID,
 		Permissions:         perms,
 		TwoFactorEnabled:    info.TwoFactorEnabled,
@@ -1017,15 +1050,17 @@ func userInfoToDTO(info *authsvc.UserInfoResult) dtoresponse.UserInfo {
 	}
 }
 
+// applyRoleInfo 通过权限列表器补充用户的角色名称和权限键列表。
 func (h *AuthHandler) applyRoleInfo(info *authsvc.UserInfoResult) {
 	if info == nil || h.permLister == nil {
 		return
 	}
 	roleID := info.RoleID
-	info.Permissions = h.permLister.PermKeysForRoleID(roleID)
-	info.Role = h.permLister.RoleNameForID(roleID)
+	info.Permissions = h.permLister.PermissionKeysForRoleID(roleID)
+	info.RoleName = h.permLister.RoleNameForID(roleID)
 }
 
+// loginResultToDTO 将登录服务结果转换为 API 响应的 DTO。
 func loginResultToDTO(result *authsvc.LoginServiceResult) dtoresponse.LoginResult {
 	if result == nil {
 		return dtoresponse.LoginResult{}
@@ -1059,6 +1094,7 @@ func loginResultToDTO(result *authsvc.LoginServiceResult) dtoresponse.LoginResul
 	return out
 }
 
+// userModelToResult 将 User 模型转换为 UserInfoResult。
 func userModelToResult(u *model.User) *authsvc.UserInfoResult {
 	return &authsvc.UserInfoResult{
 		ID:                  strconv.FormatUint(u.ID, 10),
@@ -1068,13 +1104,14 @@ func userModelToResult(u *model.User) *authsvc.UserInfoResult {
 		Avatar:              u.Avatar,
 		Email:               u.Email,
 		Role:                string(u.Role),
-		RoleIdentifier:      string(u.Role),
+		RoleName:            u.RoleName,
 		RoleID:              strconv.FormatUint(u.RoleID, 10),
 		TwoFactorEnabled:    u.TwoFactorEnabled,
 		PreferredAuthMethod: u.PreferredAuthMethod,
 	}
 }
 
+// containsQueryParam 检查 URL 中是否已包含查询参数。
 func containsQueryParam(rawURL string) bool {
 	for _, c := range rawURL {
 		if c == '?' {

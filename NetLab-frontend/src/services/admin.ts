@@ -111,7 +111,7 @@ export const adminApi = {
     const users = await request.post('/users/export', params) as unknown as AdminUserExportView[]
     const rows = users.map((user) => [
       user.username, user.nickname, user.phone, user.email, user.roleId,
-      user.roleIdentifier, user.roleName, user.status, user.createdAt,
+      user.role, user.roleName, user.status, user.createdAt,
     ])
     saveWorkbook(rows, headers, `netlab-users-${new Date().toISOString().slice(0, 10)}.xlsx`, [20, 20, 16, 32, 12, 18, 20, 12, 24])
   },
@@ -120,7 +120,7 @@ export const adminApi = {
   downloadImportTemplate(headers: string[]): void {
     saveWorkbook([
       ['alice', 'Alice', '13800000001', 'alice@example.com', '', 'viewer', 'Vermilion-Otter-42'],
-      ['bob', 'Bob', '13800000002', 'bob@example.com', '', 'editor', 'Harbor-Piano-Sunset-9'],
+      ['bob', 'Bob', '13800000002', 'bob@example.com', '', 'viewer', 'Harbor-Piano-Sunset-9'],
     ], headers, 'netlab-users-template.xlsx', [20, 20, 16, 32, 12, 18, 24])
   },
 
@@ -138,9 +138,9 @@ export const adminApi = {
       phone: cell(row, 2),
       email: cell(row, 3),
       roleId: cell(row, 4),
-      roleIdentifier: cell(row, 5),
+      role: cell(row, 5),
       password: cell(row, 6),
-    })).filter((user) => user.username || user.email || user.roleId || user.roleIdentifier || user.password)
+    })).filter((user) => user.username || user.email || user.roleId || user.role || user.password)
     if (users.length === 0) throw new Error('import file has no data rows')
     return request.post('/users/import', { users })
   },

@@ -47,8 +47,7 @@ func NewTokenRepository(rdb *redis.Client) *TokenRepository {
 
 // ── Refresh Token ──────────────────────────────────────────────────
 
-// SaveSession stores the only active login session for a user.
-// It revokes the previous session in O(1) through the user -> session index.
+// SaveSession 存储用户唯一的活跃登录会话，并通过 user -> session 索引以 O(1) 撤销旧会话。
 func (r *TokenRepository) SaveSession(ctx context.Context, userID, sessionID, refreshToken string, refreshExp, absoluteExp time.Time) error {
 	ttl := time.Until(refreshExp)
 	if ttl <= 0 {
@@ -71,7 +70,7 @@ func (r *TokenRepository) SaveSession(ctx context.Context, userID, sessionID, re
 	return err
 }
 
-// RotateSession atomically replaces the session's current refresh hash.
+// RotateSession 原子地替换会话当前的 refresh token 哈希。
 func (r *TokenRepository) RotateSession(ctx context.Context, userID, sessionID, oldRefreshToken, newRefreshToken string, refreshExp time.Time) error {
 	ttl := time.Until(refreshExp)
 	if ttl <= 0 {
@@ -89,8 +88,7 @@ func (r *TokenRepository) RotateSession(ctx context.Context, userID, sessionID, 
 	return err
 }
 
-// IsRefreshTokenActive validates that the presented refresh token is the
-// current token for the user's current session.
+// IsRefreshTokenActive 校验所提交的 refresh token 是否为该用户当前会话的现行 token。
 func (r *TokenRepository) IsRefreshTokenActive(ctx context.Context, userID, sessionID, tokenValue string) (bool, time.Time, error) {
 	tokenHash := crypto.SHA256Base64URL(tokenValue)
 	cmds, err := r.redis.Pipelined(ctx, func(pipe redis.Pipeliner) error {
@@ -126,7 +124,7 @@ func (r *TokenRepository) IsRefreshTokenActive(ctx context.Context, userID, sess
 	return storedSID == sessionID && storedHash == tokenHash, absoluteExp, nil
 }
 
-// IsSessionActive validates the current access token's session.
+// IsSessionActive 校验当前 access token 所属会话是否有效。
 func (r *TokenRepository) IsSessionActive(ctx context.Context, userID, sessionID string) (bool, error) {
 	storedSID, err := r.redis.HGet(ctx, r.sessionKey(userID), "s").Result()
 	if err == redis.Nil {
@@ -252,6 +250,7 @@ func (r *TokenRepository) IncrementLoginFailure(ctx context.Context, userID stri
 	return int(attempts), false, nil
 }
 
+// IsLoginLocked 报告账户是否因连续登录失败而处于锁定状态。
 func (r *TokenRepository) IsLoginLocked(ctx context.Context, userID string) (bool, time.Duration, error) {
 	ttl, err := r.redis.TTL(ctx, r.loginLockKey(userID)).Result()
 	if err != nil {
@@ -260,6 +259,7 @@ func (r *TokenRepository) IsLoginLocked(ctx context.Context, userID string) (boo
 	return ttl > 0, ttl, nil
 }
 
+// ClearLoginFailures 清除账户的登录失败计数（登录成功后调用）。
 func (r *TokenRepository) ClearLoginFailures(ctx context.Context, userID string) error {
 	return r.redis.Del(ctx, r.loginFailKey(userID), r.loginLockKey(userID)).Err()
 }
@@ -290,7 +290,7 @@ func (r *TokenRepository) ConsumeTwoFactorChallenge(ctx context.Context, token s
 	_ = r.DeleteOneTimeToken(ctx, twoFactorChallengeNamespace, token)
 }
 
-// ConsumeTwoFactorChallenge atomically consumes a valid challenge token.
+// ConsumeTwoFactorChallengeValue 原子地消费一个有效的二步验证质询 token。
 func (r *TokenRepository) ConsumeTwoFactorChallengeValue(ctx context.Context, token string) (string, error) {
 	raw, err := r.ConsumeOneTimeToken(ctx, twoFactorChallengeNamespace, token)
 	if err != nil {

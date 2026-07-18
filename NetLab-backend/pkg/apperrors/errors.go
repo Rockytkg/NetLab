@@ -1,3 +1,5 @@
+// Package apperrors 定义带 i18n 错误码的类型化应用错误，
+// 供各层统一返回业务错误并由响应层本地化。
 package apperrors
 
 import (

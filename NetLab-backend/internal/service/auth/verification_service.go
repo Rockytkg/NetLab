@@ -21,10 +21,12 @@ const (
 	verificationCooldown = time.Minute      // 同一邮箱同一用途的发送冷却期为 1 分钟。
 )
 
+// CaptchaVerifier 抽象图形验证码校验能力。
 type CaptchaVerifier interface {
 	Verify(id, code string) (bool, error)
 }
 
+// VerificationService 承载邮箱验证码的发送、校验与消费。
 type VerificationService struct {
 	userRepo      *repository.UserRepository
 	tokenRepo     *repository.TokenRepository
@@ -34,14 +36,17 @@ type VerificationService struct {
 	logger        *zap.Logger
 }
 
+// NewVerificationService 创建一个新的 VerificationService。
 func NewVerificationService(userRepo *repository.UserRepository, tokenRepo *repository.TokenRepository, configService *sysconfig.Service, emailSender *mailer.Provider, captcha CaptchaVerifier, logger *zap.Logger) *VerificationService {
 	return &VerificationService{userRepo: userRepo, tokenRepo: tokenRepo, configService: configService, emailSender: emailSender, captcha: captcha, logger: logger}
 }
 
+// SendCode 发送邮箱验证码并返回冷却秒数；配置了图形验证码校验器时先行校验。
 func (s *VerificationService) SendCode(ctx context.Context, email, purpose, locale, captchaID, captchaCode string) (int, *apperrors.AppError) {
 	return s.sendCode(ctx, email, purpose, locale, captchaID, captchaCode, true)
 }
 
+// SendCodeWithoutCaptcha 跳过图形验证码校验直接发送邮箱验证码（供内部受信流程使用）。
 func (s *VerificationService) SendCodeWithoutCaptcha(ctx context.Context, email, purpose, locale string) (int, *apperrors.AppError) {
 	return s.sendCode(ctx, email, purpose, locale, "", "", false)
 }
@@ -90,6 +95,7 @@ func (s *VerificationService) sendCode(ctx context.Context, email, purpose, loca
 	return int(verificationCooldown.Seconds()), nil
 }
 
+// VerifyCode 校验邮箱验证码是否正确；仅查看不消费，验证码在有效期内仍可使用。
 func (s *VerificationService) VerifyCode(ctx context.Context, email, code, purpose string) (bool, *apperrors.AppError) {
 	email, appErr := validation.NormalizeEmail(email)
 	if appErr != nil {
@@ -106,6 +112,7 @@ func (s *VerificationService) VerifyCode(ctx context.Context, email, code, purpo
 	return stored != "" && stored == code, nil
 }
 
+// ConsumeCode 校验并一次性消费邮箱验证码。
 func (s *VerificationService) ConsumeCode(ctx context.Context, email, code, purpose string) *apperrors.AppError {
 	email, appErr := validation.NormalizeEmail(email)
 	if appErr != nil {

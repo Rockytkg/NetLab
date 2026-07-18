@@ -17,6 +17,7 @@ type OAuthBindingRepository struct {
 	db *gorm.DB
 }
 
+// NewOAuthBindingRepository 创建一个新的 OAuthBindingRepository。
 func NewOAuthBindingRepository(db *gorm.DB) *OAuthBindingRepository {
 	return &OAuthBindingRepository{db: db}
 }
@@ -148,8 +149,8 @@ func (r *OAuthBindingRepository) Bind(ctx context.Context, userID uint64, provid
 	}
 
 	return r.db.WithContext(ctx).Model(&model.User{}).Where("id = ?", userID).Updates(map[string]interface{}{
-		idCol:     providerUserID,
-		emailCol:  email,
+		idCol:    providerUserID,
+		emailCol: email,
 	}).Error
 }
 

@@ -1,13 +1,8 @@
 package router
 
-// Auth route contracts are kept here so authentication paths and permissions are
-// not duplicated across handlers, clients, and route registration.
+// 认证路由契约集中定义于此，避免路径与权限
+// 在 handler、客户端与路由注册之间重复定义。
 const authRoutePrefix = "/auth"
-
-const (
-	authPermissionResource = "auth"
-	authPermissionRead     = "read"
-)
 
 func authRoute(path string) string {
 	return authRoutePrefix + path

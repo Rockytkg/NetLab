@@ -13,6 +13,7 @@ import (
 	"netlab-backend/pkg/crypto"
 )
 
+// PasswordService 承载密码相关业务：修改密码、忘记密码、重置密码。
 type PasswordService struct {
 	userRepo      *repository.UserRepository
 	tokenRepo     *repository.TokenRepository
@@ -22,10 +23,12 @@ type PasswordService struct {
 	logger        *zap.Logger
 }
 
+// NewPasswordService 创建一个新的 PasswordService。
 func NewPasswordService(userRepo *repository.UserRepository, tokenRepo *repository.TokenRepository, configService *sysconfig.Service, tokenService *TokenService, verification *VerificationService, logger *zap.Logger) *PasswordService {
 	return &PasswordService{userRepo: userRepo, tokenRepo: tokenRepo, configService: configService, tokenService: tokenService, verification: verification, logger: logger}
 }
 
+// ChangePassword 在校验当前密码后为用户设置新密码，并吊销其活跃会话。
 func (s *PasswordService) ChangePassword(ctx context.Context, userID, currentPassword, newPassword string) *apperrors.AppError {
 	if currentPassword == "" {
 		return apperrors.ErrInvalidCredentials
@@ -61,6 +64,8 @@ func (s *PasswordService) ChangePassword(ctx context.Context, userID, currentPas
 	return nil
 }
 
+// SendResetCode 向邮箱发送重置密码验证码并返回冷却秒数；受系统重置开关与
+// 图形验证码策略约束，邮箱未注册时静默返回以避免账号枚举。
 func (s *PasswordService) SendResetCode(ctx context.Context, email, locale, captchaID, captchaCode string) (int, *apperrors.AppError) {
 	email, appErr := validation.NormalizeEmail(email)
 	if appErr != nil {
@@ -79,11 +84,13 @@ func (s *PasswordService) SendResetCode(ctx context.Context, email, locale, capt
 	return s.verification.SendCode(ctx, email, "reset-password", locale, captchaID, captchaCode)
 }
 
+// ForgotPassword 发起忘记密码流程，跳过图形验证码直接向邮箱发送重置验证码。
 func (s *PasswordService) ForgotPassword(ctx context.Context, email, locale, captchaID, captchaCode string) *apperrors.AppError {
 	_, appErr := s.verification.SendCodeWithoutCaptcha(ctx, email, "reset-password", locale)
 	return appErr
 }
 
+// ResetPassword 在系统允许重置时校验并一次性消费邮箱验证码，为用户重置密码并吊销其活跃会话。
 func (s *PasswordService) ResetPassword(ctx context.Context, email, verifyCode, newPassword string) *apperrors.AppError {
 	if sec, err := s.configService.Security(ctx); err == nil && !sec.PasswordResetEnabled {
 		return apperrors.ErrPasswordResetClosed

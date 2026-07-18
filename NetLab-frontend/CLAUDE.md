@@ -1,10 +1,12 @@
+[根目录](../CLAUDE.md) > **NetLab-frontend**
+
 # NetLab Frontend — Development Constitution
 
 > **Product**: 网络管理中心前端  
 > **Domain**: 真实网络设备纳管、SNMP 监控、Syslog 日志、RADIUS 认证审计、告警与运维模板  
 > **Stack**: React 19 · TypeScript 6 · Ant Design 6.x · Vite 8 · Zustand 5 · React Router 7 · i18next  
 > **Design Doc**: `docs/ui-redesign-proposal.md`  
-> **Last Updated**: 2026-07-14
+> **Last Updated**: 2026-07-18
 
 ---
 
@@ -15,12 +17,9 @@ NetLab is no longer modeled as a simulator/lab product. Frontend architecture mu
 | Domain | Primary Route | Source Area |
 |--------|---------------|-------------|
 | Operations overview | `/dashboard` | `src/pages/dashboard/` |
-| Device groups | `/device-groups` | `src/pages/device-groups/` |
-| Device inventory | `/device-library` | `src/pages/device-library/` |
-| Device topology | `/devices/:deviceId/topology` | `src/pages/devices/` |
-| Monitoring and logs | `/observability` | `src/pages/observability/` |
-| Operations templates | `/operations-templates` | `src/pages/operations-templates/` |
 | System/account settings | `/settings/**` | `src/pages/settings/` |
+
+Planned operations domains (device groups, device inventory, topology, observability, operations templates) had placeholder pages that were removed in the 2026-07-18 cleanup; they will be rebuilt with real data sources in Phase 2/3 under `/device-groups`, `/device-library`, `/devices/:deviceId/topology`, `/observability`, and `/operations-templates`.
 
 Legacy `/labs`, `/lab/:id`, `/monitor`, and `/templates` routes may exist only as redirects. Do not add new feature code under those legacy concepts.
 
@@ -52,9 +51,7 @@ Component or page-specific styles must live under `src/assets/css/` and be impor
 |------------|-------|
 | `src/assets/css/layout.css` | `components/layout/**` shell, header, sidebar, footer responsive helpers |
 | `src/assets/css/login.css` | `pages/login/**` auth and login surfaces |
-| `src/assets/css/device-groups.css` | `pages/device-groups/` |
 | `src/assets/css/settings.css` | `pages/settings/**` |
-| `src/assets/css/topology.css` | `pages/devices/**` topology and device panel surfaces |
 
 Rules:
 
@@ -119,13 +116,8 @@ src/
 ├── pages/
 │   ├── login/
 │   ├── dashboard/
-│   ├── device-groups/
-│   ├── device-library/
-│   ├── devices/
-│   ├── observability/
-│   ├── operations-templates/
+│   ├── account/
 │   ├── settings/
-│   ├── help/
 │   └── error/
 ├── router/
 ├── stores/
@@ -164,10 +156,18 @@ Operations data is server-owned. Keep it in memory unless there is an explicit U
 
 ## 7. Routing Rules
 
-Use these as canonical route contracts:
+Use these as canonical route contracts (currently registered):
 
 ```
 /dashboard
+/settings
+/settings/profile
+/settings/users
+```
+
+Reserved for Phase 2+ (re-add pages together with real data sources; do not repurpose these paths):
+
+```
 /device-groups
 /device-library
 /devices/:deviceId/topology
@@ -175,10 +175,6 @@ Use these as canonical route contracts:
 /operations-templates
 /operations-templates/upload
 /operations-templates/installed
-/settings
-/settings/profile
-/settings/users
-/help
 ```
 
 Legacy routes are redirects only:
@@ -213,7 +209,17 @@ Before considering work complete:
 
 | Phase | Status | Scope |
 |-------|--------|-------|
-| Phase 1 | ✅ Complete | Layout shell, auth, theme, i18n, operations information architecture |
-| Phase 2 | 🔲 Planned | Device inventory, site/group management, device onboarding |
-| Phase 3 | 🔲 Planned | SNMP polling, interface metrics, Syslog ingestion/search |
-| Phase 4 | 🔲 Planned | RADIUS audit, alert policies, notification workflows, responsive operations workspace |
+| Phase 1 | Done | Layout shell, auth, theme, i18n, operations information architecture |
+| Phase 2 | Planned | Device inventory, site/group management, device onboarding |
+| Phase 3 | Planned | SNMP polling, interface metrics, Syslog ingestion/search |
+| Phase 4 | Planned | RADIUS audit, alert policies, notification workflows, responsive operations workspace |
+
+---
+
+## 10. Changelog
+
+| Date | Change |
+|------|--------|
+| 2026-07-18 | Removed unrouted placeholder pages (device-groups, device-library, devices/topology, observability, operations-templates, help) plus their dedicated CSS (device-groups.css, topology.css) and dead types (OperationsFilter, DEVICE_STATUS_CONFIG); routing/structure docs now reflect current state |
+| 2026-07-18 | Added breadcrumb navigation to root CLAUDE.md; added changelog section |
+| 2026-07-14 | Original frontend development constitution created |
