@@ -1,9 +1,9 @@
 import { useState } from 'react'
-import { Alert, Button, Card, Form, Input, App, theme } from 'antd'
+import { Alert, Button, Form, Input, App, Flex } from 'antd'
 import { LockOutlined, SaveOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
-import { authApi } from '@/services/auth'
+import { accountApi } from '@/services/account'
 import { useAuthStore } from '@/stores/authStore'
 import { createPasswordStrengthRule } from '@/utils/password-strength'
 import type { ChangePasswordParams } from '@/types/auth'
@@ -14,7 +14,6 @@ import type { ChangePasswordParams } from '@/types/auth'
  */
 export default function ChangePasswordPanel() {
   const { t } = useTranslation(['settings', 'common'])
-  const { token } = theme.useToken()
   const { message } = App.useApp()
   const navigate = useNavigate()
   const logout = useAuthStore((s) => s.logout)
@@ -24,7 +23,7 @@ export default function ChangePasswordPanel() {
   const handleSubmit = async (values: ChangePasswordParams) => {
     setSaving(true)
     try {
-      await authApi.changePassword(values)
+      await accountApi.changePassword(values)
       message.success(t('settings:changePassword.success'))
       form.resetFields()
       // 改密后会话已在服务端失效，直接清理本地会话并跳转登录页
@@ -39,24 +38,13 @@ export default function ChangePasswordPanel() {
   }
 
   return (
-    <Card
-      title={t('settings:changePassword.title')}
-      variant="outlined"
-      styles={{ body: { paddingBlock: token.paddingLG } }}
-    >
+    <Flex vertical gap="large">
       <Alert
         type="info"
         showIcon
         title={t('settings:changePassword.notice')}
-        style={{ marginBottom: token.marginLG }}
       />
-      <Form
-        form={form}
-        layout="vertical"
-        onFinish={handleSubmit}
-        requiredMark={false}
-        style={{ maxWidth: 420 }}
-      >
+      <Form form={form} layout="vertical" onFinish={handleSubmit} requiredMark={false}>
         <Form.Item
           name="currentPassword"
           label={t('settings:changePassword.current')}
@@ -92,12 +80,12 @@ export default function ChangePasswordPanel() {
         >
           <Input.Password prefix={<LockOutlined />} autoComplete="new-password" maxLength={128} />
         </Form.Item>
-        <Form.Item style={{ marginBottom: 0 }}>
+        <Form.Item>
           <Button type="primary" htmlType="submit" loading={saving} icon={<SaveOutlined />}>
             {saving ? t('settings:saving') : t('settings:changePassword.submit')}
           </Button>
         </Form.Item>
       </Form>
-    </Card>
+    </Flex>
   )
 }

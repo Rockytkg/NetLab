@@ -14,6 +14,20 @@
     "smtp": "Email Service",
     "oauth": "Third-party Login"
   },
+  "overview": {
+    "nav": "Overview",
+    "title": "System Settings Overview",
+    "description": "Review core site configuration and open a section from the navigation.",
+    "hint": "Configuration changes take effect immediately for sign-in, registration, and notifications.",
+    "filing": "Filing Information",
+    "security": "Security Policies",
+    "smtp": "Email Service",
+    "oauth": "Third-party Login",
+    "configured": "Configured",
+    "notConfigured": "Not configured",
+    "enabledCount": "enabled",
+    "statusTitle": "Configuration Status"
+  },
   "beian": {
     "title": "Filing Information",
     "description": "Configure the filing numbers shown in the login page footer. Leave blank to hide.",
@@ -98,10 +112,22 @@
     "disabled": "Passkey login is disabled in system security policies"
   },
   "profile": {
-    "subtitle": "Manage your account profile, password, passkeys, and linked third-party accounts.",
+    "currentInfo": "Current Information",
+    "editTitle": "Profile Settings",
+    "loadFailedTitle": "Failed to load your account center",
+    "loadFailedDescription": "Check the network or backend service, then try again.",
+    "retry": "Reload",
+    "twoFactorStatus": "Two-factor authentication",
+    "enabled": "Enabled",
+    "disabled": "Disabled",
     "username": "Username",
+    "nickname": "Nickname",
     "phone": "Phone",
-    "email": "Email"
+    "email": "Email",
+    "nicknameRequired": "Please enter a nickname",
+    "phoneRequired": "Please enter a phone number",
+    "save": "Save Profile",
+    "updateSuccess": "Profile updated successfully"
   },
   "account": {
     "codeLabel": "Email Verification Code",
@@ -212,6 +238,60 @@
     "disableTwoFactorHint": "Disabling clears the user's two-factor secret and recovery codes. The user can bind two-factor authentication again themselves.",
     "importDone": "Imported {{created}} users successfully",
     "importResult": "Import finished: {{created}} created, {{skipped}} skipped"
+  },
+  "roles": {
+    "addRole": "Add Role",
+    "editRole": "Edit Role",
+    "delete": "Delete Role",
+    "configurePermissions": "Permissions",
+    "permissionsTitle": "Configure Permissions - {{name}}",
+    "hiddenTag": "Hidden",
+    "searchPlaceholder": "Search role code, name, or description",
+    "roleCodeHint": "The role code cannot be changed after creation and must not contain spaces or dots",
+    "roleRequired": "Please enter a role code",
+    "roleLength": "Role code must be 2-64 characters",
+    "roleInvalid": "Role code must not contain spaces or dots",
+    "roleNameRequired": "Please enter a role name",
+    "roleCreated": "Role created successfully",
+    "roleUpdated": "Role updated successfully",
+    "permissionsUpdated": "Role permissions updated",
+    "deleted": "Role deleted",
+    "deleteConfirmTitle": "Confirm Role Deletion",
+    "deleteConfirm": "Delete role \"{{name}}\"? This cannot be undone.",
+    "columns": {
+      "role": "Role Code",
+      "roleName": "Role Name",
+      "description": "Description",
+      "type": "Type",
+      "createdAt": "Created At",
+      "actions": "Actions"
+    },
+    "type": {
+      "builtin": "Built-in",
+      "custom": "Custom"
+    },
+    "accountGroup": "Account",
+    "otherGroup": "Others",
+    "permissionNames": {
+      "auth": {
+        "read": "Read current account"
+      },
+      "rbac": {
+        "read": "View roles and permissions",
+        "write": "Modify roles and permissions"
+      },
+      "setting": {
+        "read": "View system settings",
+        "update": "Update system settings"
+      },
+      "user": {
+        "read": "View users",
+        "create": "Create users",
+        "update": "Update users",
+        "delete": "Delete users",
+        "import": "Import users"
+      }
+    }
   },
   "twoFactor": {
     "title": "Two-Factor Authentication",

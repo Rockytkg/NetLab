@@ -78,9 +78,8 @@ func main() {
 		logger.Fatal("Failed to connect to PostgreSQL", zap.Error(err))
 	}
 
-	// ── 自动迁移数据库结构 ───────────────────────────────────────────
-	// GORM AutoMigrate 只会新增缺失的列/表，绝不会删除或修改。
-	// 在所有环境中运行都是安全的。
+	// ── 首次启动时创建数据库表 ────────────────────────────────────────
+	// 仅创建不存在的表；已有表结构由显式、人工审核的数据库迁移管理。
 	if err := database.AutoMigrate(db); err != nil {
 		logger.Fatal("Failed to migrate database schema", zap.Error(err))
 	}

@@ -1,10 +1,45 @@
 /* Layout shell and shared responsive layout utilities */
 .netlab-shell-sider {
   transition: width 0.2s ease;
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
 }
 
 .netlab-main-content {
-  min-width: 0;
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+
+.netlab-shell-sider:hover,
+.netlab-main-content:hover {
+  scrollbar-color: var(--ant-color-border, #d9d9d9) transparent;
+}
+
+.netlab-shell-sider::-webkit-scrollbar,
+.netlab-main-content::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.netlab-shell-sider::-webkit-scrollbar-track,
+.netlab-main-content::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.netlab-shell-sider::-webkit-scrollbar-thumb,
+.netlab-main-content::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: 999px;
+}
+
+.netlab-shell-sider:hover::-webkit-scrollbar-thumb,
+.netlab-main-content:hover::-webkit-scrollbar-thumb {
+  background: var(--ant-color-border, #d9d9d9);
+}
+
+.netlab-shell-sider:hover::-webkit-scrollbar-thumb:hover,
+.netlab-main-content:hover::-webkit-scrollbar-thumb:hover {
+  background: var(--ant-color-primary-border, #91caff);
 }
 
 .netlab-layout-footer {

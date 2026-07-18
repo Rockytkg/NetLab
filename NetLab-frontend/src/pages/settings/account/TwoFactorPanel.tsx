@@ -1,8 +1,8 @@
 import { useState } from 'react'
-import { Alert, App, Button, Card, Modal, Radio, Space, Tag, Typography, theme } from 'antd'
+import { Alert, App, Button, Flex, Modal, Radio, Space, Tag, Typography, theme } from 'antd'
 import { LockOutlined, SafetyOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
-import { authApi } from '@/services/auth'
+import { accountApi } from '@/services/account'
 import { useAuthStore } from '@/stores/authStore'
 import TwoFactorBindingSteps from './TwoFactorBindingSteps'
 import EmailCodeField from './EmailCodeField'
@@ -49,7 +49,7 @@ export default function TwoFactorPanel({ forceRequired }: TwoFactorPanelProps) {
     }
     setDisabling(true)
     try {
-      await authApi.disableTwoFactor(disableCode)
+      await accountApi.disableTwoFactor(disableCode)
       message.success(t('twoFactor.disableSuccess'))
       setDisableOpen(false)
       setDisableCode('')
@@ -65,7 +65,7 @@ export default function TwoFactorPanel({ forceRequired }: TwoFactorPanelProps) {
     setPreferredMethod(method)
     setSavingPreferred(true)
     try {
-      await authApi.setPreferredAuthMethod(method as 'totp' | 'passkey')
+      await accountApi.setPreferredAuthMethod(method as 'totp' | 'passkey')
       message.success(t('twoFactor.preferredMethodUpdated'))
       await fetchUserInfo()
     } catch {
@@ -79,28 +79,23 @@ export default function TwoFactorPanel({ forceRequired }: TwoFactorPanelProps) {
   const passkeyAvailable = !!userInfo?.hasPasskey
 
   return (
-    <Card
-      title={t('twoFactor.title')}
-      variant='outlined'
-      extra={
+    <Flex vertical gap={token.marginLG}>
+      <Flex align='center' justify='space-between' gap={token.margin} wrap>
+        <Text type='secondary'>{t('twoFactor.description')}</Text>
         <Tag color={enabled ? 'success' : 'default'}>
           {enabled ? t('twoFactor.statusEnabled') : t('twoFactor.statusDisabled')}
         </Tag>
-      }
-      styles={{ body: { paddingBlock: token.paddingLG } }}
-    >
-      <Text type='secondary'>{t('twoFactor.description')}</Text>
+      </Flex>
 
       {forceRequired && (
         <Alert
           type='warning'
           showIcon
           title={enabled ? t('twoFactor.forcedDisableHint') : t('twoFactor.forceNotice')}
-          style={{ marginTop: token.margin }}
         />
       )}
 
-      <div style={{ marginTop: token.marginLG }}>
+      <Flex>
         {enabled ? (
           <Button danger icon={<LockOutlined />} disabled={forceRequired} onClick={() => setDisableOpen(true)}>
             {t('twoFactor.disable')}
@@ -110,34 +105,32 @@ export default function TwoFactorPanel({ forceRequired }: TwoFactorPanelProps) {
             {t('twoFactor.enable')}
           </Button>
         )}
-      </div>
+      </Flex>
 
       {enabled && (
-        <div style={{ marginTop: token.marginLG }}>
+        <Flex vertical gap={token.marginXS}>
           <Text strong>{t('twoFactor.preferredMethod')}</Text>
-          <div style={{ marginTop: token.marginXS }}>
-            <Radio.Group
-              value={preferredMethod}
-              onChange={(e) => handlePreferredChange(e.target.value)}
-              disabled={savingPreferred}
-            >
-              <Space orientation='vertical'>
-                <Radio value='totp'>{t('twoFactor.preferredMethodTotp')}</Radio>
-                <Radio value='passkey' disabled={!passkeyAvailable}>
-                  {t('twoFactor.preferredMethodPasskey')}
-                  {!passkeyAvailable && (
-                    <Text type='secondary' style={{ fontSize: 12, marginLeft: token.marginXS }}>
-                      {t('twoFactor.preferredMethodPasskeyDisabled')}
-                    </Text>
-                  )}
-                </Radio>
-              </Space>
-            </Radio.Group>
-          </div>
+          <Radio.Group
+            value={preferredMethod}
+            onChange={(e) => handlePreferredChange(e.target.value)}
+            disabled={savingPreferred}
+          >
+            <Space orientation='vertical'>
+              <Radio value='totp'>{t('twoFactor.preferredMethodTotp')}</Radio>
+              <Radio value='passkey' disabled={!passkeyAvailable}>
+                {t('twoFactor.preferredMethodPasskey')}
+                {!passkeyAvailable && (
+                  <Text type='secondary' style={{ fontSize: 12, marginLeft: token.marginXS }}>
+                    {t('twoFactor.preferredMethodPasskeyDisabled')}
+                  </Text>
+                )}
+              </Radio>
+            </Space>
+          </Radio.Group>
           <Text type='secondary' style={{ fontSize: 12 }}>
             {t('twoFactor.preferredMethodHelp')}
           </Text>
-        </div>
+        </Flex>
       )}
 
       <Modal title={t('twoFactor.setupTitle')} open={enableOpen} onCancel={() => setEnableOpen(false)} footer={null} width={440}>
@@ -156,16 +149,14 @@ export default function TwoFactorPanel({ forceRequired }: TwoFactorPanelProps) {
         okButtonProps={{ danger: true, loading: disabling }}
         cancelText={t('common:cancel')}
       >
-        <Space orientation='vertical' size={token.margin} style={{ width: '100%' }}>
+        <Flex vertical gap={token.margin}>
           <Alert type='warning' showIcon title={t('twoFactor.disableNotice')} />
-          <div>
-            <div style={{ marginBottom: token.marginXS }}>
-              <Text>{t('twoFactor.disableEmailLabel')}</Text>
-            </div>
+          <Flex vertical gap={token.marginXS}>
+            <Text>{t('twoFactor.disableEmailLabel')}</Text>
             <EmailCodeField value={disableCode} onChange={setDisableCode} purpose='disable-2fa' />
-          </div>
-        </Space>
+          </Flex>
+        </Flex>
       </Modal>
-    </Card>
+    </Flex>
   )
 }

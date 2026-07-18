@@ -36,13 +36,15 @@ import { rbacApi } from '@/services/rbac'
 import { usePermission } from '@/hooks/usePermission'
 import Can from '@/components/auth/Can'
 import { createPasswordStrengthRule } from '@/utils/password-strength'
-import type { AdminUserView, CreateUserParams, ExportUsersParams, ImportSummary, UpdateUserParams } from '@/types/settings'
+import type { AdminUserView, CreateUserParams, ExportUsersParams, ImportSummary, RoleView, UpdateUserParams } from '@/types/settings'
 
 const { Text } = Typography
 
 type UserRoleValue = string
 type CreateUserFormValues = Omit<CreateUserParams, 'role'> & { role: UserRoleValue }
 type UpdateUserFormValues = Omit<UpdateUserParams, 'role'> & { role: UserRoleValue }
+/** 可分配角色：value 用角色标识（提交给 API），界面展示角色名 */
+type AssignableRole = Pick<RoleView, 'role' | 'roleName'>
 
 function generateStrongPassword() {
   const upper = 'ABCDEFGHJKLMNPQRSTUVWXYZ'
@@ -75,7 +77,7 @@ export default function UsersPage() {
   const { message, modal } = App.useApp()
   const { can } = usePermission()
   const canReadUsers = can('user.read')
-  const [assignableRoles, setAssignableRoles] = useState<string[]>(['admin'])
+  const [assignableRoles, setAssignableRoles] = useState<AssignableRole[]>([{ role: 'admin', roleName: 'admin' }])
 
   const [data, setData] = useState<AdminUserView[]>([])
   const [total, setTotal] = useState(0)
@@ -130,7 +132,7 @@ export default function UsersPage() {
   }, [load])
 
   useEffect(() => {
-    rbacApi.listRoles().then((roles) => setAssignableRoles(roles.map((role) => role.role))).catch(() => undefined)
+    rbacApi.listRoles().then((roles) => setAssignableRoles(roles.map(({ role, roleName }) => ({ role, roleName })))).catch(() => undefined)
   }, [])
 
   // 数据范围由后端 RBAC 资源权限控制。
@@ -139,6 +141,17 @@ export default function UsersPage() {
     [data, selectedRowKeys],
   )
   const hasSelection = selectedUsers.length > 0
+
+  // 下拉选项统一展示角色名，value 仍是角色标识，提交/筛选时直接传给 API
+  const roleOptions = useMemo(
+    () => assignableRoles.map((r) => ({ value: r.role, label: r.roleName || r.role })),
+    [assignableRoles],
+  )
+  // 编辑弹窗补上用户当前角色，避免其不在可分配列表时回显成角色标识
+  const editRoleOptions = useMemo(() => {
+    if (!editingUser || roleOptions.some((o) => o.value === editingUser.role)) return roleOptions
+    return [...roleOptions, { value: editingUser.role, label: editingUser.roleName || editingUser.role }]
+  }, [roleOptions, editingUser])
 
   const columns: ColumnsType<AdminUserView> = [
     {
@@ -254,7 +267,7 @@ export default function UsersPage() {
 
   const openCreate = () => {
     createForm.resetFields()
-    createForm.setFieldsValue({ role: assignableRoles[0] ?? 'admin' })
+    createForm.setFieldsValue({ role: assignableRoles[0]?.role ?? 'admin' })
     setCreateOpen(true)
   }
 
@@ -476,10 +489,7 @@ export default function UsersPage() {
               }}
               placeholder={t('settings:users.roleFilter')}
               style={{ width: 140 }}
-              options={assignableRoles.map((value) => ({
-                value,
-                label: value,
-              }))}
+              options={roleOptions}
             />
             <Input
               value={search}
@@ -577,10 +587,7 @@ export default function UsersPage() {
             rules={[{ required: true, message: t('settings:users.roleRequired') }]}
           >
             <Select
-              options={assignableRoles.map((r) => ({
-                value: r,
-                label: r,
-              }))}
+              options={roleOptions}
             />
           </Form.Item>
           <Form.Item label={t('settings:users.initialPassword')} required>
@@ -649,10 +656,7 @@ export default function UsersPage() {
             rules={[{ required: true, message: t('settings:users.roleRequired') }]}
           >
             <Select
-              options={assignableRoles.map((r) => ({
-                value: r,
-                label: r,
-              }))}
+              options={editRoleOptions}
             />
           </Form.Item>
           <Form.Item

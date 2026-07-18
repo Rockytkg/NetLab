@@ -223,6 +223,29 @@ func (s *AuthService) GetUserInfo(ctx context.Context, userID string) (*model.Us
 	return user, nil
 }
 
+// UpdateProfile 更新当前用户的昵称和手机号，并校验手机号唯一性。
+func (s *AuthService) UpdateProfile(ctx context.Context, userID, nickname, phone string) *apperrors.AppError {
+	normalizedNickname, appErr := validation.NormalizeNickname(nickname)
+	if appErr != nil {
+		return appErr
+	}
+	normalizedPhone, appErr := validation.NormalizePhone(phone)
+	if appErr != nil {
+		return appErr
+	}
+	existing, err := s.userRepo.FindByPhone(ctx, normalizedPhone)
+	if err != nil {
+		return apperrors.Wrap(apperrors.ErrCodeDuplicateEntry, "database error", err)
+	}
+	if existing != nil && strconv.FormatUint(existing.ID, 10) != userID {
+		return apperrors.ErrDuplicateEntry
+	}
+	if err := s.userRepo.UpdateProfile(ctx, userID, normalizedNickname, normalizedPhone); err != nil {
+		return apperrors.Wrap(apperrors.ErrCodeOperationDenied, "failed to update profile", err)
+	}
+	return nil
+}
+
 // CompleteRequiredSecurityUpdate 在用户进入应用前完成强制的账户安全更新
 // （修改初始/过期密码，必要时一并换绑邮箱），更新后清除强制标记并吊销活跃会话。
 func (s *AuthService) CompleteRequiredSecurityUpdate(ctx context.Context, userID, newPassword, newEmail, verifyCode string) (*model.User, *apperrors.AppError) {

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Button, Input, Space, App } from 'antd'
 import { useTranslation } from 'react-i18next'
-import { authApi } from '@/services/auth'
+import { accountApi } from '@/services/account'
 import type { AccountCodePurpose } from '@/types/auth'
 
 interface EmailCodeFieldProps {
@@ -30,7 +30,7 @@ export default function EmailCodeField({ value, onChange, purpose, disabled }: E
   const handleSend = async () => {
     setSending(true)
     try {
-      const res = await authApi.sendAccountEmailCode(purpose)
+      const res = await accountApi.sendAccountEmailCode(purpose)
       setCooldown(res.cooldown > 0 ? res.cooldown : 60)
       message.success(t('settings:account.codeSent'))
     } catch {

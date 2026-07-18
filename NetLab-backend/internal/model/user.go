@@ -96,6 +96,19 @@ type User struct {
 	TwoFactorSecret     string     `gorm:"type:varchar(512)" json:"-"`
 	PreferredAuthMethod string     `gorm:"type:varchar(16);not null;default:'totp'" json:"preferredAuthMethod"`
 
+	// OAuth 绑定信息存储在用户表中。指针类型允许未绑定时使用 NULL，
+	// 避免给每个 provider 的唯一索引制造重复的空字符串。
+	OAuthGithubID     *string `gorm:"column:oauth_github_id;type:varchar(255)" json:"-"`
+	OAuthGithubEmail  *string `gorm:"column:oauth_github_email;type:varchar(255)" json:"-"`
+	OAuthGoogleID     *string `gorm:"column:oauth_google_id;type:varchar(255)" json:"-"`
+	OAuthGoogleEmail  *string `gorm:"column:oauth_google_email;type:varchar(255)" json:"-"`
+	OAuthLinuxdoID    *string `gorm:"column:oauth_linuxdo_id;type:varchar(255)" json:"-"`
+	OAuthLinuxdoEmail *string `gorm:"column:oauth_linuxdo_email;type:varchar(255)" json:"-"`
+	OAuthWechatID     *string `gorm:"column:oauth_wechat_id;type:varchar(255)" json:"-"`
+	OAuthWechatEmail  *string `gorm:"column:oauth_wechat_email;type:varchar(255)" json:"-"`
+	OAuthQQID         *string `gorm:"column:oauth_qq_id;type:varchar(255)" json:"-"`
+	OAuthQQEmail      *string `gorm:"column:oauth_qq_email;type:varchar(255)" json:"-"`
+
 	// ── 恢复码 ──
 	RecoveryCodes     RecoveryCodes `gorm:"type:jsonb;default:'[]'" json:"-"`
 	PasswordChangedAt *time.Time    `gorm:"type:timestamptz" json:"passwordChangedAt"`

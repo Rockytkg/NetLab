@@ -3,6 +3,7 @@
   "administration": "Administration",
   "settings": "Settings",
   "userManagement": "User Management",
+  "roleManagement": "Role Management",
   "profile": "Profile",
   "home": "Home"
 }

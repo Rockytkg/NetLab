@@ -191,6 +191,17 @@ func (r *UserRepository) UpdateEmail(ctx context.Context, userID, email string) 
 		}).Error
 }
 
+// UpdateProfile 更新用户可自助修改的基础资料。
+func (r *UserRepository) UpdateProfile(ctx context.Context, userID, nickname, phone string) error {
+	return r.db.WithContext(ctx).Model(&model.User{}).
+		Where("id = ?", userID).
+		Updates(map[string]interface{}{
+			"nickname":   nickname,
+			"phone":      phone,
+			"updated_at": time.Now(),
+		}).Error
+}
+
 // BatchDelete 删除一组用户。
 func (r *UserRepository) BatchDelete(ctx context.Context, ids []string) (int64, error) {
 	if len(ids) == 0 {

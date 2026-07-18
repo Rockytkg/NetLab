@@ -102,6 +102,12 @@ type ChangeEmailParams struct {
 	VerifyCode string `json:"verifyCode" binding:"required,len=6"`
 }
 
+// UpdateProfileParams 是 PUT /auth/account/profile 的请求体。
+type UpdateProfileParams struct {
+	Nickname string `json:"nickname" binding:"required,max=64"`
+	Phone    string `json:"phone" binding:"required"`
+}
+
 // OAuthBindExistingParams 是 POST /auth/oauth/bind-existing 的请求体。
 type OAuthBindExistingParams struct {
 	PendingToken string `json:"pendingToken" binding:"required"`

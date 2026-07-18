@@ -51,8 +51,7 @@ func NewPostgresDB(cfg config.DatabaseConfig, mode string) (*gorm.DB, error) {
 }
 
 // AutoMigrate 为所有模型运行 GORM 自动迁移。
-// 验证码仅存储在 Redis 中（临时、基于 TTL）；
-// 无需 PostgreSQL 表。
+// 验证码仅存储在 Redis 中（临时、基于 TTL），无需 PostgreSQL 表。
 func AutoMigrate(db *gorm.DB) error {
 	models := []any{
 		&model.User{},
@@ -127,7 +126,7 @@ func SeedDefaultAdmin(db *gorm.DB) error {
 	}
 	superAdmin := &model.User{
 		Username:            "superadmin",
-		Nickname:            "Super Admin",
+		Nickname:            "超级管理员",
 		Phone:               "13800000000",
 		Email:               "superadmin@netlab.local",
 		PasswordHash:        saHash,
@@ -147,7 +146,7 @@ func SeedDefaultAdmin(db *gorm.DB) error {
 	}
 	admin := &model.User{
 		Username:            "admin",
-		Nickname:            "Administrator",
+		Nickname:            "管理员",
 		Phone:               "13800000099",
 		Email:               "admin@admin.com",
 		PasswordHash:        adminHash,

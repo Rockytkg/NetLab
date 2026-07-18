@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
-import { Alert, App, Button, Checkbox, Image, Input, Skeleton, Space, Steps, Typography, theme } from 'antd'
+import { Alert, App, Button, Card, Checkbox, Col, Flex, Grid, Image, Input, Row, Skeleton, Space, Steps, Typography, theme } from 'antd'
 import { SafetyOutlined, DownloadOutlined, CopyOutlined, LoadingOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
-import { authApi } from '@/services/auth'
+import { accountApi } from '@/services/account'
 import type { TwoFactorSetupResult } from '@/types/auth'
 
-const { Text, Paragraph } = Typography
+const { Text } = Typography
+const { useBreakpoint } = Grid
 
 interface TwoFactorBindingStepsProps {
   onComplete: () => void
@@ -15,6 +16,8 @@ interface TwoFactorBindingStepsProps {
 export default function TwoFactorBindingSteps({ onComplete }: TwoFactorBindingStepsProps) {
   const { t } = useTranslation('settings')
   const { token } = theme.useToken()
+  const screens = useBreakpoint()
+  const isCompact = !screens.sm
   const { message } = App.useApp()
   const [setup, setSetup] = useState<TwoFactorSetupResult | null>(null)
   const [loading, setLoading] = useState(true)
@@ -30,7 +33,7 @@ export default function TwoFactorBindingSteps({ onComplete }: TwoFactorBindingSt
     let alive = true
     ;(async () => {
       try {
-        const result = await authApi.beginTwoFactorSetup()
+        const result = await accountApi.beginTwoFactorSetup()
         if (alive) setSetup(result)
       } catch {
         // interceptor
@@ -49,7 +52,7 @@ export default function TwoFactorBindingSteps({ onComplete }: TwoFactorBindingSt
     setErrorStatus('')
     setSubmitting(true)
     try {
-      const result = await authApi.confirmTwoFactorSetup(value)
+      const result = await accountApi.confirmTwoFactorSetup(value)
       message.success(t('twoFactor.enableSuccess'))
       setRecoveryCodes(result.recoveryCodes ?? [])
       setStep(2)
@@ -93,37 +96,27 @@ export default function TwoFactorBindingSteps({ onComplete }: TwoFactorBindingSt
 
   const formattedSecret = setup ? setup.secret.replace(/(.{4})/g, '$1 ').trim() : ''
 
+  const stepsItems = [
+    { title: t('twoFactor.stepScan') },
+    { title: t('twoFactor.stepVerify') },
+    { title: t('twoFactor.stepRecovery') },
+  ]
+
   if (step === 2) {
     return (
-      <Space orientation='vertical' size={token.marginLG} style={{ width: '100%' }}>
-        <Steps
-          size='small'
-          current={2}
-          items={[
-            { title: t('twoFactor.stepScan') },
-            { title: t('twoFactor.stepVerify') },
-            { title: t('twoFactor.stepRecovery') },
-          ]}
-        />
+      <Flex vertical gap={token.marginLG}>
+        <Steps size='small' current={2} items={stepsItems} />
         <Alert type='warning' showIcon title={t('twoFactor.recoveryNotice')} />
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
-            gap: token.marginSM,
-            background: token.colorFillQuaternary,
-            padding: token.padding,
-            borderRadius: token.borderRadius,
-            fontFamily: 'monospace',
-          }}
-        >
-          {recoveryCodes.map((c) => (
-            <Text key={c} code style={{ fontSize: 13 }}>
-              {c}
-            </Text>
-          ))}
-        </div>
-        <Space>
+        <Card size='small' variant='borderless' style={{ background: token.colorFillAlter }}>
+          <Row gutter={[token.marginSM, token.marginSM]}>
+            {recoveryCodes.map((c) => (
+              <Col key={c} xs={24} sm={12}>
+                <Text code>{c}</Text>
+              </Col>
+            ))}
+          </Row>
+        </Card>
+        <Space wrap>
           <Button icon={<DownloadOutlined />} onClick={handleDownload}>
             {t('twoFactor.recoveryDownload')}
           </Button>
@@ -137,78 +130,69 @@ export default function TwoFactorBindingSteps({ onComplete }: TwoFactorBindingSt
         <Button type='primary' block icon={<SafetyOutlined />} disabled={!saved} onClick={onComplete}>
           {t('twoFactor.recoveryComplete')}
         </Button>
-      </Space>
+      </Flex>
     )
   }
 
   return (
-    <Space orientation='vertical' size={token.marginLG} style={{ width: '100%' }}>
-      <Steps
-        size='small'
-        current={step}
-        items={[
-          { title: t('twoFactor.stepScan') },
-          { title: t('twoFactor.stepVerify') },
-          { title: t('twoFactor.stepRecovery') },
-        ]}
-      />
+    <Flex vertical gap={token.marginLG}>
+      <Steps size='small' current={step} items={stepsItems} />
 
       {loading || !setup ? (
-        <div style={{ display: 'flex', justifyContent: 'center' }}>
+        <Flex justify='center'>
           <Skeleton.Image active style={{ width: 200, height: 200 }} />
-        </div>
+        </Flex>
       ) : (
         <>
-          <div style={{ display: 'flex', justifyContent: 'center' }}>
-            <Image src={setup.qrCode} alt={t('twoFactor.qrAlt')} width={200} height={200} preview={false} />
-          </div>
+          <Flex justify='center'>
+            <Image
+              src={setup.qrCode}
+              alt={t('twoFactor.qrAlt')}
+              width={184}
+              height={184}
+              preview={false}
+              style={{
+                // 二维码需白底以保证暗色模式下可扫描
+                padding: token.paddingSM,
+                background: '#ffffff',
+                border: `1px solid ${token.colorBorderSecondary}`,
+                borderRadius: token.borderRadiusLG,
+              }}
+            />
+          </Flex>
 
-          <div>
+          <Flex vertical gap={token.marginXXS}>
             <Text type='secondary'>{t('twoFactor.manualEntry')}</Text>
-            <Paragraph style={{ marginTop: token.marginXS, marginBottom: 0 }}>
-              <Text code copyable>
-                {formattedSecret}
-              </Text>
-            </Paragraph>
-          </div>
+            <Text code copyable>
+              {formattedSecret}
+            </Text>
+          </Flex>
 
-          <div>
-            <div style={{ marginTop: token.marginXS, display: 'flex', justifyContent: 'center' }}>
-              <Input.OTP
-                length={6}
-                value={code}
-                status={errorStatus || undefined}
-                disabled={submitting}
-                onChange={(val) => {
-                  setStep(1)
-                  setErrorStatus('')
-                  setCode(val)
-                }}
-              />
-            </div>
+          <Flex vertical align='center' gap={token.marginXS}>
+            <Input.OTP
+              size={isCompact ? 'middle' : 'large'}
+              length={6}
+              value={code}
+              status={errorStatus || undefined}
+              disabled={submitting}
+              onChange={(val) => {
+                setStep(1)
+                setErrorStatus('')
+                setCode(val)
+              }}
+            />
             {submitting ? (
-              <div style={{ textAlign: 'center', marginTop: token.marginXS }}>
-                <Text type='secondary' style={{ fontSize: 12 }}>
-                  <LoadingOutlined style={{ marginRight: token.marginXS }} />
-                  {t('twoFactor.verifying')}
-                </Text>
-              </div>
+              <Text type='secondary'>
+                <LoadingOutlined /> {t('twoFactor.verifying')}
+              </Text>
             ) : errorStatus === 'error' ? (
-              <div style={{ textAlign: 'center', marginTop: token.marginXS }}>
-                <Text type='danger' style={{ fontSize: 12 }}>
-                  {t('twoFactor.codeInvalid')}
-                </Text>
-              </div>
+              <Text type='danger'>{t('twoFactor.codeInvalid')}</Text>
             ) : (
-              <div style={{ textAlign: 'center', marginTop: token.marginXS }}>
-                <Text type='secondary' style={{ fontSize: 12 }}>
-                  {t('twoFactor.autoVerifyHint')}
-                </Text>
-              </div>
+              <Text type='secondary'>{t('twoFactor.autoVerifyHint')}</Text>
             )}
-          </div>
+          </Flex>
         </>
       )}
-    </Space>
+    </Flex>
   )
 }

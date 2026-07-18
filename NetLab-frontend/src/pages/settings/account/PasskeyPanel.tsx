@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Alert, Button, Card, Empty, Input, List, Modal, Space, Spin, Typography, App, theme } from 'antd'
+import { Alert, Button, Empty, Flex, Input, List, Modal, Space, Spin, Typography, App, theme } from 'antd'
 import { KeyOutlined, DeleteOutlined, PlusOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
-import { authApi } from '@/services/auth'
+import { accountApi } from '@/services/account'
 import { usePasskey } from '@/hooks/usePasskey'
 import type { PasskeyInfo } from '@/types/settings'
 import EmailCodeField from './EmailCodeField'
@@ -12,13 +12,14 @@ const { Text } = Typography
 interface PasskeyPanelProps {
   /** 系统安全策略状态；undefined 表示配置仍在加载。 */
   enabled?: boolean
+  initialPasskeys?: PasskeyInfo[]
 }
 
 /**
  * 个人中心 · Passkey 管理面板。
  * 添加与删除均需邮箱验证码二次校验。
  */
-export default function PasskeyPanel({ enabled }: PasskeyPanelProps) {
+export default function PasskeyPanel({ enabled, initialPasskeys }: PasskeyPanelProps) {
   const { t } = useTranslation(['settings', 'common'])
   const { token } = theme.useToken()
   const { message } = App.useApp()
@@ -39,7 +40,7 @@ export default function PasskeyPanel({ enabled }: PasskeyPanelProps) {
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const res = await authApi.listPasskeys()
+      const res = await accountApi.listPasskeys()
       setList(res.passkeys ?? [])
     } catch {
       // 拦截器已提示错误
@@ -49,8 +50,12 @@ export default function PasskeyPanel({ enabled }: PasskeyPanelProps) {
   }, [])
 
   useEffect(() => {
-    load()
-  }, [load])
+    if (initialPasskeys) {
+      setList(initialPasskeys)
+      return
+    }
+    void load()
+  }, [initialPasskeys, load])
 
   const supported = isSupported()
   const canOperate = enabled === true && supported
@@ -92,7 +97,7 @@ export default function PasskeyPanel({ enabled }: PasskeyPanelProps) {
     }
     setDeleting(true)
     try {
-      await authApi.deletePasskey(deleteTarget.id, deleteCode)
+      await accountApi.deletePasskey(deleteTarget.id, deleteCode)
       message.success(t('settings:passkey.deleteSuccess'))
       setDeleteTarget(null)
       await load()
@@ -104,24 +109,19 @@ export default function PasskeyPanel({ enabled }: PasskeyPanelProps) {
   }
 
   return (
-    <Card
-      title={t('settings:passkey.title')}
-      variant="outlined"
-      extra={
+    <Flex vertical gap="large">
+      <Flex align="center" justify="space-between" gap="large" wrap>
+        <Text type="secondary">{t('settings:passkey.description')}</Text>
         <Button type="primary" icon={<PlusOutlined />} disabled={!canOperate} onClick={openAdd}>
           {t('settings:passkey.add')}
         </Button>
-      }
-      styles={{ body: { paddingBlock: token.paddingLG } }}
-    >
-      <Text type="secondary">{t('settings:passkey.description')}</Text>
+      </Flex>
 
       {enabled === false && (
         <Alert
           type="warning"
           showIcon
           title={t('settings:passkey.disabled')}
-          style={{ marginTop: token.margin }}
         />
       )}
       {enabled === true && !supported && (
@@ -129,11 +129,10 @@ export default function PasskeyPanel({ enabled }: PasskeyPanelProps) {
           type="warning"
           showIcon
           title={t('settings:passkey.unsupported')}
-          style={{ marginTop: token.margin }}
         />
       )}
 
-      <div style={{ marginTop: token.marginLG }}>
+      <div>
         <Spin spinning={loading}>
           {list.length === 0 ? (
             <Empty description={t('settings:passkey.empty')} />
@@ -237,6 +236,6 @@ export default function PasskeyPanel({ enabled }: PasskeyPanelProps) {
           </div>
         </Space>
       </Modal>
-    </Card>
+    </Flex>
   )
 }

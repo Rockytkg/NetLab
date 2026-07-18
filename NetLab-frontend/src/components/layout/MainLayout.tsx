@@ -126,7 +126,7 @@ export default function MainLayout() {
           style={{
             flex: 1,
             minHeight: 0,
-            overflow: 'hidden',
+            overflow: 'auto',
             padding: contentPadding,
             background: token.colorBgLayout,
           }}

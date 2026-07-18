@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Alert, App, Button, Card, Input, Space, Typography, theme } from 'antd'
-import { SafetyOutlined } from '@ant-design/icons'
+import { App, Button, Card, Flex, Grid, Input, Result, Segmented, Typography, theme } from 'antd'
+import { KeyOutlined, LockOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { authApi } from '@/services/auth'
@@ -9,6 +9,9 @@ import { navigateAfterLogin } from '@/utils/auth-flow'
 import type { LoginResult } from '@/types/auth'
 
 const { Title, Text } = Typography
+const { useBreakpoint } = Grid
+
+type VerifyMode = 'totp' | 'recovery'
 
 interface LocationState {
   twoFactorToken?: string
@@ -22,9 +25,11 @@ export default function TwoFactorVerifyPage() {
   const { message } = App.useApp()
   const navigate = useNavigate()
   const location = useLocation()
+  const screens = useBreakpoint()
+  const isCompact = !screens.md
   const state = (location.state ?? {}) as LocationState
 
-  const [mode, setMode] = useState<'totp' | 'recovery'>('totp')
+  const [mode, setMode] = useState<VerifyMode>('totp')
   const [code, setCode] = useState('')
   const [recoveryCode, setRecoveryCode] = useState('')
   const [loading, setLoading] = useState(false)
@@ -100,77 +105,103 @@ export default function TwoFactorVerifyPage() {
     }
   }, [code, mode, submitTotp])
 
-  const switchMode = (next: 'totp' | 'recovery') => {
+  const switchMode = (next: VerifyMode) => {
     setMode(next)
     setErrorStatus('')
     setCode('')
     setRecoveryCode('')
   }
 
+  const cardStyle = {
+    width: '100%',
+    maxWidth: 400,
+    background: token.colorBgElevated,
+    boxShadow: token.boxShadowTertiary,
+  }
+
+  const pageStyle = {
+    minHeight: '100dvh',
+    padding: isCompact ? token.padding : token.paddingLG,
+    background: token.colorBgLayout,
+  }
+
   if (!state.twoFactorToken) {
     return (
-      <div style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', padding: token.paddingLG }}>
-      <div style={{ width: '100%', maxWidth: 360, textAlign: 'center' }}>
-          <Alert type='warning' showIcon title={t('twoFactorSessionExpired')} style={{ marginBottom: token.marginLG }} />
-          <Button type='primary' onClick={() => navigate('/login', { replace: true })}>
-            {t('twoFactorBackToLogin')}
-          </Button>
-        </div>
-      </div>
+      <Flex justify='center' align='center' style={pageStyle}>
+        <Card variant='borderless' style={cardStyle}>
+          <Result
+            status='warning'
+            title={t('twoFactorSessionExpired')}
+            style={{ padding: `${token.paddingLG}px 0` }}
+            extra={
+              <Button type='primary' onClick={() => navigate('/login', { replace: true })}>
+                {t('twoFactorBackToLogin')}
+              </Button>
+            }
+          />
+        </Card>
+      </Flex>
     )
   }
 
   return (
-    <div style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', padding: token.paddingLG }}>
-      <div style={{ width: '100%', maxWidth: 420 }}>
-        <Card>
-          <Space orientation='vertical' size={24} style={{ width: '100%' }}>
-            <div style={{ textAlign: 'center' }}>
-              <SafetyOutlined style={{ fontSize: 36, color: token.colorPrimary }} />
-              <Title level={3} style={{ marginTop: token.marginSM, marginBottom: token.marginXS }}>
+    <Flex justify='center' align='center' style={pageStyle}>
+      <Card
+        variant='borderless'
+        styles={{ body: { padding: isCompact ? token.paddingLG : token.paddingXL } }}
+        style={cardStyle}
+      >
+        <Flex vertical gap={token.marginLG}>
+          <Flex vertical gap={token.marginXXS}>
+            <Flex align='center' gap={token.marginXS}>
+              <img
+                src='/logo-mark.svg'
+                alt=''
+                aria-hidden
+                width={28}
+                height={28}
+                style={{ display: 'block', borderRadius: token.borderRadiusSM }}
+              />
+              <Title level={3} style={{ margin: 0, fontSize: 24, lineHeight: 1.3 }}>
                 {t('twoFactorTitle')}
               </Title>
-              <Text type='secondary'>{t('twoFactorHello', { username: state.username ?? '' })}</Text>
-              <div>
-                <Text type='secondary' style={{ fontSize: 13 }}>
-                  {mode === 'totp' ? t('twoFactorSubtitle') : t('twoFactorRecoveryHint')}
-                </Text>
-              </div>
-            </div>
+            </Flex>
+            <Text type='secondary'>{t('twoFactorHello', { username: state.username ?? '' })}</Text>
+          </Flex>
+
+          <Segmented
+            block
+            size='large'
+            value={mode}
+            onChange={(value) => switchMode(value as VerifyMode)}
+            options={[
+              { label: t('twoFactorUseAuthenticator'), value: 'totp' },
+              { label: t('twoFactorUseRecoveryCode'), value: 'recovery' },
+            ]}
+          />
 
           {mode === 'totp' ? (
-            <>
-              <div>
-                <div style={{ display: 'flex', justifyContent: 'center', marginTop: token.marginSM }}>
-                  <Input.OTP
-                    length={6}
-                    value={code}
-                    status={errorStatus || undefined}
-                    disabled={loading}
-                    onChange={(val) => {
-                      setErrorStatus('')
-                      setCode(val)
-                    }}
-                  />
-                </div>
-                {errorStatus === 'error' && (
-                  <div style={{ textAlign: 'center', marginTop: token.marginXS }}>
-                    <Text type='danger' style={{ fontSize: 12 }}>
-                      {t('twoFactorCodeInvalid')}
-                    </Text>
-                  </div>
-                )}
-              </div>
-              <Button type='link' block onClick={() => switchMode('recovery')}>
-                {t('twoFactorUseRecoveryCode')}
-              </Button>
-            </>
+            <Flex vertical align='center' gap={token.marginSM}>
+              <Text type='secondary'>{t('twoFactorSubtitle')}</Text>
+              <Input.OTP
+                size={isCompact ? 'middle' : 'large'}
+                length={6}
+                value={code}
+                status={errorStatus || undefined}
+                disabled={loading}
+                onChange={(val) => {
+                  setErrorStatus('')
+                  setCode(val)
+                }}
+              />
+              {errorStatus === 'error' && <Text type='danger'>{t('twoFactorCodeInvalid')}</Text>}
+            </Flex>
           ) : (
-            <>
-              <div>
-                <Text strong>{t('twoFactorRecoveryLabel')}</Text>
+            <Flex vertical gap={token.marginSM}>
+              <Flex vertical gap={token.marginXXS}>
                 <Input
-                  style={{ marginTop: token.marginSM }}
+                  size='large'
+                  prefix={<KeyOutlined style={{ color: token.colorTextQuaternary }} />}
                   status={errorStatus || undefined}
                   value={recoveryCode}
                   onChange={(e) => {
@@ -181,29 +212,42 @@ export default function TwoFactorVerifyPage() {
                   onPressEnter={submitRecovery}
                   autoComplete='off'
                 />
-                {errorStatus === 'error' && (
-                  <div style={{ marginTop: token.marginXS }}>
-                    <Text type='danger' style={{ fontSize: 12 }}>
-                      {t('twoFactorRecoveryInvalid')}
-                    </Text>
-                  </div>
+                {errorStatus === 'error' ? (
+                  <Text type='danger'>{t('twoFactorRecoveryInvalid')}</Text>
+                ) : (
+                  <Text type='secondary'>{t('twoFactorRecoveryHint')}</Text>
                 )}
-              </div>
-              <Button type='primary' block size='large' loading={loading} onClick={submitRecovery}>
+              </Flex>
+              <Button
+                type='primary'
+                block
+                loading={loading}
+                onClick={submitRecovery}
+                style={{ height: 44, fontSize: 15, fontWeight: 500 }}
+              >
                 {t('twoFactorRecoverySubmit')}
               </Button>
-              <Button type='link' block onClick={() => switchMode('totp')}>
-                {t('twoFactorUseAuthenticator')}
-              </Button>
-            </>
+            </Flex>
           )}
 
-          <Button type='link' block onClick={() => navigate('/login', { replace: true })}>
-            {t('twoFactorBackToLogin')}
-          </Button>
-          </Space>
-        </Card>
-      </div>
-    </div>
+          <Flex vertical align='center' gap={token.margin}>
+            <Button
+              type='link'
+              size='small'
+              onClick={() => navigate('/login', { replace: true })}
+              style={{ padding: 0, fontSize: 13 }}
+            >
+              {t('twoFactorBackToLogin')}
+            </Button>
+            <Flex justify='center' align='center' gap={token.marginXXS}>
+              <LockOutlined style={{ color: token.colorTextQuaternary, fontSize: 11 }} />
+              <Text type='secondary' style={{ fontSize: 11 }}>
+                {t('secureTip')}
+              </Text>
+            </Flex>
+          </Flex>
+        </Flex>
+      </Card>
+    </Flex>
   )
 }

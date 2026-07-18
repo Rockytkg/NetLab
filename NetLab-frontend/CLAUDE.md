@@ -160,7 +160,11 @@ Use these as canonical route contracts (currently registered):
 
 ```
 /dashboard
-/settings
+/settings              # 重定向到 /settings/beian
+/settings/beian
+/settings/security
+/settings/smtp
+/settings/oauth
 /settings/profile
 /settings/users
 ```

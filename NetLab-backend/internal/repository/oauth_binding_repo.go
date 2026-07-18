@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 
@@ -79,12 +80,24 @@ func (r *OAuthBindingRepository) ListByUser(ctx context.Context, userID uint64) 
 	for provider, pair := range cols {
 		idCol, _ := pair[0], pair[1]
 		// 从 user 行中读取 provider 列的值
-		var providerID string
-		row := r.db.WithContext(ctx).Model(&model.User{}).
+		var providerID sql.NullString
+		query := r.db.WithContext(ctx).Model(&model.User{}).
 			Select(idCol).
-			Where("id = ?", userID).
-			Row()
-		if err := row.Scan(&providerID); err != nil || providerID == "" {
+			Where("id = ?", userID)
+		if query.Error != nil {
+			return nil, fmt.Errorf("query OAuth provider %s: %w", provider, query.Error)
+		}
+		row := query.Row()
+		if row == nil {
+			return nil, fmt.Errorf("query OAuth provider %s returned a nil row", provider)
+		}
+		if err := row.Scan(&providerID); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				continue
+			}
+			return nil, fmt.Errorf("scan OAuth provider %s: %w", provider, err)
+		}
+		if !providerID.Valid || providerID.String == "" {
 			continue
 		}
 		result = append(result, model.OAuthProviderInfo{
@@ -95,13 +108,22 @@ func (r *OAuthBindingRepository) ListByUser(ctx context.Context, userID uint64) 
 	// 顺便读取 email
 	for i, info := range result {
 		_, emailCol := oauthColumns(info.Provider)
-		var email string
-		row := r.db.WithContext(ctx).Model(&model.User{}).
+		var email sql.NullString
+		query := r.db.WithContext(ctx).Model(&model.User{}).
 			Select(emailCol).
-			Where("id = ?", userID).
-			Row()
-		if err := row.Scan(&email); err == nil {
-			result[i].Email = email
+			Where("id = ?", userID)
+		if query.Error != nil {
+			return nil, fmt.Errorf("query OAuth email %s: %w", info.Provider, query.Error)
+		}
+		row := query.Row()
+		if row == nil {
+			return nil, fmt.Errorf("query OAuth email %s returned a nil row", info.Provider)
+		}
+		if err := row.Scan(&email); err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return nil, fmt.Errorf("scan OAuth email %s: %w", info.Provider, err)
+		}
+		if email.Valid {
+			result[i].Email = email.String
 		}
 	}
 	if result == nil {
@@ -119,12 +141,24 @@ func (r *OAuthBindingRepository) HasAny(ctx context.Context, userID uint64) (boo
 	cols := providerColMap()
 	for provider := range cols {
 		idCol, _ := oauthColumns(provider)
-		var providerID string
-		row := r.db.WithContext(ctx).Model(&model.User{}).
+		var providerID sql.NullString
+		query := r.db.WithContext(ctx).Model(&model.User{}).
 			Select(idCol).
-			Where("id = ?", userID).
-			Row()
-		if err := row.Scan(&providerID); err != nil || providerID == "" {
+			Where("id = ?", userID)
+		if query.Error != nil {
+			return false, fmt.Errorf("query OAuth provider %s: %w", provider, query.Error)
+		}
+		row := query.Row()
+		if row == nil {
+			return false, fmt.Errorf("query OAuth provider %s returned a nil row", provider)
+		}
+		if err := row.Scan(&providerID); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				continue
+			}
+			return false, fmt.Errorf("scan OAuth provider %s: %w", provider, err)
+		}
+		if !providerID.Valid || providerID.String == "" {
 			continue
 		}
 		return true, nil
@@ -178,17 +212,29 @@ func (r *OAuthBindingRepository) GetBinding(ctx context.Context, userID uint64, 
 		return nil, err
 	}
 
-	var providerID, providerEmail string
-	row := r.db.WithContext(ctx).Model(&model.User{}).
+	var providerID, providerEmail sql.NullString
+	query := r.db.WithContext(ctx).Model(&model.User{}).
 		Select(fmt.Sprintf("%s, %s", idCol, emailCol)).
-		Where("id = ?", userID).
-		Row()
-	if err := row.Scan(&providerID, &providerEmail); err != nil || providerID == "" {
+		Where("id = ?", userID)
+	if query.Error != nil {
+		return nil, query.Error
+	}
+	row := query.Row()
+	if row == nil {
+		return nil, fmt.Errorf("query OAuth binding %s returned a nil row", provider)
+	}
+	if err := row.Scan(&providerID, &providerEmail); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	if !providerID.Valid || providerID.String == "" {
 		return nil, nil
 	}
 	return &model.OAuthProviderInfo{
 		Provider:  provider,
-		Email:     providerEmail,
+		Email:     providerEmail.String,
 		CreatedAt: user.CreatedAt,
 	}, nil
 }

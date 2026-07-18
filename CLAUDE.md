@@ -159,7 +159,7 @@ All endpoints return `{ code: number, data: T, message: string }`. Success codes
 |------|-------|-----------|
 | Very strict | 3 req/min per IP | `/auth/send-code`, account email code |
 | Strict | 5 req/min per IP | `/auth/login`, `/auth/reset-password`, `/auth/refresh`, passkey verify, OAuth bind/create, 2FA login, change-password, SMTP test, user import |
-| Moderate | 15 req/min per IP | `/auth/register`, `/auth/captcha`, passkey/OAuth, `/auth/config`, settings write, user CRUD |
+| Moderate | 15 req/min per IP | `/auth/register`, `/auth/captcha`, passkey/OAuth, `/auth/config`, profile update, settings write, user CRUD |
 | Standard | 60 req/min per IP | `/auth/userinfo`, `/auth/logout`, passkey registration/list, RBAC read, settings read, user list/export |
 | Global | 100 req/min per IP | All routes (applied before endpoint-specific limits) |
 

@@ -1,14 +1,13 @@
 import { useEffect, useState } from 'react'
-import { Alert, Button, Card, Form, Input, Space, App, theme } from 'antd'
+import { Alert, Button, Form, Input, Space, App, Flex } from 'antd'
 import { MailOutlined, SaveOutlined, SendOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
-import { authApi } from '@/services/auth'
+import { accountApi } from '@/services/account'
 import { useAuthStore } from '@/stores/authStore'
 import type { ChangeEmailParams } from '@/types/auth'
 
 export default function ChangeEmailPanel() {
   const { t } = useTranslation(['settings', 'common'])
-  const { token } = theme.useToken()
   const { message } = App.useApp()
   const [form] = Form.useForm<ChangeEmailParams>()
   const [cooldown, setCooldown] = useState(0)
@@ -26,7 +25,7 @@ export default function ChangeEmailPanel() {
     try {
       const { newEmail } = await form.validateFields(['newEmail'])
       setSending(true)
-      const res = await authApi.sendChangeEmailCode(newEmail)
+      const res = await accountApi.sendChangeEmailCode(newEmail)
       setCooldown(res.cooldown > 0 ? res.cooldown : 60)
       message.success(t('settings:changeEmail.codeSent'))
     } catch (err) {
@@ -39,7 +38,7 @@ export default function ChangeEmailPanel() {
   const submit = async (values: ChangeEmailParams) => {
     setSaving(true)
     try {
-      const user = await authApi.changeEmail(values)
+      const user = await accountApi.changeEmail(values)
       useAuthStore.getState().setUserInfo(user)
       form.resetFields()
       setCooldown(0)
@@ -52,24 +51,13 @@ export default function ChangeEmailPanel() {
   }
 
   return (
-    <Card
-      title={t('settings:changeEmail.title')}
-      variant="outlined"
-      styles={{ body: { paddingBlock: token.paddingLG } }}
-    >
+    <Flex vertical gap="large">
       <Alert
         type="info"
         showIcon
         title={t('settings:changeEmail.notice', { email: currentEmail || '-' })}
-        style={{ marginBottom: token.margin }}
       />
-      <Form
-        form={form}
-        layout="vertical"
-        onFinish={submit}
-        requiredMark={false}
-        style={{ maxWidth: 460 }}
-      >
+      <Form form={form} layout="vertical" onFinish={submit} requiredMark={false}>
         <Form.Item
           name="newEmail"
           label={t('settings:changeEmail.newEmail')}
@@ -104,12 +92,12 @@ export default function ChangeEmailPanel() {
             </Button>
           </Space.Compact>
         </Form.Item>
-        <Form.Item style={{ marginBottom: 0 }}>
+        <Form.Item>
           <Button type="primary" htmlType="submit" loading={saving} icon={<SaveOutlined />}>
             {saving ? t('settings:saving') : t('settings:changeEmail.submit')}
           </Button>
         </Form.Item>
       </Form>
-    </Card>
+    </Flex>
   )
 }

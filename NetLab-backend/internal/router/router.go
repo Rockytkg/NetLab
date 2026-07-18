@@ -13,6 +13,7 @@ import (
 	"netlab-backend/internal/handler/auth"
 	rbacHandler "netlab-backend/internal/handler/rbac"
 	"netlab-backend/internal/middleware"
+	"netlab-backend/internal/permission"
 	authsvc "netlab-backend/internal/service/auth"
 	pkgjwt "netlab-backend/pkg/jwt"
 )
@@ -180,11 +181,15 @@ func Setup(cfg RouterConfig) *gin.Engine {
 		{
 			authUser := authenticated.Group(authRoutePrefix)
 			{
-				authUser.Use(middleware.RequirePermission(cfg.Authorizer, "auth.read"))
+				authUser.Use(middleware.RequirePermission(cfg.Authorizer, permission.AuthRead))
 				// 用户信息——标准限流（频繁轮询）
 				authUser.GET("/userinfo",
 					cfg.limitStandard("auth-userinfo"),
 					cfg.AuthHandler.GetUserInfo,
+				)
+				authUser.PUT("/account/profile",
+					cfg.limitModerate("account-update-profile"),
+					cfg.AuthHandler.UpdateProfile,
 				)
 
 				// 登出——标准限流
@@ -289,44 +294,44 @@ func Setup(cfg RouterConfig) *gin.Engine {
 				{
 					rbacGroup.GET("/roles",
 						cfg.limitStandard("rbac-roles-list"),
-						middleware.RequirePermission(cfg.Authorizer, "rbac.read"),
+						middleware.RequirePermission(cfg.Authorizer, permission.RBACRead),
 						cfg.RBACHandler.ListRoles,
 					)
 					rbacGroup.GET("/roles/:id",
 						cfg.limitStandard("rbac-roles-get"),
-						middleware.RequirePermission(cfg.Authorizer, "rbac.read"),
+						middleware.RequirePermission(cfg.Authorizer, permission.RBACRead),
 						cfg.RBACHandler.GetRole,
 					)
 					rbacGroup.POST("/roles",
 						cfg.limitModerate("rbac-roles-create"),
-						middleware.RequirePermission(cfg.Authorizer, "rbac.write"),
+						middleware.RequirePermission(cfg.Authorizer, permission.RBACWrite),
 						cfg.RBACHandler.CreateRole,
 					)
 					rbacGroup.PUT("/roles/:id",
 						cfg.limitModerate("rbac-roles-update"),
-						middleware.RequirePermission(cfg.Authorizer, "rbac.write"),
+						middleware.RequirePermission(cfg.Authorizer, permission.RBACWrite),
 						cfg.RBACHandler.UpdateRole,
 					)
 					rbacGroup.DELETE("/roles/:id",
 						cfg.limitModerate("rbac-roles-delete"),
-						middleware.RequirePermission(cfg.Authorizer, "rbac.write"),
+						middleware.RequirePermission(cfg.Authorizer, permission.RBACWrite),
 						cfg.RBACHandler.DeleteRole,
 					)
 
 					rbacGroup.GET("/roles/:id/permissions",
 						cfg.limitStandard("rbac-roles-perms-get"),
-						middleware.RequirePermission(cfg.Authorizer, "rbac.read"),
+						middleware.RequirePermission(cfg.Authorizer, permission.RBACRead),
 						cfg.RBACHandler.GetRolePermissions,
 					)
 					rbacGroup.PUT("/roles/:id/permissions",
 						cfg.limitModerate("rbac-roles-perms-set"),
-						middleware.RequirePermission(cfg.Authorizer, "rbac.write"),
+						middleware.RequirePermission(cfg.Authorizer, permission.RBACWrite),
 						cfg.RBACHandler.SetRolePermissions,
 					)
 
 					rbacGroup.GET("/permissions",
 						cfg.limitStandard("rbac-perms-list"),
-						middleware.RequirePermission(cfg.Authorizer, "rbac.read"),
+						middleware.RequirePermission(cfg.Authorizer, permission.RBACRead),
 						cfg.RBACHandler.ListAllPermissions,
 					)
 				}
@@ -339,74 +344,74 @@ func Setup(cfg RouterConfig) *gin.Engine {
 				{
 					settingsGroup.GET("",
 						cfg.limitStandard("admin-settings-get"),
-						middleware.RequirePermission(cfg.Authorizer, "setting.read"),
+						middleware.RequirePermission(cfg.Authorizer, permission.SettingRead),
 						cfg.AdminHandler.GetSettings,
 					)
 					settingsGroup.PUT("/security",
 						cfg.limitModerate("admin-security"),
-						middleware.RequirePermission(cfg.Authorizer, "setting.update"),
+						middleware.RequirePermission(cfg.Authorizer, permission.SettingUpdate),
 						cfg.AdminHandler.UpdateSecurity,
 					)
 					settingsGroup.PUT("/beian",
 						cfg.limitModerate("admin-beian"),
-						middleware.RequirePermission(cfg.Authorizer, "setting.update"),
+						middleware.RequirePermission(cfg.Authorizer, permission.SettingUpdate),
 						cfg.AdminHandler.UpdateBeian,
 					)
 					settingsGroup.PUT("/smtp",
 						cfg.limitModerate("admin-smtp"),
-						middleware.RequirePermission(cfg.Authorizer, "setting.update"),
+						middleware.RequirePermission(cfg.Authorizer, permission.SettingUpdate),
 						cfg.AdminHandler.UpdateSMTP,
 					)
 					settingsGroup.POST("/smtp/test",
 						cfg.limitStrict("admin-smtp-test"),
-						middleware.RequirePermission(cfg.Authorizer, "setting.update"),
+						middleware.RequirePermission(cfg.Authorizer, permission.SettingUpdate),
 						cfg.AdminHandler.TestSMTP,
 					)
 					settingsGroup.PUT("/oauth/:provider",
 						cfg.limitModerate("admin-oauth"),
-						middleware.RequirePermission(cfg.Authorizer, "setting.update"),
+						middleware.RequirePermission(cfg.Authorizer, permission.SettingUpdate),
 						cfg.AdminHandler.UpdateOAuthProvider,
 					)
 
 					// ── 用户管理 ──
 					usersGroup.GET("",
 						cfg.limitStandard("admin-users-list"),
-						middleware.RequirePermission(cfg.Authorizer, "user.read"),
+						middleware.RequirePermission(cfg.Authorizer, permission.UserRead),
 						cfg.AdminHandler.ListUsers,
 					)
 					usersGroup.POST("",
 						cfg.limitModerate("admin-users-create"),
-						middleware.RequirePermission(cfg.Authorizer, "user.create"),
+						middleware.RequirePermission(cfg.Authorizer, permission.UserCreate),
 						cfg.AdminHandler.CreateUser,
 					)
 					usersGroup.DELETE("",
 						cfg.limitModerate("admin-users-delete"),
-						middleware.RequirePermission(cfg.Authorizer, "user.delete"),
+						middleware.RequirePermission(cfg.Authorizer, permission.UserDelete),
 						cfg.AdminHandler.BatchDeleteUsers,
 					)
 					usersGroup.PUT("/role",
 						cfg.limitModerate("admin-users-role"),
-						middleware.RequirePermission(cfg.Authorizer, "user.update"),
+						middleware.RequirePermission(cfg.Authorizer, permission.UserUpdate),
 						cfg.AdminHandler.BatchUpdateRole,
 					)
 					usersGroup.PUT("/reset-password",
 						cfg.limitModerate("admin-users-reset-pw"),
-						middleware.RequirePermission(cfg.Authorizer, "user.update"),
+						middleware.RequirePermission(cfg.Authorizer, permission.UserUpdate),
 						cfg.AdminHandler.BatchResetPassword,
 					)
 					usersGroup.POST("/import",
 						cfg.limitStrict("admin-users-import"),
-						middleware.RequirePermission(cfg.Authorizer, "user.import"),
+						middleware.RequirePermission(cfg.Authorizer, permission.UserImport),
 						cfg.AdminHandler.ImportUsers,
 					)
 					usersGroup.POST("/export",
 						cfg.limitStandard("admin-users-export"),
-						middleware.RequirePermission(cfg.Authorizer, "user.read"),
+						middleware.RequirePermission(cfg.Authorizer, permission.UserRead),
 						cfg.AdminHandler.ExportUsers,
 					)
 					usersGroup.PUT("/:id",
 						cfg.limitModerate("admin-users-update"),
-						middleware.RequirePermission(cfg.Authorizer, "user.update"),
+						middleware.RequirePermission(cfg.Authorizer, permission.UserUpdate),
 						cfg.AdminHandler.UpdateUser,
 					)
 				}

@@ -167,6 +167,40 @@ func (h *AuthHandler) GetUserInfo(c *gin.Context) {
 	response.SuccessOK(c, userInfoToDTO(result))
 }
 
+// UpdateProfile 处理 PUT /api/auth/account/profile。
+// @Summary      Update current user profile
+// @Tags         Account
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        body  body      request.UpdateProfileParams true "Profile fields"
+// @Success      200   {object}  response.ApiResponse{data=dtoresponse.UserInfo}
+// @Router       /api/auth/account/profile [put]
+func (h *AuthHandler) UpdateProfile(c *gin.Context) {
+	userID := middleware.GetUserID(c)
+	if userID == "" {
+		response.Error(c, apperrors.ErrTokenExpired)
+		return
+	}
+	var params request.UpdateProfileParams
+	if err := c.ShouldBindJSON(&params); err != nil {
+		response.Error(c, apperrors.New(apperrors.ErrCodeInvalidRequest, "invalid request parameters: "+err.Error()))
+		return
+	}
+	if appErr := h.authService.UpdateProfile(c.Request.Context(), userID, params.Nickname, params.Phone); appErr != nil {
+		response.Error(c, appErr)
+		return
+	}
+	user, appErr := h.authService.GetUserInfo(c.Request.Context(), userID)
+	if appErr != nil {
+		response.Error(c, appErr)
+		return
+	}
+	info := userModelToResult(user)
+	h.applyRoleInfo(info)
+	response.SuccessOK(c, userInfoToDTO(info))
+}
+
 // Logout 处理 POST /api/auth/logout
 // @Summary      Logout
 // @Description  Revoke current tokens and clear session

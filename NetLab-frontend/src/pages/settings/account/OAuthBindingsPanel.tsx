@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Button, Card, Empty, List, Popconfirm, Spin, Tag, Typography, App, theme } from 'antd'
+import { Button, Empty, Flex, List, Popconfirm, Spin, Tag, Typography, App, theme } from 'antd'
 import { GithubOutlined, GoogleOutlined, QqOutlined, WechatOutlined, LinkOutlined, DisconnectOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
-import { authApi } from '@/services/auth'
+import { accountApi } from '@/services/account'
 import LinuxDoIcon from '@/components/common/icons/LinuxDoIcon'
 import type { OAuthBinding, OAuthProvider } from '@/types/auth'
 
@@ -19,25 +19,26 @@ const PROVIDER_ICONS: Record<string, React.ReactNode> = {
 interface OAuthBindingsPanelProps {
   /** /auth/config 返回的已启用第三方提供商 */
   providers: OAuthProvider[]
+  initialBindings?: OAuthBinding[]
 }
 
 /**
  * 个人中心 · 第三方账号绑定面板。
  * 通过弹窗完成 OAuth 授权（bind 意图），回调后调用 /auth/oauth/bind 写入绑定。
  */
-export default function OAuthBindingsPanel({ providers }: OAuthBindingsPanelProps) {
+export default function OAuthBindingsPanel({ providers, initialBindings }: OAuthBindingsPanelProps) {
   const { t } = useTranslation(['settings', 'common', 'login'])
   const { token } = theme.useToken()
   const { message } = App.useApp()
 
-  const [bindings, setBindings] = useState<OAuthBinding[]>([])
+  const [bindings, setBindings] = useState<OAuthBinding[]>(initialBindings ?? [])
   const [loading, setLoading] = useState(false)
   const [busyProvider, setBusyProvider] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const res = await authApi.listOAuthBindings()
+      const res = await accountApi.listOAuthBindings()
       setBindings(res.bindings ?? [])
     } catch {
       // 拦截器已提示错误
@@ -47,8 +48,12 @@ export default function OAuthBindingsPanel({ providers }: OAuthBindingsPanelProp
   }, [])
 
   useEffect(() => {
-    load()
-  }, [load])
+    if (initialBindings) {
+      setBindings(initialBindings)
+      return
+    }
+    void load()
+  }, [initialBindings, load])
 
   const boundMap = useMemo(() => {
     const m = new Map<string, OAuthBinding>()
@@ -60,7 +65,7 @@ export default function OAuthBindingsPanel({ providers }: OAuthBindingsPanelProp
     async (provider: OAuthProvider) => {
       setBusyProvider(provider.id)
       try {
-        const { authUrl } = await authApi.getOAuthBindURL(provider.id)
+        const { authUrl } = await accountApi.getOAuthBindURL(provider.id)
 
         const width = 600
         const height = 700
@@ -83,7 +88,7 @@ export default function OAuthBindingsPanel({ providers }: OAuthBindingsPanelProp
           clearInterval(checkClosed)
           popup?.close()
           try {
-            await authApi.bindOAuth({
+            await accountApi.bindOAuth({
               provider: provider.id,
               code: event.data.code,
               state: event.data.state,
@@ -116,7 +121,7 @@ export default function OAuthBindingsPanel({ providers }: OAuthBindingsPanelProp
     async (provider: string) => {
       setBusyProvider(provider)
       try {
-        await authApi.unbindOAuth(provider)
+        await accountApi.unbindOAuth(provider)
         message.success(t('settings:oauthBindings.unbindSuccess'))
         await load()
       } catch {
@@ -129,14 +134,10 @@ export default function OAuthBindingsPanel({ providers }: OAuthBindingsPanelProp
   )
 
   return (
-    <Card
-      title={t('settings:oauthBindings.title')}
-      variant="outlined"
-      styles={{ body: { paddingBlock: token.paddingLG } }}
-    >
+    <Flex vertical gap={token.marginLG}>
       <Text type="secondary">{t('settings:oauthBindings.description')}</Text>
 
-      <div style={{ marginTop: token.marginLG }}>
+      <div>
         <Spin spinning={loading}>
           {providers.length === 0 ? (
             <Empty description={t('settings:oauthBindings.noProviders')} />
@@ -211,6 +212,6 @@ export default function OAuthBindingsPanel({ providers }: OAuthBindingsPanelProp
           )}
         </Spin>
       </div>
-    </Card>
+    </Flex>
   )
 }

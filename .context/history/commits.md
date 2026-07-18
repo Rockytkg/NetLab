@@ -1,6 +1,21 @@
 # 提交历史
 
-> 自动生成于 2026-07-18 12:00:00
+> 自动生成于 2026-07-18 14:15:00
+
+## 2026-07-18 — ♻️ refactor: 权限注册表提取、OAuth 绑定内联化与设置页路由重构
+
+- **类型**: refactor
+- **分支**: main
+- **文件数**: 54 (+2473/-1592)
+- **决策**:
+  - 权限定义从 rbac.go 内联 catalog 提取到独立的 internal/permission 包，导出类型化常量替代魔术字符串
+  - syncPermissionCatalog() 在事务中清理过期内置权限及其角色关联
+  - OAuth 绑定从独立关联表迁移到 User 表内联列（oauth_*_id/email），使用 *string 支持 NULL 唯一索引
+  - 设置页从 Ant Design Tabs 重构为 React Router 嵌套路由，每个面板获得独立 URL
+  - 为个人资料新增独立的 PUT /auth/account/profile 自助接口
+  - AutoMigrate 语义变更为仅创建不存在的表，已有表结构变更需显式迁移
+  - 新增角色管理页面（/settings/roles），支持角色 CRUD 与权限分配
+  - 提取 SecurityFlowLayout 共享布局，简化安全验证/绑定页面结构
 
 ## 2026-07-18 — ♻️ refactor(admin): Excel 导入导出从前端生成，移除后端 excelize 依赖
 

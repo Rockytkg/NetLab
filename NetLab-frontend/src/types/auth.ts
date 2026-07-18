@@ -20,6 +20,11 @@ export interface UserInfo {
   hasPasskey?: boolean
 }
 
+export interface UpdateProfileParams {
+  nickname: string
+  phone: string
+}
+
 export interface SecurityActions {
   requirePasswordChange: boolean
   requireEmailChange: boolean

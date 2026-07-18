@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
-import { Alert, Card, Col, Row, Space, Steps, Typography, theme } from 'antd'
-import { KeyOutlined, SafetyOutlined, ThunderboltOutlined } from '@ant-design/icons'
+import { Alert, Flex, Typography, theme } from 'antd'
+import { KeyOutlined, ThunderboltOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
+import SecurityFlowLayout from '@/components/auth/SecurityFlowLayout'
 import { authApi } from '@/services/auth'
 import { useAuthStore } from '@/stores/authStore'
 import TwoFactorBindingSteps from '@/pages/settings/account/TwoFactorBindingSteps'
@@ -47,66 +48,24 @@ export default function TwoFactorSetupPage() {
   if (!ready) return null
 
   return (
-    <div
-      style={{
-        minHeight: '100vh',
-        display: 'grid',
-        placeItems: 'center',
-        padding: token.paddingLG,
-        background: token.colorBgLayout,
-      }}
+    <SecurityFlowLayout
+      title={t('settings:twoFactor.title')}
+      subtitle={t('login:twoFactorForceSubtitle', { username: userInfo?.username ?? '' })}
+      steps={[
+        { title: t('settings:twoFactor.forceStepAuthenticator'), icon: <KeyOutlined /> },
+        { title: t('settings:twoFactor.forceStepAutoVerify'), icon: <ThunderboltOutlined /> },
+      ]}
     >
-      <div
-        style={{
-          width: '100%',
-          maxWidth: 980,
-        }}
-      >
-        <Row gutter={[24, 24]} align='top'>
-          <Col xs={24} md={10}>
-            <Card style={{ height: '100%' }}>
-              <Space orientation='vertical' size={24} style={{ width: '100%' }}>
-                <div>
-                  <SafetyOutlined style={{ fontSize: 42, color: token.colorPrimary }} />
-                  <Title level={2} style={{ marginTop: 16, marginBottom: 8 }}>
-                    {t('settings:twoFactor.title')}
-                  </Title>
-                  <Text type='secondary'>{t('login:twoFactorForceSubtitle', { username: userInfo?.username ?? '' })}</Text>
-                </div>
-                <Steps
-                  orientation='vertical'
-                  current={0}
-                  items={[
-                    {
-                      title: t('settings:twoFactor.forceStepAuthenticator'),
-                      icon: <KeyOutlined />,
-                    },
-                    {
-                      title: t('settings:twoFactor.forceStepAutoVerify'),
-                      icon: <ThunderboltOutlined />,
-                    },
-                  ]}
-                />
-              </Space>
-            </Card>
-          </Col>
-
-          <Col xs={24} md={14}>
-            <Card>
-              <Space orientation='vertical' size={24} style={{ width: '100%' }}>
-                <div>
-                  <Title level={4} style={{ marginBottom: 8 }}>
-                    {t('settings:twoFactor.setupTitle')}
-                  </Title>
-                  <Text type='secondary'>{t('settings:twoFactor.forcePanelHint')}</Text>
-                </div>
-                <Alert type='warning' showIcon title={t('settings:twoFactor.forceNotice')} />
-                <TwoFactorBindingSteps onComplete={handleComplete} />
-              </Space>
-            </Card>
-          </Col>
-        </Row>
-      </div>
-    </div>
+      <Flex vertical gap={token.marginLG}>
+        <Flex vertical gap={token.marginXXS}>
+          <Title level={4} style={{ margin: 0 }}>
+            {t('settings:twoFactor.setupTitle')}
+          </Title>
+          <Text type='secondary'>{t('settings:twoFactor.forcePanelHint')}</Text>
+        </Flex>
+        <Alert type='warning' showIcon title={t('settings:twoFactor.forceNotice')} />
+        <TwoFactorBindingSteps onComplete={handleComplete} />
+      </Flex>
+    </SecurityFlowLayout>
   )
 }

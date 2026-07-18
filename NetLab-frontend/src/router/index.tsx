@@ -17,9 +17,14 @@ const TwoFactorVerifyPage = lazy(() => import('@/pages/login/TwoFactorVerifyPage
 const ForbiddenPage = lazy(() => import('@/pages/error/403'))
 const NotFoundPage = lazy(() => import('@/pages/error/404'))
 const DashboardPage = lazy(() => import('@/pages/dashboard'))
-const SettingsPage = lazy(() => import('@/pages/settings'))
+const SettingsLayout = lazy(() => import('@/pages/settings'))
+const BeianPanel = lazy(() => import('@/pages/settings/panels/BeianPanel'))
+const SecurityPanel = lazy(() => import('@/pages/settings/panels/SecurityPanel'))
+const SMTPPanel = lazy(() => import('@/pages/settings/panels/SMTPPanel'))
+const OAuthPanel = lazy(() => import('@/pages/settings/panels/OAuthPanel'))
 const SettingsProfilePage = lazy(() => import('@/pages/settings/profile'))
 const UsersPage = lazy(() => import('@/pages/settings/users'))
+const RolesPage = lazy(() => import('@/pages/settings/roles'))
 
 const router = createBrowserRouter([
   // ── 公开路由 ──
@@ -76,10 +81,21 @@ const router = createBrowserRouter([
       // 运维工作台
       { path: '/dashboard', element: <DashboardPage /> },
 
-      // 设置
-      { path: '/settings', element: <SettingsPage /> },
+      // 设置（左侧菜单 + 子路由）
+      {
+        path: '/settings',
+        element: <SettingsLayout />,
+        children: [
+          { index: true, element: <Navigate to="beian" replace /> },
+          { path: 'beian', element: <BeianPanel /> },
+          { path: 'security', element: <SecurityPanel /> },
+          { path: 'smtp', element: <SMTPPanel /> },
+          { path: 'oauth', element: <OAuthPanel /> },
+        ],
+      },
       { path: '/settings/profile', element: <SettingsProfilePage /> },
       { path: '/settings/users', element: <UsersPage /> },
+      { path: '/settings/roles', element: <RolesPage /> },
     ],
   },
 ])

@@ -40,6 +40,7 @@ interface HeaderBarProps {
 const PAGE_TITLES: Record<string, { titleNs: string; titleKey: string }> = {
   '/dashboard': { titleNs: 'menu', titleKey: 'dashboard' },
   '/settings/users': { titleNs: 'menu', titleKey: 'userManagement' },
+  '/settings/roles': { titleNs: 'menu', titleKey: 'roleManagement' },
   '/settings/profile': { titleNs: 'menu', titleKey: 'profile' },
   '/settings': { titleNs: 'menu', titleKey: 'settings' },
 }

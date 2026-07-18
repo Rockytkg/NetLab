@@ -4,6 +4,7 @@ import { Menu, theme } from 'antd'
 import {
   ControlOutlined,
   DashboardOutlined,
+  SafetyCertificateOutlined,
   SettingOutlined,
   TeamOutlined,
 } from '@ant-design/icons'
@@ -22,6 +23,7 @@ export default function SideMenu({ collapsed }: SideMenuProps) {
   const { token } = theme.useToken()
   const { can } = usePermission()
 	const canReadSettings = can('setting.read')
+	const canReadRbac = can('rbac.read')
 
   type MenuItem = Required<MenuProps>['items'][number]
   const rootSubmenuKeys = ['administration']
@@ -50,12 +52,21 @@ export default function SideMenu({ collapsed }: SideMenuProps) {
                   icon: <TeamOutlined />,
                   label: t('userManagement'),
                 },
+                ...(canReadRbac
+                  ? [
+                      {
+                        key: '/settings/roles',
+                        icon: <SafetyCertificateOutlined />,
+                        label: t('roleManagement'),
+                      },
+                    ]
+                  : []),
               ],
             } as MenuItem,
           ]
         : []),
     ],
-    [canReadSettings, t],
+    [canReadSettings, canReadRbac, t],
   )
 
   const leafKeys = useMemo(() => {

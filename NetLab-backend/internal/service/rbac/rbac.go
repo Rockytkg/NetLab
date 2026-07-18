@@ -11,6 +11,7 @@ import (
 	"gorm.io/gorm"
 
 	"netlab-backend/internal/model"
+	"netlab-backend/internal/permission"
 )
 
 // 内置角色标识常量。
@@ -20,28 +21,6 @@ const (
 	// RoleAdmin 管理员角色标识（管理级别 80）。
 	RoleAdmin = "admin"
 )
-
-// permissionDef 描述权限目录中的一条权限定义。
-type permissionDef struct {
-	Resource string
-	Action   string
-	Desc     string
-}
-
-// permissionCatalog 是系统内置权限目录：所有可分配的 resource:action 权限项。
-// 服务启动时幂等地同步到 nb_permissions 表。
-var permissionCatalog = []permissionDef{
-	{"user", "create", "Create users"}, {"user", "read", "View users"}, {"user", "update", "Update users"}, {"user", "delete", "Delete users"}, {"user", "import", "Import users"}, {"user", "export", "Export users"},
-	{"device", "create", "Create devices"}, {"device", "read", "View devices"}, {"device", "update", "Update devices"}, {"device", "delete", "Delete devices"}, {"device", "import", "Import devices"}, {"device", "export", "Export devices"},
-	{"alert", "create", "Create alert rules"}, {"alert", "read", "View alerts"}, {"alert", "update", "Update alert rules"}, {"alert", "delete", "Delete alert rules"},
-	{"syslog", "read", "View syslog"}, {"syslog", "export", "Export syslog"},
-	{"setting", "read", "View system settings"}, {"setting", "update", "Update system settings"},
-	{"dashboard", "read", "View dashboards"}, {"dashboard", "update", "Configure dashboards"},
-	{"audit_log", "read", "View audit logs"}, {"audit_log", "export", "Export audit logs"},
-	{"group", "create", "Create device groups"}, {"group", "read", "View device groups"}, {"group", "update", "Update device groups"}, {"group", "delete", "Delete device groups"},
-	{"rbac", "read", "View RBAC configuration"}, {"rbac", "write", "Modify RBAC configuration"},
-	{"auth", "read", "Read the current account"}, {"auth", "update", "Update the current account"},
-}
 
 // permissionCache 是单个角色的权限缓存。all 为 true 表示拥有全部权限
 // （superadmin/admin），否则按 keys 精确匹配。
@@ -71,30 +50,65 @@ func NewService(db *gorm.DB, logger *zap.Logger) (*Service, error) {
 // permissionKey 拼接 resource.action 形式的权限键。
 func permissionKey(resource, action string) string { return resource + "." + action }
 
-// seedDefaults 幂等地写入权限目录、内置角色（superadmin/admin）、
+// seedDefaults 根据实际受保护路由的权限注册表同步权限目录、内置角色（superadmin/admin）、
 // 默认自定义角色（viewer）及其权限关联。
 func (s *Service) seedDefaults(ctx context.Context) error {
-	for _, p := range permissionCatalog {
-		var existing model.Permission
-		err := s.db.WithContext(ctx).Where("resource = ? AND action = ?", p.Resource, p.Action).First(&existing).Error
-		if err == gorm.ErrRecordNotFound {
-			if err := s.db.WithContext(ctx).Create(&model.Permission{Resource: p.Resource, Action: p.Action, Description: p.Desc, Builtin: true}).Error; err != nil {
-				return err
-			}
-		} else if err != nil {
-			return err
-		}
-	}
-	if err := s.ensureBuiltinRole(ctx, RoleSuperadmin, "Super Administrator", 100, true); err != nil {
+	if err := s.syncPermissionCatalog(ctx); err != nil {
 		return err
 	}
-	if err := s.ensureBuiltinRole(ctx, RoleAdmin, "Administrator", 80, false); err != nil {
+	if err := s.ensureBuiltinRole(ctx, RoleSuperadmin, "超级管理员", "系统超级管理员，拥有全部权限，角色对外隐藏", 100, true); err != nil {
 		return err
 	}
-	if err := s.ensureCustomRole(ctx, "viewer", "Viewer", "Read-only operational access", []string{"auth.read", "auth.update", "device.read", "alert.read", "syslog.read", "dashboard.read", "group.read"}); err != nil {
+	if err := s.ensureBuiltinRole(ctx, RoleAdmin, "管理员", "系统管理员，拥有全部管理权限", 80, false); err != nil {
+		return err
+	}
+	if err := s.ensureCustomRole(ctx, "viewer", "访客", "仅拥有只读访问权限", []string{permission.AuthRead, permission.RBACRead, permission.SettingRead, permission.UserRead}); err != nil {
 		return err
 	}
 	return s.populateBuiltinPermissions(ctx)
+}
+
+// syncPermissionCatalog reconciles the database with the authoritative registry.
+// Stale built-in permissions and their role links are removed transactionally;
+// custom permission rows, if any, are left untouched for forward compatibility.
+func (s *Service) syncPermissionCatalog(ctx context.Context) error {
+	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		desired := make(map[string]permission.Definition, len(permission.Catalog))
+		for _, p := range permission.Catalog {
+			desired[permissionKey(p.Resource, p.Action)] = p
+			var existing model.Permission
+			err := tx.Where("resource = ? AND action = ?", p.Resource, p.Action).First(&existing).Error
+			switch err {
+			case nil:
+				if err := tx.Model(&existing).Updates(map[string]any{"description": p.Description, "builtin": true}).Error; err != nil {
+					return err
+				}
+			case gorm.ErrRecordNotFound:
+				if err := tx.Create(&model.Permission{Resource: p.Resource, Action: p.Action, Description: p.Description, Builtin: true}).Error; err != nil {
+					return err
+				}
+			default:
+				return err
+			}
+		}
+
+		var existing []model.Permission
+		if err := tx.Where("builtin = ?", true).Find(&existing).Error; err != nil {
+			return err
+		}
+		for _, p := range existing {
+			if _, ok := desired[permissionKey(p.Resource, p.Action)]; ok {
+				continue
+			}
+			if err := tx.Where("permission_id = ?", p.ID).Delete(&model.RolePermission{}).Error; err != nil {
+				return err
+			}
+			if err := tx.Delete(&p).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 }
 
 // ensureCustomRole 确保存在指定标识的自定义角色，并为其授予 codes 中列出的权限。
@@ -129,17 +143,18 @@ func (s *Service) ensureCustomRole(ctx context.Context, code, name, description 
 	return nil
 }
 
-// ensureBuiltinRole 确保存在指定标识的内置角色；已存在时刷新其类型、级别与隐藏标记。
-func (s *Service) ensureBuiltinRole(ctx context.Context, code, name string, level int, hidden bool) error {
+// ensureBuiltinRole 确保存在指定标识的内置角色；已存在时刷新其名称、描述、类型、级别与隐藏标记。
+// 内置角色不可通过接口修改，因此每次启动都以这里的默认值为准。
+func (s *Service) ensureBuiltinRole(ctx context.Context, code, name, description string, level int, hidden bool) error {
 	var role model.Role
 	err := s.db.WithContext(ctx).Where("role = ?", code).First(&role).Error
 	if err == gorm.ErrRecordNotFound {
-		return s.db.WithContext(ctx).Create(&model.Role{Role: code, RoleName: name, Description: name, RoleType: model.RoleTypeBuiltin, ManagementLevel: level, Hidden: hidden, Version: 1}).Error
+		return s.db.WithContext(ctx).Create(&model.Role{Role: code, RoleName: name, Description: description, RoleType: model.RoleTypeBuiltin, ManagementLevel: level, Hidden: hidden, Version: 1}).Error
 	}
 	if err != nil {
 		return err
 	}
-	return s.db.WithContext(ctx).Model(&model.Role{}).Where("id = ?", role.ID).Updates(map[string]any{"role_type": model.RoleTypeBuiltin, "management_level": level, "is_hidden": hidden, "version": gorm.Expr("version + 1")}).Error
+	return s.db.WithContext(ctx).Model(&model.Role{}).Where("id = ?", role.ID).Updates(map[string]any{"role_name": name, "description": description, "role_type": model.RoleTypeBuiltin, "management_level": level, "is_hidden": hidden, "version": gorm.Expr("version + 1")}).Error
 }
 
 // populateBuiltinPermissions 为内置角色（superadmin/admin）授予目录中的全部权限。
@@ -306,7 +321,7 @@ func (s *Service) UpdateRole(ctx context.Context, id, name, description string) 
 	return s.db.WithContext(ctx).Model(&model.Role{}).Where("id = ?", id).Updates(map[string]any{"role_name": strings.TrimSpace(name), "description": strings.TrimSpace(description), "version": gorm.Expr("version + 1")}).Error
 }
 
-// DeleteRole 删除自定义角色及其权限关联；内置角色不可删除。
+// DeleteRole 删除自定义角色及其权限关联；内置角色或仍被用户引用的角色不可删除。
 func (s *Service) DeleteRole(ctx context.Context, id string) error {
 	role, err := s.GetRole(ctx, id)
 	if err != nil {
@@ -317,6 +332,13 @@ func (s *Service) DeleteRole(ctx context.Context, id string) error {
 	}
 	if role.RoleType == model.RoleTypeBuiltin {
 		return fmt.Errorf("built-in role is immutable")
+	}
+	var userCount int64
+	if err := s.db.WithContext(ctx).Model(&model.User{}).Where("role_id = ?", role.ID).Count(&userCount).Error; err != nil {
+		return err
+	}
+	if userCount > 0 {
+		return fmt.Errorf("role is still assigned to %d user(s)", userCount)
 	}
 	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := tx.Where("role_id = ?", role.ID).Delete(&model.RolePermission{}).Error; err != nil {
