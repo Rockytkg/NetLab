@@ -21,13 +21,13 @@ export const rbacApi = {
   },
 
   /** 创建自定义角色 */
-  createRole(name: string, description?: string): Promise<RoleView> {
-    return request.post('/rbac/roles', { name, description })
+  createRole(role: string, roleName: string, description?: string): Promise<RoleView> {
+    return request.post('/rbac/roles', { role, roleName, description })
   },
 
   /** 更新角色名称和描述 */
-  updateRole(id: string, name: string, description?: string): Promise<MessageResponse> {
-    return request.put(`/rbac/roles/${id}`, { name, description })
+  updateRole(id: string, role: string, roleName: string, description?: string): Promise<MessageResponse> {
+    return request.put(`/rbac/roles/${id}`, { role, roleName, description })
   },
 
   /** 删除角色 */

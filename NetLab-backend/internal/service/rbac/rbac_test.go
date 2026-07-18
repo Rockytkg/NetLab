@@ -16,14 +16,14 @@ func TestWildcardRoleCanReadUsers(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create casbin enforcer: %v", err)
 	}
-	if _, err := enforcer.AddPolicy("admin", "*", "*"); err != nil {
+	if _, err := enforcer.AddPolicy("1", "*", "*"); err != nil {
 		t.Fatalf("add admin wildcard policy: %v", err)
 	}
-	if _, err := enforcer.AddPolicy("super_admin", "*", "*"); err != nil {
+	if _, err := enforcer.AddPolicy("2", "*", "*"); err != nil {
 		t.Fatalf("add super_admin wildcard policy: %v", err)
 	}
 
-	for _, role := range []string{"admin", "super_admin"} {
+	for _, role := range []string{"1", "2"} {
 		allowed, err := enforcer.Enforce(role, "user", "read")
 		if err != nil {
 			t.Fatalf("enforce %s user:read: %v", role, err)

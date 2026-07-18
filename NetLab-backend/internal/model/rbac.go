@@ -7,7 +7,8 @@ import (
 // Role 表示一个角色定义。
 type Role struct {
 	ID          uint64    `gorm:"primaryKey;autoIncrement" json:"id"`
-	Name        string    `gorm:"type:varchar(64);uniqueIndex;not null" json:"name"`
+	Role        string    `gorm:"column:role;type:varchar(64);uniqueIndex;not null" json:"role"`
+	RoleName    string    `gorm:"column:role_name;type:varchar(128);not null" json:"roleName"`
 	Description string    `gorm:"type:varchar(255)" json:"description"`
 	CreatedAt   time.Time `gorm:"type:timestamptz;not null;default:now()" json:"createdAt"`
 	UpdatedAt   time.Time `gorm:"type:timestamptz;not null;default:now()" json:"updatedAt"`

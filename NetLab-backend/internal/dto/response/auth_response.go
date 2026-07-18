@@ -11,6 +11,7 @@ type UserInfo struct {
 	Avatar              string   `json:"avatar,omitempty"`
 	Email               string   `json:"email,omitempty"`
 	Role                string   `json:"role"`
+	RoleID              string   `json:"roleId,omitempty"`
 	Permissions         []string `json:"permissions"`
 	TwoFactorEnabled    bool     `json:"twoFactorEnabled"`
 	PreferredAuthMethod string   `json:"preferredAuthMethod,omitempty"`

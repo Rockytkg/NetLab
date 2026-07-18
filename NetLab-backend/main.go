@@ -102,9 +102,6 @@ func main() {
 	if err := database.SeedDefaultConfigs(db); err != nil {
 		logger.Warn("Seed configs warning", zap.Error(err))
 	}
-	if err := database.SeedDefaultAdmin(db); err != nil {
-		logger.Warn("Seed admin user warning", zap.Error(err))
-	}
 
 	// ── 连接 Redis ─────────────────────────────────────────────────
 	rdb, err := database.NewRedisClient(cfg.Redis)
@@ -166,9 +163,12 @@ func main() {
 	if err != nil {
 		logger.Fatal("Failed to initialize RBAC service", zap.Error(err))
 	}
+	if err := database.SeedDefaultAdmin(db); err != nil {
+		logger.Warn("Seed admin user warning", zap.Error(err))
+	}
 
-	userAdminService := authsvc.NewUserAdminService(userRepo, logger)
-	importExportService := authsvc.NewUserImportExportService(userRepo, logger)
+	userAdminService := authsvc.NewUserAdminService(userRepo, logger, rbacService)
+	importExportService := authsvc.NewUserImportExportService(userRepo, logger, rbacService)
 
 	// ── 初始化处理器 ─────────────────────────────────────────────────
 	twoFactorService := authsvc.NewTwoFactorService(userRepo, tokenRepo, tokenService, configService, logger)

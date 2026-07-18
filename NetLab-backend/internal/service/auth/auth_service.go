@@ -409,6 +409,8 @@ type UserInfoResult struct {
 	Avatar              string
 	Email               string
 	Role                string
+	RoleIdentifier      string
+	RoleID              string
 	Permissions         []string
 	TwoFactorEnabled    bool
 	PreferredAuthMethod string
@@ -424,6 +426,8 @@ func userToInfo(u *model.User) *UserInfoResult {
 		Avatar:              u.Avatar,
 		Email:               u.Email,
 		Role:                string(u.Role),
+		RoleIdentifier:      string(u.Role),
+		RoleID:              strconv.FormatUint(u.RoleID, 10),
 		TwoFactorEnabled:    u.TwoFactorEnabled,
 		PreferredAuthMethod: u.PreferredAuthMethod,
 	}

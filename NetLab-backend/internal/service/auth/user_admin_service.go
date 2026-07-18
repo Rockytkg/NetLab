@@ -17,12 +17,19 @@ import (
 
 // UserAdminService 承载用户资源的管理业务，访问控制由路由层 RBAC 权限负责。
 type UserAdminService struct {
-	userRepo *repository.UserRepository
-	logger   *zap.Logger
+	userRepo     *repository.UserRepository
+	logger       *zap.Logger
+	roleResolver interface {
+		RoleNameForIdentifier(string) string
+	}
 }
 
-func NewUserAdminService(userRepo *repository.UserRepository, logger *zap.Logger) *UserAdminService {
-	return &UserAdminService{userRepo: userRepo, logger: logger}
+func NewUserAdminService(userRepo *repository.UserRepository, logger *zap.Logger, resolvers ...interface{ RoleNameForIdentifier(string) string }) *UserAdminService {
+	service := &UserAdminService{userRepo: userRepo, logger: logger}
+	if len(resolvers) > 0 {
+		service.roleResolver = resolvers[0]
+	}
+	return service
 }
 
 // AdminUserView 是返回给用户资源接口的安全视图。
@@ -33,6 +40,7 @@ type AdminUserView struct {
 	Phone            string `json:"phone"`
 	Email            string `json:"email"`
 	Role             string `json:"role"`
+	RoleIdentifier   string `json:"roleIdentifier"`
 	Status           string `json:"status"`
 	TwoFactorEnabled bool   `json:"twoFactorEnabled"`
 	CreatedAt        string `json:"createdAt"`
@@ -82,7 +90,7 @@ func (s *UserAdminService) ListUsers(ctx context.Context, page, size int, keywor
 	}
 	items := make([]AdminUserView, len(users))
 	for i := range users {
-		items[i] = toAdminUserView(&users[i])
+		items[i] = s.toAdminUserView(&users[i])
 	}
 	if page < 1 {
 		page = 1
@@ -106,7 +114,7 @@ func (s *UserAdminService) ExportUsersData(ctx context.Context, ids []string) ([
 	items := make([]AdminUserExportView, 0, len(ids))
 	for _, id := range ids {
 		if user, ok := byID[strings.TrimSpace(id)]; ok {
-			items = append(items, AdminUserExportView{ID: strconv.FormatUint(user.ID, 10), Username: user.Username, Nickname: user.Nickname, Phone: user.Phone, Email: user.Email, Role: string(user.Role), Status: string(user.Status), CreatedAt: user.CreatedAt.Format("2006-01-02T15:04:05Z07:00")})
+			items = append(items, AdminUserExportView{ID: strconv.FormatUint(user.ID, 10), Username: user.Username, Nickname: user.Nickname, Phone: user.Phone, Email: user.Email, Role: s.roleName(string(user.Role)), Status: string(user.Status), CreatedAt: user.CreatedAt.Format("2006-01-02T15:04:05Z07:00")})
 		}
 	}
 	return items, nil
@@ -163,7 +171,7 @@ func (s *UserAdminService) CreateUser(ctx context.Context, username, nickname, p
 	if err := s.userRepo.Create(ctx, user); err != nil {
 		return nil, apperrors.Wrap(apperrors.ErrCodeOperationDenied, "failed to create user", err)
 	}
-	view := toAdminUserView(user)
+	view := s.toAdminUserView(user)
 	s.logger.Info("created user", zap.String("userID", view.ID), zap.String("username", view.Username))
 	return &view, nil
 }
@@ -263,5 +271,18 @@ func (s *UserAdminService) BatchResetPassword(ctx context.Context, ids []string,
 }
 
 func toAdminUserView(u *model.User) AdminUserView {
-	return AdminUserView{ID: strconv.FormatUint(u.ID, 10), Username: u.Username, Nickname: u.Nickname, Phone: u.Phone, Email: u.Email, Role: string(u.Role), Status: string(u.Status), TwoFactorEnabled: u.TwoFactorEnabled, CreatedAt: u.CreatedAt.Format("2006-01-02T15:04:05Z07:00")}
+	return AdminUserView{ID: strconv.FormatUint(u.ID, 10), Username: u.Username, Nickname: u.Nickname, Phone: u.Phone, Email: u.Email, Role: string(u.Role), RoleIdentifier: string(u.Role), Status: string(u.Status), TwoFactorEnabled: u.TwoFactorEnabled, CreatedAt: u.CreatedAt.Format("2006-01-02T15:04:05Z07:00")}
+}
+
+func (s *UserAdminService) toAdminUserView(u *model.User) AdminUserView {
+	view := toAdminUserView(u)
+	view.Role = s.roleName(string(u.Role))
+	return view
+}
+
+func (s *UserAdminService) roleName(identifier string) string {
+	if s.roleResolver == nil {
+		return identifier
+	}
+	return s.roleResolver.RoleNameForIdentifier(identifier)
 }

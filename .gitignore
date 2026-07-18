@@ -75,3 +75,7 @@ api-for-ai-agents.md
 # 覆盖率报告
 coverage/
 *.out
+.context
+.ccg
+.codegraph
+.agents

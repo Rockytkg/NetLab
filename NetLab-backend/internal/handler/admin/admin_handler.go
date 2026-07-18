@@ -197,7 +197,7 @@ func (h *AdminHandler) UpdateUser(c *gin.Context) {
 		response.Error(c, apperrors.New(apperrors.ErrCodeInvalidCode, "invalid parameters: "+err.Error()))
 		return
 	}
-	if err := h.userAdminService.UpdateUser(c.Request.Context(), c.Param("id"), params.Nickname, params.Phone, params.Email, params.Role, params.Status); err != nil {
+	if err := h.userAdminService.UpdateUser(c.Request.Context(), c.Param("id"), params.Nickname, params.Phone, params.Email, params.Role, params.Status, params.DisableTwoFactor); err != nil {
 		response.Error(c, err)
 		return
 	}

@@ -79,22 +79,23 @@ var defaultPermissions = []model.Permission{
 
 // 内置角色及权限映射。
 type roleDef struct {
-	Name        string
+	Role        string
+	RoleName    string
 	Description string
 	PermKeys    []string // "resource:action"
 }
 
 var defaultRoles = []roleDef{
 	{
-		Name: "super_admin", Description: "Super administrator with full system access",
+		Role: "super_admin", RoleName: "Super Administrator", Description: "Super administrator with full system access",
 		PermKeys: []string{"*:*"},
 	},
 	{
-		Name: "admin", Description: "Administrator with full management access",
+		Role: "admin", RoleName: "Administrator", Description: "Administrator with full management access",
 		PermKeys: []string{"*:*"},
 	},
 	{
-		Name: "editor", Description: "Operator with read-write access to operational resources",
+		Role: "editor", RoleName: "Editor", Description: "Operator with full operational access",
 		PermKeys: []string{
 			"auth:read", "auth:update",
 			"user:read",
@@ -107,7 +108,7 @@ var defaultRoles = []roleDef{
 		},
 	},
 	{
-		Name: "viewer", Description: "Read-only access to operational resources",
+		Role: "viewer", RoleName: "Viewer", Description: "Read-only access to operational resources",
 		PermKeys: []string{
 			"auth:read", "auth:update",
 			"device:read", "alert:read", "syslog:read", "dashboard:read", "group:read",
@@ -210,11 +211,11 @@ func (s *Service) seedPermissions(ctx context.Context) (map[string]string, error
 
 func (s *Service) seedRole(ctx context.Context, rd roleDef) (*model.Role, error) {
 	var role model.Role
-	err := s.db.WithContext(ctx).Where("name = ?", rd.Name).First(&role).Error
+	err := s.db.WithContext(ctx).Where("role = ?", rd.Role).First(&role).Error
 	if err == gorm.ErrRecordNotFound {
-		role = model.Role{Name: rd.Name, Description: rd.Description}
+		role = model.Role{Role: rd.Role, RoleName: rd.RoleName, Description: rd.Description}
 		if err := s.db.WithContext(ctx).Create(&role).Error; err != nil {
-			return nil, fmt.Errorf("create role %s: %w", rd.Name, err)
+			return nil, fmt.Errorf("create role %s: %w", rd.Role, err)
 		}
 	} else if err != nil {
 		return nil, err
@@ -284,13 +285,13 @@ func (s *Service) SyncCasbinPolicies(ctx context.Context) error {
 	s.enforcer.ClearPolicy()
 
 	var rps []struct {
-		RoleName string
+		RoleID   string
 		Resource string
 		Action   string
 	}
 	if err := s.db.WithContext(ctx).
 		Table("nb_role_permissions").
-		Select("r.name AS role_name, p.resource, p.action").
+		Select("CAST(r.id AS TEXT) AS role_id, p.resource, p.action").
 		Joins("JOIN nb_roles r ON r.id = nb_role_permissions.role_id").
 		Joins("JOIN nb_permissions p ON p.id = nb_role_permissions.permission_id").
 		Scan(&rps).Error; err != nil {
@@ -298,8 +299,8 @@ func (s *Service) SyncCasbinPolicies(ctx context.Context) error {
 	}
 
 	for _, rp := range rps {
-		if _, err := s.enforcer.AddPolicy(rp.RoleName, rp.Resource, rp.Action); err != nil {
-			return fmt.Errorf("add policy %s %s %s: %w", rp.RoleName, rp.Resource, rp.Action, err)
+		if _, err := s.enforcer.AddPolicy(rp.RoleID, rp.Resource, rp.Action); err != nil {
+			return fmt.Errorf("add policy %s %s %s: %w", rp.RoleID, rp.Resource, rp.Action, err)
 		}
 	}
 
@@ -329,15 +330,15 @@ func (s *Service) GetRole(ctx context.Context, id string) (*model.Role, error) {
 	return &role, nil
 }
 
-func (s *Service) CreateRole(ctx context.Context, name, description string) (*model.Role, error) {
-	role := &model.Role{Name: name, Description: description}
+func (s *Service) CreateRole(ctx context.Context, roleValue, roleName, description string) (*model.Role, error) {
+	role := &model.Role{Role: roleValue, RoleName: roleName, Description: description}
 	if err := s.db.WithContext(ctx).Create(role).Error; err != nil {
 		return nil, err
 	}
 	return role, nil
 }
 
-func (s *Service) UpdateRole(ctx context.Context, id, name, description string) error {
+func (s *Service) UpdateRole(ctx context.Context, id, roleValue, roleName, description string) error {
 	role, err := s.GetRole(ctx, id)
 	if err != nil {
 		return err
@@ -346,7 +347,7 @@ func (s *Service) UpdateRole(ctx context.Context, id, name, description string) 
 		return gorm.ErrRecordNotFound
 	}
 	if err := s.db.WithContext(ctx).Model(&model.Role{}).Where("id = ?", id).
-		Updates(map[string]interface{}{"name": name, "description": description}).Error; err != nil {
+		Updates(map[string]interface{}{"role": roleValue, "role_name": roleName, "description": description}).Error; err != nil {
 		return err
 	}
 	return nil
@@ -368,13 +369,8 @@ func (s *Service) DeleteRole(ctx context.Context, id string) error {
 	})
 }
 
-// PermKeysForRole 返回指定角色名的权限键列表（"resource:action" 格式）。
-// super_admin 返回 ["*:*"]；未知角色返回空切片（非 nil，保证 JSON 序列化为 []）。
-func (s *Service) PermKeysForRole(roleName string) []string {
-	if roleName == "super_admin" {
-		return []string{"*:*"}
-	}
-
+// PermKeysForRoleID 返回指定角色 ID 的权限键列表（"resource:action" 格式）。
+func (s *Service) PermKeysForRoleID(roleID string) []string {
 	var rps []struct {
 		Resource string
 		Action   string
@@ -384,9 +380,9 @@ func (s *Service) PermKeysForRole(roleName string) []string {
 		FROM nb_role_permissions rp
 		JOIN nb_permissions p ON p.id = rp.permission_id
 		JOIN nb_roles r ON r.id = rp.role_id
-		WHERE r.name = ?
-	`, roleName).Scan(&rps).Error; err != nil {
-		s.logger.Warn("PermKeysForRole query failed", zap.String("role", roleName), zap.Error(err))
+		WHERE rp.role_id = ?
+	`, roleID).Scan(&rps).Error; err != nil {
+		s.logger.Warn("PermKeysForRoleID query failed", zap.String("roleID", roleID), zap.Error(err))
 		return []string{}
 	}
 
@@ -395,6 +391,24 @@ func (s *Service) PermKeysForRole(roleName string) []string {
 		keys = append(keys, rp.Resource+":"+rp.Action)
 	}
 	return keys
+}
+
+// RoleNameForID 返回角色 ID 对应的展示名称。
+func (s *Service) RoleNameForID(roleID string) string {
+	var role model.Role
+	if err := s.db.Select("role_name").Where("id = ?", roleID).First(&role).Error; err != nil || role.RoleName == "" {
+		return ""
+	}
+	return role.RoleName
+}
+
+// RoleNameForIdentifier 返回角色标识对应的展示名称，用于用户创建/导入等输入流程。
+func (s *Service) RoleNameForIdentifier(identifier string) string {
+	var role model.Role
+	if err := s.db.Select("role_name").Where("role = ?", identifier).First(&role).Error; err != nil || role.RoleName == "" {
+		return identifier
+	}
+	return role.RoleName
 }
 
 // ─── 权限管理 ───────────────────────────────────────────────────────────────

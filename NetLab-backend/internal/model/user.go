@@ -81,7 +81,8 @@ type User struct {
 	Email               string     `gorm:"type:varchar(255);uniqueIndex;not null" json:"email"`
 	PasswordHash        string     `gorm:"type:varchar(255);not null" json:"-"`
 	Avatar              string     `gorm:"type:varchar(512)" json:"avatar"`
-	Role                UserRole   `gorm:"type:varchar(32);not null;default:'viewer'" json:"role"`
+	RoleID              uint64     `gorm:"column:role_id;not null;index" json:"roleId"`
+	Role                UserRole   `gorm:"-" json:"-"`
 	Status              UserStatus `gorm:"type:varchar(16);not null;default:'active'" json:"status"`
 	ForcePasswordChange bool       `gorm:"type:boolean;not null;default:false" json:"forcePasswordChange"`
 	ForceEmailChange    bool       `gorm:"type:boolean;not null;default:false" json:"forceEmailChange"`
@@ -100,8 +101,17 @@ func (User) TableName() string { return "nb_users" }
 
 // BeforeCreate 在创建前设置默认值。
 func (u *User) BeforeCreate(tx *gorm.DB) error {
-	if u.Role == "" {
-		u.Role = RoleViewer
+	if u.RoleID == 0 {
+		role := u.Role
+		if role == "" {
+			role = RoleViewer
+		}
+		var roleModel Role
+		if err := tx.Where("role = ?", role).First(&roleModel).Error; err != nil {
+			return err
+		}
+		u.RoleID = roleModel.ID
+		u.Role = UserRole(roleModel.Role)
 	}
 	if u.Status == "" {
 		u.Status = StatusActive
@@ -112,13 +122,25 @@ func (u *User) BeforeCreate(tx *gorm.DB) error {
 	return nil
 }
 
+func (u *User) AfterFind(tx *gorm.DB) error {
+	if u.RoleID == 0 {
+		return nil
+	}
+	var role Role
+	if err := tx.Select("id, role").First(&role, u.RoleID).Error; err != nil {
+		return err
+	}
+	u.Role = UserRole(role.Role)
+	return nil
+}
+
 func (u *User) IsActive() bool { return u.Status == StatusActive }
 
 // ── TokenUser interface ──────────────────────────────────────────────────
 
 func (u *User) GetID() string       { return strconv.FormatUint(u.ID, 10) }
 func (u *User) GetUsername() string { return u.Username }
-func (u *User) GetRole() string     { return string(u.Role) }
+func (u *User) GetRole() string     { return strconv.FormatUint(u.RoleID, 10) }
 
 // ─── 恢复码 ──────────────────────────────────────────────────────────
 

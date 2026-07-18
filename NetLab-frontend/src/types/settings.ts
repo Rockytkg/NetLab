@@ -75,6 +75,7 @@ export interface AdminUserView {
   username: string
   email: string
   role: string
+  roleIdentifier: string
   status: string
 	 twoFactorEnabled: boolean
 	createdAt: string
@@ -149,7 +150,8 @@ export interface MessageResponse {
 /** 角色视图 */
 export interface RoleView {
   id: string
-  name: string
+  role: string
+  roleName: string
   description?: string
 	permissions?: PermissionRef[]
   createdAt: string

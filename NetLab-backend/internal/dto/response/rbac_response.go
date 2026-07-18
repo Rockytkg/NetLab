@@ -9,7 +9,8 @@ import (
 // RoleView 是角色的 API 视图。
 type RoleView struct {
 	ID          string          `json:"id"`
-	Name        string          `json:"name"`
+	Role        string          `json:"role"`
+	RoleName    string          `json:"roleName"`
 	Description string          `json:"description,omitempty"`
 	Permissions []PermissionRef `json:"permissions,omitempty"`
 	CreatedAt   string          `json:"createdAt"`
@@ -37,7 +38,8 @@ type PermissionView struct {
 func ToRoleView(r *model.Role) RoleView {
 	return RoleView{
 		ID:          strconv.FormatUint(r.ID, 10),
-		Name:        r.Name,
+		Role:        r.Role,
+		RoleName:    r.RoleName,
 		Description: r.Description,
 		CreatedAt:   r.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
 		UpdatedAt:   r.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),

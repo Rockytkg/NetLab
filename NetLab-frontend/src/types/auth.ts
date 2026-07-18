@@ -9,7 +9,9 @@ export interface UserInfo {
   phone: string
   avatar?: string
   email?: string
-  role: UserRole
+  role: string
+  roleIdentifier: UserRole
+  roleId?: string
   permissions: string[]
   twoFactorEnabled?: boolean
   /** 首选验证方式：'totp'（身份验证器应用）或 'passkey'（通行密钥） */

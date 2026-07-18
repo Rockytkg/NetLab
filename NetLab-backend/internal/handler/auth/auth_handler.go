@@ -34,7 +34,9 @@ type AuthHandler struct {
 
 // PermissionLister 提供通过角色名查询权限键列表的能力。
 type PermissionLister interface {
-	PermKeysForRole(roleName string) []string
+	PermKeysForRoleID(roleID string) []string
+	RoleNameForID(roleID string) string
+	RoleNameForIdentifier(identifier string) string
 }
 
 // NewAuthHandler 创建一个新的 AuthHandler。
@@ -102,9 +104,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
-	if result.User != nil && h.permLister != nil {
-		result.User.Permissions = h.permLister.PermKeysForRole(result.User.Role)
-	}
+	h.applyRoleInfo(result.User)
 	response.SuccessOK(c, loginResultToDTO(result))
 }
 
@@ -160,9 +160,7 @@ func (h *AuthHandler) GetUserInfo(c *gin.Context) {
 	}
 
 	result := userModelToResult(user)
-	if h.permLister != nil {
-		result.Permissions = h.permLister.PermKeysForRole(result.Role)
-	}
+	h.applyRoleInfo(result)
 	if hasPasskey, err := h.passkeyService.HasPasskey(c.Request.Context(), userID); err == nil {
 		result.HasPasskey = hasPasskey
 	}
@@ -485,9 +483,7 @@ func (h *AuthHandler) VerifyPasskeyAuth(c *gin.Context) {
 		return
 	}
 
-	if result.User != nil && h.permLister != nil {
-		result.User.Permissions = h.permLister.PermKeysForRole(result.User.Role)
-	}
+	h.applyRoleInfo(result.User)
 	response.SuccessOK(c, loginResultToDTO(result))
 }
 
@@ -593,7 +589,9 @@ func (h *AuthHandler) CompleteSecurityUpdate(c *gin.Context) {
 		response.Error(c, appErr)
 		return
 	}
-	response.SuccessOK(c, userInfoToDTO(userModelToResult(user)))
+	info := userModelToResult(user)
+	h.applyRoleInfo(info)
+	response.SuccessOK(c, userInfoToDTO(info))
 }
 
 // SendAccountEmailCode 处理 POST /api/auth/account/email-code
@@ -703,9 +701,7 @@ func (h *AuthHandler) ChangeEmail(c *gin.Context) {
 		return
 	}
 	info := userModelToResult(user)
-	if h.permLister != nil {
-		info.Permissions = h.permLister.PermKeysForRole(info.Role)
-	}
+	h.applyRoleInfo(info)
 	response.SuccessOK(c, userInfoToDTO(info))
 }
 
@@ -789,9 +785,7 @@ func (h *AuthHandler) OAuthCallback(c *gin.Context) {
 		return
 	}
 
-	if result.User != nil && h.permLister != nil {
-		result.User.Permissions = h.permLister.PermKeysForRole(result.User.Role)
-	}
+	h.applyRoleInfo(result.User)
 	response.SuccessOK(c, loginResultToDTO(result))
 }
 
@@ -806,9 +800,7 @@ func (h *AuthHandler) OAuthBindExisting(c *gin.Context) {
 		response.Error(c, appErr)
 		return
 	}
-	if result.User != nil && h.permLister != nil {
-		result.User.Permissions = h.permLister.PermKeysForRole(result.User.Role)
-	}
+	h.applyRoleInfo(result.User)
 	response.SuccessOK(c, loginResultToDTO(result))
 }
 
@@ -823,9 +815,7 @@ func (h *AuthHandler) OAuthCreateAccount(c *gin.Context) {
 		response.Error(c, appErr)
 		return
 	}
-	if result.User != nil && h.permLister != nil {
-		result.User.Permissions = h.permLister.PermKeysForRole(result.User.Role)
-	}
+	h.applyRoleInfo(result.User)
 	response.SuccessOK(c, loginResultToDTO(result))
 }
 
@@ -1019,11 +1009,21 @@ func userInfoToDTO(info *authsvc.UserInfoResult) dtoresponse.UserInfo {
 		Avatar:              info.Avatar,
 		Email:               info.Email,
 		Role:                info.Role,
+		RoleID:              info.RoleID,
 		Permissions:         perms,
 		TwoFactorEnabled:    info.TwoFactorEnabled,
 		PreferredAuthMethod: info.PreferredAuthMethod,
 		HasPasskey:          info.HasPasskey,
 	}
+}
+
+func (h *AuthHandler) applyRoleInfo(info *authsvc.UserInfoResult) {
+	if info == nil || h.permLister == nil {
+		return
+	}
+	roleID := info.RoleID
+	info.Permissions = h.permLister.PermKeysForRoleID(roleID)
+	info.Role = h.permLister.RoleNameForID(roleID)
 }
 
 func loginResultToDTO(result *authsvc.LoginServiceResult) dtoresponse.LoginResult {
@@ -1068,6 +1068,8 @@ func userModelToResult(u *model.User) *authsvc.UserInfoResult {
 		Avatar:              u.Avatar,
 		Email:               u.Email,
 		Role:                string(u.Role),
+		RoleIdentifier:      string(u.Role),
+		RoleID:              strconv.FormatUint(u.RoleID, 10),
 		TwoFactorEnabled:    u.TwoFactorEnabled,
 		PreferredAuthMethod: u.PreferredAuthMethod,
 	}
@@ -1186,9 +1188,7 @@ func (h *AuthHandler) VerifyTwoFactorLogin(c *gin.Context) {
 		response.Error(c, appErr)
 		return
 	}
-	if result.User != nil && h.permLister != nil {
-		result.User.Permissions = h.permLister.PermKeysForRole(result.User.Role)
-	}
+	h.applyRoleInfo(result.User)
 	response.SuccessOK(c, loginResultToDTO(result))
 }
 
@@ -1213,9 +1213,7 @@ func (h *AuthHandler) VerifyRecoveryLogin(c *gin.Context) {
 		response.Error(c, appErr)
 		return
 	}
-	if result.User != nil && h.permLister != nil {
-		result.User.Permissions = h.permLister.PermKeysForRole(result.User.Role)
-	}
+	h.applyRoleInfo(result.User)
 	response.SuccessOK(c, loginResultToDTO(result))
 }
 

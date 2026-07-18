@@ -144,7 +144,7 @@ func (r *UserRepository) List(ctx context.Context, page, size int, keyword, stat
 		q = q.Where("status = ?", status)
 	}
 	if role != "" {
-		q = q.Where("role = ?", role)
+		q = q.Joins("JOIN nb_roles r ON r.id = nb_users.role_id").Where("r.role = ?", role)
 	}
 	var total int64
 	if err := q.Count(&total).Error; err != nil {
@@ -162,13 +162,17 @@ func (r *UserRepository) List(ctx context.Context, page, size int, keyword, stat
 
 // UpdateManagedFields 更新管理端允许编辑的用户字段。
 func (r *UserRepository) UpdateManagedFields(ctx context.Context, userID, nickname, phone, email string, role model.UserRole, status model.UserStatus) error {
+	roleID, err := r.roleID(ctx, role)
+	if err != nil {
+		return err
+	}
 	return r.db.WithContext(ctx).Model(&model.User{}).
 		Where("id = ?", userID).
 		Updates(map[string]interface{}{
 			"nickname":   nickname,
 			"phone":      phone,
 			"email":      email,
-			"role":       role,
+			"role_id":    roleID,
 			"status":     status,
 			"updated_at": time.Now(),
 		}).Error
@@ -211,13 +215,25 @@ func (r *UserRepository) BatchUpdateRole(ctx context.Context, ids []string, role
 	if len(ids) == 0 {
 		return 0, nil
 	}
+	roleID, err := r.roleID(ctx, role)
+	if err != nil {
+		return 0, err
+	}
 	res := r.db.WithContext(ctx).Model(&model.User{}).
 		Where("id IN ?", ids).
 		Updates(map[string]interface{}{
-			"role":       role,
+			"role_id":    roleID,
 			"updated_at": time.Now(),
 		})
 	return res.RowsAffected, res.Error
+}
+
+func (r *UserRepository) roleID(ctx context.Context, role model.UserRole) (uint64, error) {
+	var roleModel model.Role
+	if err := r.db.WithContext(ctx).Select("id").Where("role = ?", role).First(&roleModel).Error; err != nil {
+		return 0, err
+	}
+	return roleModel.ID, nil
 }
 
 // BatchUpdatePassword 批量重置用户密码为同一哈希，并清除锁定状态。

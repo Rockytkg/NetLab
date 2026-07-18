@@ -277,7 +277,7 @@ export default function UsersPage() {
       nickname: user.nickname,
       phone: user.phone,
       email: user.email,
-      role: (ASSIGNABLE_ROLES.includes(user.role as UserRoleValue) ? user.role : 'viewer') as UserRoleValue,
+      role: (ASSIGNABLE_ROLES.includes(user.roleIdentifier as UserRoleValue) ? user.roleIdentifier : 'viewer') as UserRoleValue,
       status: user.status,
       disableTwoFactor: undefined,
     })

@@ -119,7 +119,7 @@ func (s *TokenService) RefreshTokens(ctx context.Context, refreshTokenValue stri
 		_ = s.tokenRepo.RevokeAllUserTokens(ctx, claims.UserID)
 		return nil, apperrors.ErrInvalidRefreshToken
 	}
-	pair, issueErr := s.jwtManager.IssueTokenPairUntil(strconv.FormatUint(user.ID, 10), user.Username, string(user.Role), claims.SessionID, refreshExp)
+	pair, issueErr := s.jwtManager.IssueTokenPairUntil(strconv.FormatUint(user.ID, 10), user.Username, strconv.FormatUint(user.RoleID, 10), claims.SessionID, refreshExp)
 	if issueErr != nil {
 		return nil, apperrors.Wrap(apperrors.ErrCodeInternal, "failed to issue tokens", issueErr)
 	}

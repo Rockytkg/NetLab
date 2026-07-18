@@ -21,13 +21,20 @@ import (
 
 // UserImportExportService 承载用户 JSON 批量导入与 Excel 导出业务。
 type UserImportExportService struct {
-	userRepo *repository.UserRepository
-	logger   *zap.Logger
+	userRepo     *repository.UserRepository
+	logger       *zap.Logger
+	roleResolver interface {
+		RoleNameForIdentifier(string) string
+	}
 }
 
 // NewUserImportExportService 创建用户导入导出服务。
-func NewUserImportExportService(userRepo *repository.UserRepository, logger *zap.Logger) *UserImportExportService {
-	return &UserImportExportService{userRepo: userRepo, logger: logger}
+func NewUserImportExportService(userRepo *repository.UserRepository, logger *zap.Logger, resolvers ...interface{ RoleNameForIdentifier(string) string }) *UserImportExportService {
+	service := &UserImportExportService{userRepo: userRepo, logger: logger}
+	if len(resolvers) > 0 {
+		service.roleResolver = resolvers[0]
+	}
+	return service
 }
 
 // UserImportRecord 是前端解析表格后提交的一条用户记录。
@@ -167,7 +174,7 @@ func (s *UserImportExportService) ExportUsersExcel(ctx context.Context, userIDs 
 	for i := range filtered {
 		user := &filtered[i]
 		rows = append(rows, []interface{}{
-			user.Username, user.Nickname, user.Phone, user.Email, string(user.Role), string(user.Status),
+			user.Username, user.Nickname, user.Phone, user.Email, s.roleName(string(user.Role)), string(user.Status),
 			user.TwoFactorEnabled, user.CreatedAt.Format(time.RFC3339),
 		})
 	}
@@ -178,6 +185,13 @@ func (s *UserImportExportService) ExportUsersExcel(ctx context.Context, userIDs 
 	}
 	s.logger.Info("excel user export finished", zap.Int("requested", len(ids)), zap.Int("exported", len(filtered)))
 	return data, nil
+}
+
+func (s *UserImportExportService) roleName(identifier string) string {
+	if s.roleResolver == nil {
+		return identifier
+	}
+	return s.roleResolver.RoleNameForIdentifier(identifier)
 }
 
 // BuildImportTemplate 生成本地化的用户导入模板：表头 + 两行示例。

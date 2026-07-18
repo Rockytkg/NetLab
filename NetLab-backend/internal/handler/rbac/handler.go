@@ -80,7 +80,7 @@ func (h *Handler) CreateRole(c *gin.Context) {
 		response.Error(c, apperrors.New(apperrors.ErrCodeInvalidCode, "invalid parameters: "+err.Error()))
 		return
 	}
-	role, err := h.svc.CreateRole(c.Request.Context(), params.Name, params.Description)
+	role, err := h.svc.CreateRole(c.Request.Context(), params.Role, params.RoleName, params.Description)
 	if err != nil {
 		response.Error(c, apperrors.Wrap(apperrors.ErrCodeOperationDenied, "failed to create role", err))
 		return
@@ -95,7 +95,7 @@ func (h *Handler) UpdateRole(c *gin.Context) {
 		response.Error(c, apperrors.New(apperrors.ErrCodeInvalidCode, "invalid parameters: "+err.Error()))
 		return
 	}
-	if err := h.svc.UpdateRole(c.Request.Context(), c.Param("id"), params.Name, params.Description); err != nil {
+	if err := h.svc.UpdateRole(c.Request.Context(), c.Param("id"), params.Role, params.RoleName, params.Description); err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			response.Error(c, apperrors.New(apperrors.ErrCodeUserNotFound, "role not found"))
 			return
