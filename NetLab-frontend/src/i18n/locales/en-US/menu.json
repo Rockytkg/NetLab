@@ -6,5 +6,19 @@
   "roleManagement": "Role Management",
   "loginLogs": "Login Logs",
   "profile": "Profile",
-  "home": "Home"
+  "home": "Home",
+  "billing": "Auth & Billing",
+  "radiusGroupBusiness": "Business",
+  "radiusGroupAuth": "Authentication",
+  "radiusGroupService": "Service",
+  "radiusNas": "NAS Devices",
+  "radiusUsers": "Users",
+  "radiusProfiles": "Profiles",
+  "radiusSessions": "Online Sessions",
+  "radiusAccounting": "Accounting",
+  "radiusAuthLogs": "Auth Logs",
+  "radiusDot1x": "802.1X",
+  "radiusBypass": "Auth Bypass",
+  "radiusCerts": "Certificates",
+  "radiusSettings": "Service Settings"
 }

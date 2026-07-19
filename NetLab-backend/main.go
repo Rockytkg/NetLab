@@ -19,14 +19,17 @@ import (
 	"netlab-backend/internal/handler/admin"
 	"netlab-backend/internal/handler/auth"
 	loghandler "netlab-backend/internal/handler/log"
+	radiusHandler "netlab-backend/internal/handler/radius"
 	rbacHandler "netlab-backend/internal/handler/rbac"
 	"netlab-backend/internal/mailer"
 	"netlab-backend/internal/middleware"
+	"netlab-backend/internal/radiusd"
 	"netlab-backend/internal/repository"
 	"netlab-backend/internal/router"
 	authsvc "netlab-backend/internal/service/auth"
 	sysconfig "netlab-backend/internal/service/config"
 	logsvc "netlab-backend/internal/service/log"
+	radiussvc "netlab-backend/internal/service/radius"
 	"netlab-backend/internal/service/rbac"
 	"netlab-backend/pkg/captcha"
 	"netlab-backend/pkg/crypto"
@@ -117,6 +120,13 @@ func main() {
 	bindingRepo := repository.NewOAuthBindingRepository(db)
 	configRepo := repository.NewConfigRepository(db)
 	loginLogRepo := repository.NewLoginLogRepository(db)
+	radiusUserRepo := repository.NewRadiusUserRepository(db)
+	radiusNasRepo := repository.NewRadiusNasRepository(db)
+	radiusSessionRepo := repository.NewRadiusSessionRepository(db)
+	radiusAccountingRepo := repository.NewRadiusAccountingRepository(db)
+	radiusAuthLogRepo := repository.NewRadiusAuthLogRepository(db)
+	radiusCertRepo := repository.NewRadiusCertRepository(db)
+	radiusBypassRepo := repository.NewRadiusBypassRepository(db)
 
 	// ── 初始化运行时配置服务 ─────────────────────────────────────────
 	configService := sysconfig.NewService(configRepo, configCipher, rdb)
@@ -170,6 +180,19 @@ func main() {
 	userAdminService := authsvc.NewUserAdminService(userRepo, logger, rbacService)
 	importService := authsvc.NewUserImportService(userRepo, logger)
 
+	// ── 初始化 RADIUS 认证计费服务 ─────────────────────────────────────
+	// RADIUS UDP 服务（1812/1813，可选 RadSec 2083）与 HTTP 管理 API 共用
+	// 同一套仓储；Manager 持有运行时生命周期，管理端的配置变更经它热生效，
+	// CoA 服务供管理端踢下线/动态授权使用。
+	radiusManager := radiusd.NewManager(
+		logger, configCipher,
+		radiusUserRepo, radiusNasRepo, radiusSessionRepo, radiusAccountingRepo, radiusAuthLogRepo, radiusBypassRepo, radiusCertRepo,
+	)
+	radiusMgmtService := radiussvc.NewService(
+		radiusUserRepo, radiusNasRepo, radiusSessionRepo, radiusAccountingRepo, radiusAuthLogRepo, radiusCertRepo, radiusBypassRepo,
+		configCipher, radiusManager, configService, cfg.Radius,
+	)
+
 	// ── 初始化处理器 ─────────────────────────────────────────────────
 	twoFactorService := authsvc.NewTwoFactorService(userRepo, tokenRepo, tokenService, configService, logger)
 
@@ -179,6 +202,7 @@ func main() {
 	adminHandler := admin.NewAdminHandler(adminService, userAdminService, importService, emailSender, logger)
 	rHandler := rbacHandler.NewHandler(rbacService)
 	logHandler := loghandler.NewHandler(loginLogService)
+	radiusHandler := radiusHandler.NewHandler(radiusMgmtService)
 
 	// ── 初始化限流器 ─────────────────────────────────────────────────
 	var rateLimiter *middleware.RateLimiter
@@ -194,6 +218,7 @@ func main() {
 		AdminHandler:  adminHandler,
 		RBACHandler:   rHandler,
 		LogHandler:    logHandler,
+		RadiusHandler: radiusHandler,
 		AuthService:   authService,
 		TokenService:  tokenService,
 		CryptoService: cryptoService,
@@ -209,6 +234,20 @@ func main() {
 		Handler:      r,
 		ReadTimeout:  cfg.Server.ReadTimeout,
 		WriteTimeout: cfg.Server.WriteTimeout,
+	}
+
+	// ── 启动 RADIUS 认证计费服务（UDP 1812/1813，可选 RadSec 2083）─────
+	// 生效配置 = 环境变量底座 + 管理端 DB 配置覆盖；DB 读取失败时回落 env
+	// 配置（见 EffectiveConfig），不阻断进程启动。
+	effectiveRadiusCfg := radiusMgmtService.EffectiveConfig(context.Background())
+	radiusManager.Apply(effectiveRadiusCfg)
+	if radiusManager.Running() {
+		logger.Info("RADIUS service started",
+			zap.String("authAddr", fmt.Sprintf("%s:%d", effectiveRadiusCfg.BindHost, effectiveRadiusCfg.AuthPort)),
+			zap.String("acctAddr", fmt.Sprintf("%s:%d", effectiveRadiusCfg.BindHost, effectiveRadiusCfg.AcctPort)),
+			zap.Bool("eap", effectiveRadiusCfg.EAPEnabled),
+			zap.Bool("radsec", effectiveRadiusCfg.RadsecEnabled),
+		)
 	}
 
 	// 在 goroutine 中启动服务器
@@ -231,6 +270,13 @@ func main() {
 
 	if err := srv.Shutdown(ctx); err != nil {
 		logger.Fatal("Server forced to shutdown", zap.Error(err))
+	}
+
+	if radiusManager.Running() {
+		radiusCtx, radiusCancel := context.WithTimeout(context.Background(), radiusd.ShutdownTimeout)
+		defer radiusCancel()
+		radiusManager.Shutdown(radiusCtx)
+		logger.Info("RADIUS service stopped")
 	}
 
 	logger.Info("Server exited gracefully")

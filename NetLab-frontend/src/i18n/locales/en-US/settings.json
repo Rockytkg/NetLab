@@ -315,6 +315,10 @@
         "read": "View login logs",
         "delete": "Delete login logs"
       },
+      "radius": {
+        "read": "View RADIUS billing data",
+        "manage": "Manage RADIUS users, NAS devices, profiles and sessions"
+      },
       "rbac": {
         "read": "View roles and permissions",
         "write": "Modify roles and permissions"

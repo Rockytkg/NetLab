@@ -26,6 +26,16 @@ const SettingsProfilePage = lazy(() => import('@/pages/settings/profile'))
 const UsersPage = lazy(() => import('@/pages/settings/users'))
 const RolesPage = lazy(() => import('@/pages/settings/roles'))
 const LoginLogsPage = lazy(() => import('@/pages/settings/login-logs'))
+const RadiusNasPage = lazy(() => import('@/pages/billing/nas'))
+const RadiusUsersPage = lazy(() => import('@/pages/billing/users'))
+const RadiusProfilesPage = lazy(() => import('@/pages/billing/profiles'))
+const RadiusSessionsPage = lazy(() => import('@/pages/billing/sessions'))
+const RadiusAccountingPage = lazy(() => import('@/pages/billing/accounting'))
+const RadiusAuthLogsPage = lazy(() => import('@/pages/billing/auth-logs'))
+const RadiusSettingsPage = lazy(() => import('@/pages/billing/settings'))
+const RadiusDot1xPage = lazy(() => import('@/pages/billing/dot1x'))
+const RadiusBypassPage = lazy(() => import('@/pages/billing/bypass'))
+const RadiusCertsPage = lazy(() => import('@/pages/billing/certs'))
 
 const router = createBrowserRouter([
   // ── 公开路由 ──
@@ -98,6 +108,22 @@ const router = createBrowserRouter([
       { path: '/settings/users', element: <UsersPage /> },
       { path: '/settings/roles', element: <RolesPage /> },
       { path: '/settings/login-logs', element: <LoginLogsPage /> },
+
+      // 项目认证计费（RADIUS 管理）
+      { path: '/billing', element: <Navigate to="/billing/users" replace /> },
+      { path: '/billing/nas', element: <RadiusNasPage /> },
+      { path: '/billing/users', element: <RadiusUsersPage /> },
+      { path: '/billing/profiles', element: <RadiusProfilesPage /> },
+      { path: '/billing/sessions', element: <RadiusSessionsPage /> },
+      { path: '/billing/accounting', element: <RadiusAccountingPage /> },
+      { path: '/billing/auth-logs', element: <RadiusAuthLogsPage /> },
+      { path: '/billing/dot1x', element: <RadiusDot1xPage /> },
+      { path: '/billing/bypass', element: <RadiusBypassPage /> },
+      { path: '/billing/certs', element: <RadiusCertsPage /> },
+      { path: '/billing/settings', element: <RadiusSettingsPage /> },
+      // 旧配置页合并/迁移后的兼容重定向
+      { path: '/billing/radius-config', element: <Navigate to="/billing/settings" replace /> },
+      { path: '/billing/eap-config', element: <Navigate to="/billing/dot1x" replace /> },
     ],
   },
 ])

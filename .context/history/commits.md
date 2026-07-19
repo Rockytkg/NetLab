@@ -1,6 +1,25 @@
 # 提交历史
 
-> 自动生成于 2026-07-19 00:00:37
+> 自动生成于 2026-07-19 17:22
+
+## 2026-07-19 — ✨ feat: 实现 RADIUS 认证计费模块
+
+- **类型**: feat
+- **分支**: main
+- **文件数**: 177 (+68578/-29)
+- **决策**:
+  - 移植 ToughRADIUS 协议引擎（MIT），独立 UDP 认证/计费服务与 HTTP API 同进程运行
+  - 两层配置：RADIUS_* 环境变量提供默认值，DB system_configs 持久化覆盖，保存即通过 Manager.Apply 热生效
+  - 插件管线架构：认证检查器链 → 密码验证器（PAP/CHAP/MSCHAPv2）→ 厂商 VLAN 增强器
+  - EAP 协同器支持 MD5/MSCHAPv2/TLS/PEAP/TTLS 方法，共享 TLS 引擎池
+  - RadSec（RFC 6614）复用 EAP TLS 证书管理，与 UDP 认证共享相同认证管线
+  - 厂商字典使用 codegen 生成，字典与运行时解耦
+  - 敏感字段统一使用 CONFIG_ENCRYPTION_KEY（AES-256-GCM）加密存储
+  - Message-Authenticator 校验（BlastRADIUS 加固）支持 disabled/warn/enforce 三模式
+  - 认证失败限速：滑动窗口拒绝计数 → 临时封禁（7次/10秒窗口）
+  - 僵尸会话检测：计费中断间隔的 3 倍为阈值，定期清扫
+  - 前端认证计费页面按业务域分三个侧边栏子菜单
+- **测试**: radius_mac_test.go, acct_udp_test.go, auth_udp_test.go, checkers_test.go, coa_test.go, fakes_test.go, runtime_config_test.go
 
 ## 2026-07-19 — ✨ feat: 实现登录审计日志模块
 

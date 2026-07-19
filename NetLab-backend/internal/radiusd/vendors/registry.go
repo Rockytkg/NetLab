@@ -1,0 +1,156 @@
+// Package vendors is the registry of RADIUS vendor definitions. Each vendor is
+// described by a VendorInfo that bundles its code, human-readable metadata, and
+// the vendor-specific attribute Parser and response Builder. It is the single
+// source of truth for vendor attribute handling.
+//
+// This is distinct from the internal/radiusd/registry package, which is the
+// plugin pipeline registry (password validators, policy checkers, response
+// enhancers, auth guards, accounting and EAP handlers). Vendor parsers and
+// builders live here, in vendors; cross-cutting auth/acct/eap plugins live in
+// registry. The two registries do not overlap.
+package vendors
+
+import (
+	"sort"
+	"sync"
+)
+
+// VendorInfo holds metadata and handlers for a RADIUS vendor
+type VendorInfo struct {
+	Code        string
+	Name        string
+	Description string
+	Parser      VendorParser
+	Builder     VendorResponseBuilder
+}
+
+// VendorRegistry manages vendor registrations
+type VendorRegistry struct {
+	mu      sync.RWMutex
+	vendors map[string]*VendorInfo
+}
+
+var globalRegistry = NewVendorRegistry()
+
+// NewVendorRegistry creates a new vendor registry
+func NewVendorRegistry() *VendorRegistry {
+	return &VendorRegistry{
+		vendors: make(map[string]*VendorInfo),
+	}
+}
+
+// Register adds or updates a vendor in the registry
+func (r *VendorRegistry) Register(info *VendorInfo) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if existing, exists := r.vendors[info.Code]; exists {
+		// Merge with existing registration
+		if info.Name != "" {
+			existing.Name = info.Name
+		}
+		if info.Description != "" {
+			existing.Description = info.Description
+		}
+		if info.Parser != nil {
+			existing.Parser = info.Parser
+		}
+		if info.Builder != nil {
+			existing.Builder = info.Builder
+		}
+		return nil
+	}
+
+	r.vendors[info.Code] = info
+	return nil
+}
+
+// Get retrieves a vendor by code
+func (r *VendorRegistry) Get(code string) (*VendorInfo, bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	info, ok := r.vendors[code]
+	return info, ok
+}
+
+// List returns all registered vendors
+func (r *VendorRegistry) List() []*VendorInfo {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	list := make([]*VendorInfo, 0, len(r.vendors))
+	for _, info := range r.vendors {
+		list = append(list, info)
+	}
+
+	// Sort by name for consistent output
+	sort.Slice(list, func(i, j int) bool {
+		return list[i].Name < list[j].Name
+	})
+
+	return list
+}
+
+// Global accessors
+
+// Register adds a vendor to the global registry
+func Register(info *VendorInfo) error {
+	return globalRegistry.Register(info)
+}
+
+// Get retrieves a vendor from the global registry
+func Get(code string) (*VendorInfo, bool) {
+	return globalRegistry.Get(code)
+}
+
+// GetParser returns the attribute parser registered for the given vendor code,
+// falling back to the parser registered under the "default" vendor when the
+// code has no parser of its own. This is the single lookup the RADIUS request
+// pipeline uses to obtain a vendor attribute parser.
+func GetParser(code string) (VendorParser, bool) {
+	if info, ok := Get(code); ok && info.Parser != nil {
+		return info.Parser, true
+	}
+	if info, ok := Get("default"); ok && info.Parser != nil {
+		return info.Parser, true
+	}
+	return nil, false
+}
+
+// GetResponseBuilder returns the response builder registered for the given
+// vendor code, if one exists.
+func GetResponseBuilder(code string) (VendorResponseBuilder, bool) {
+	if info, ok := Get(code); ok && info.Builder != nil {
+		return info.Builder, true
+	}
+	return nil, false
+}
+
+// RegisterParser registers a vendor attribute parser under its own vendor code.
+func RegisterParser(parser VendorParser) error {
+	return Register(&VendorInfo{
+		Code:   parser.VendorCode(),
+		Name:   parser.VendorName(),
+		Parser: parser,
+	})
+}
+
+// RegisterResponseBuilder registers a vendor response builder under its own
+// vendor code.
+func RegisterResponseBuilder(builder VendorResponseBuilder) error {
+	return Register(&VendorInfo{
+		Code:    builder.VendorCode(),
+		Builder: builder,
+	})
+}
+
+// List returns all registered vendors from the global registry
+func List() []*VendorInfo {
+	return globalRegistry.List()
+}
+
+// ResetGlobalRegistry resets the global registry (for testing)
+func ResetGlobalRegistry() {
+	globalRegistry = NewVendorRegistry()
+}

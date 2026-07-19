@@ -61,9 +61,26 @@ func AutoMigrate(db *gorm.DB) error {
 		&model.Permission{},
 		&model.RolePermission{},
 		&model.LoginLog{},
+		&model.RadiusProfile{},
+		&model.RadiusUser{},
+		&model.RadiusNas{},
+		&model.RadiusOnline{},
+		&model.RadiusAccounting{},
+		&model.RadiusAuthLog{},
+		&model.RadiusCert{},
+		&model.RadiusBypass{},
 	}
 
 	if err := db.AutoMigrate(models...); err != nil {
+		return err
+	}
+	// nb_radius_users.mac_addr 需要容纳逗号分隔的多 MAC 列表；AutoMigrate
+	// 不会扩大既有列，幂等 ALTER 兼容旧库（新库列已是 varchar(1024)）。
+	if err := db.Exec("ALTER TABLE nb_radius_users ALTER COLUMN mac_addr TYPE varchar(1024)").Error; err != nil {
+		return err
+	}
+	// MAC 认证按 lower(mac_addr) 等值/列表匹配，函数索引支撑热路径查询。
+	if err := db.Exec("CREATE INDEX IF NOT EXISTS idx_radius_users_mac_addr_lower ON nb_radius_users (lower(mac_addr))").Error; err != nil {
 		return err
 	}
 	// Casbin 持久化已被有意移除；应用现在仅以规范化的

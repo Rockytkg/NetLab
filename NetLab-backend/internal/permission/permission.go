@@ -26,6 +26,8 @@ const (
 	UserImport    = "user.import"
 	LogRead       = "log.read"
 	LogDelete     = "log.delete"
+	RadiusRead    = "radius.read"
+	RadiusManage  = "radius.manage"
 )
 
 // Catalog is the single source of truth for permissions that can be assigned.
@@ -43,4 +45,6 @@ var Catalog = []Definition{
 	{Resource: "user", Action: "import", Description: "Import users"},
 	{Resource: "log", Action: "read", Description: "View login logs"},
 	{Resource: "log", Action: "delete", Description: "Delete login logs"},
+	{Resource: "radius", Action: "read", Description: "View RADIUS billing data"},
+	{Resource: "radius", Action: "manage", Description: "Manage RADIUS users, NAS devices, profiles and sessions"},
 }

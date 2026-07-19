@@ -1,0 +1,273 @@
+package eap
+
+import (
+	"fmt"
+
+	"go.uber.org/zap"
+	"layeh.com/radius"
+	"layeh.com/radius/rfc2865"
+	"netlab-backend/internal/model"
+	radiuserrors "netlab-backend/internal/radiusd/errors"
+)
+
+// HandlerRegistry defines the EAP handler registry interface
+type HandlerRegistry interface {
+	GetHandler(eapType uint8) (EAPHandler, bool)
+}
+
+// Coordinator orchestrates EAP message dispatching and handling
+type Coordinator struct {
+	stateManager    EAPStateManager
+	pwdProvider     PasswordProvider
+	handlerRegistry HandlerRegistry
+	debug           bool // Debug mode flag
+
+	// stateLocks serializes processing of requests that carry the same RADIUS
+	// State value. RADIUS requests are dispatched via a worker pool, so a NAS
+	// retransmit of an EAP-Response can be processed concurrently with the
+	// original. The full GetState → handler → SetState sequence must run under a
+	// single goroutine per state because the per-handshake *tlsengine.Engine is
+	// shared by reference and is not safe for concurrent Process calls.
+	stateLocks *keyedMutex
+}
+
+// NewCoordinator creates a new EAP coordinator
+func NewCoordinator(stateManager EAPStateManager, pwdProvider PasswordProvider, handlerRegistry HandlerRegistry, debug bool) *Coordinator {
+	return &Coordinator{
+		stateManager:    stateManager,
+		pwdProvider:     pwdProvider,
+		handlerRegistry: handlerRegistry,
+		debug:           debug,
+		stateLocks:      newKeyedMutex(),
+	}
+}
+
+// HandleEAPRequest Handle EAP request
+// Returns: handled bool, success bool, err error
+// handled: whether the request was handled
+// success: whether authentication succeeded (only meaningful when handled=true)
+// err: error occurred during handling
+func (c *Coordinator) HandleEAPRequest(
+	w radius.ResponseWriter,
+	r *radius.Request,
+	user *model.RadiusUser,
+	nas *model.RadiusNas,
+	response *radius.Packet,
+	secret string,
+	isMacAuth bool,
+	configuredMethod string, // Configured EAP method (eap-md5, eap-mschapv2, etc.)
+) (handled bool, success bool, err error) {
+
+	// Parse the EAP message
+	eapMsg, err := ParseEAPMessage(r.Packet)
+	if err != nil {
+		// Not an EAP request
+		return false, false, nil
+	}
+
+	// Serialize concurrent processing of the same handshake. A NAS retransmit of
+	// an EAP-Response carries the same RADIUS State value as the in-flight
+	// request; holding a per-state lock across the entire GetState → handler →
+	// SetState sequence keeps the shared *tlsengine.Engine single-goroutine and
+	// prevents the losing SetState write from being silently dropped. The
+	// identity phase has no State yet, so it needs no lock.
+	if stateID := rfc2865.State_GetString(r.Packet); stateID != "" {
+		unlock := c.stateLocks.lock(stateID)
+		defer unlock()
+	}
+
+	// Create the EAP context
+	ctx := &EAPContext{
+		Request:        r,
+		ResponseWriter: w,
+		Response:       response,
+		User:           user,
+		NAS:            nas,
+		EAPMessage:     eapMsg,
+		Secret:         secret,
+		IsMacAuth:      isMacAuth,
+		StateManager:   c.stateManager,
+		PwdProvider:    c.pwdProvider,
+	}
+	// A password provider that is also an external credential verifier (e.g. the
+	// LDAP backend) drives bind-based inner PAP verification; a plain provider
+	// leaves Verifier nil and inner methods fall back to local comparison.
+	if cv, ok := c.pwdProvider.(CredentialVerifier); ok {
+		ctx.Verifier = cv
+	}
+
+	// Handle EAP-Response/Identity
+	if eapMsg.Code == CodeResponse && eapMsg.Type == TypeIdentity {
+		return c.handleIdentityResponse(ctx, configuredMethod)
+	}
+
+	// Handle EAP-Response/Nak
+	if eapMsg.Code == CodeResponse && eapMsg.Type == TypeNak {
+		return c.handleNak(ctx)
+	}
+
+	// Handle EAP-Response (Challenge Response)
+	if eapMsg.Code == CodeResponse {
+		return c.handleChallengeResponse(ctx)
+	}
+
+	return false, false, fmt.Errorf("unsupported EAP code: %d", eapMsg.Code)
+}
+
+// handleIdentityResponse processes EAP-Response/Identity and sends the configured challenge
+func (c *Coordinator) handleIdentityResponse(ctx *EAPContext, configuredMethod string) (bool, bool, error) {
+	// Select the handler for the configured method
+	var handler EAPHandler
+
+	switch configuredMethod {
+	case "eap-md5":
+		handler, _ = c.handlerRegistry.GetHandler(TypeMD5Challenge)
+	case "eap-mschapv2":
+		handler, _ = c.handlerRegistry.GetHandler(TypeMSCHAPv2)
+	case "eap-otp":
+		handler, _ = c.handlerRegistry.GetHandler(TypeOTP)
+	case "eap-tls":
+		handler, _ = c.handlerRegistry.GetHandler(TypeTLS)
+	case "eap-ttls":
+		handler, _ = c.handlerRegistry.GetHandler(TypeTTLS)
+	case "eap-peap":
+		handler, _ = c.handlerRegistry.GetHandler(TypePEAP)
+	default:
+		// Default to MD5
+		handler, _ = c.handlerRegistry.GetHandler(TypeMD5Challenge)
+	}
+
+	if handler == nil {
+		return false, false, fmt.Errorf("EAP handler not found for method: %s", configuredMethod)
+	}
+
+	// Invoke the handler to send the challenge
+	handled, err := handler.HandleIdentity(ctx)
+	if err != nil {
+		zap.L().Error("EAP HandleIdentity failed",
+			zap.String("method", configuredMethod),
+			zap.Error(err))
+	}
+
+	// Identity phase does not return success; wait for the challenge response
+	return handled, false, err
+}
+
+// handleNak handles EAP-Response/Nak when the client rejects the current method
+func (c *Coordinator) handleNak(ctx *EAPContext) (bool, bool, error) {
+	if len(ctx.EAPMessage.Data) == 0 {
+		return false, false, fmt.Errorf("nak message has no alternative methods")
+	}
+
+	// Take the first method suggested by the client
+	suggestedType := ctx.EAPMessage.Data[0]
+
+	handler, ok := c.handlerRegistry.GetHandler(suggestedType)
+	if !ok {
+		return false, false, fmt.Errorf("unsupported EAP type: %d", suggestedType)
+	}
+
+	// Send the challenge using the suggested method
+	handled, err := handler.HandleIdentity(ctx)
+	return handled, false, err
+}
+
+// handleChallengeResponse processes EAP-Response (Challenge Response)
+func (c *Coordinator) handleChallengeResponse(ctx *EAPContext) (bool, bool, error) {
+	// Get the handler based on the EAP type
+	handler, ok := c.handlerRegistry.GetHandler(ctx.EAPMessage.Type)
+	if !ok {
+		return false, false, fmt.Errorf("unsupported EAP type: %d", ctx.EAPMessage.Type)
+	}
+
+	// Check whether the handler can process this message
+	if !handler.CanHandle(ctx) {
+		return false, false, fmt.Errorf("handler cannot handle this EAP message")
+	}
+
+	// Invoke the handler to validate the response
+	success, err := handler.HandleResponse(ctx)
+	if err != nil {
+		zap.L().Error("EAP HandleResponse failed",
+			zap.String("method", handler.Name()),
+			zap.Error(err))
+		return true, false, err
+	}
+
+	return true, success, nil
+}
+
+// SendEAPSuccess Send EAP-Success response
+func (c *Coordinator) SendEAPSuccess(w radius.ResponseWriter, r *radius.Request, response *radius.Packet, secret string) error {
+	eapMsg, err := ParseEAPMessage(r.Packet)
+	if err != nil || eapMsg == nil {
+		return fmt.Errorf("cannot send EAP-Success: failed to parse EAP message: %w", err)
+	}
+	identifier := eapMsg.Identifier
+
+	// Create the EAP-Success message
+	eapSuccess := EncodeEAPHeader(CodeSuccess, identifier)
+
+	// Set the EAP-Message and Message-Authenticator
+	SetEAPMessageAndAuth(response, eapSuccess, secret)
+
+	// Send response
+	if c.debug {
+		zap.L().Info("Sending EAP-Success",
+			zap.Uint8("identifier", identifier))
+	}
+
+	return w.Write(response)
+}
+
+// SendEAPFailure Send EAP-Failure response
+func (c *Coordinator) SendEAPFailure(w radius.ResponseWriter, r *radius.Request, secret string, reason error) error {
+	eapMsg, err := ParseEAPMessage(r.Packet)
+	if err != nil || eapMsg == nil {
+		return fmt.Errorf("cannot send EAP-Failure: failed to parse EAP message: %w", err)
+	}
+	identifier := eapMsg.Identifier
+
+	// Create the EAP-Failure message
+	eapFailure := EncodeEAPHeader(CodeFailure, identifier)
+
+	// Create RADIUS Reject response
+	response := r.Response(radius.CodeAccessReject)
+	if reason != nil {
+		reply := safeReplyMessage(reason)
+		if len(reply) > 253 {
+			reply = reply[:253]
+		}
+		_ = rfc2865.ReplyMessage_SetString(response, reply) //nolint:errcheck
+	}
+
+	// Set the EAP-Message and Message-Authenticator
+	SetEAPMessageAndAuth(response, eapFailure, secret)
+
+	// Log the failure event (avoid logging raw error to prevent sensitive data leakage)
+	zap.L().Warn("Sending EAP-Failure",
+		zap.Uint8("identifier", identifier),
+		zap.String("reason", safeReplyMessage(reason)))
+
+	return w.Write(response)
+}
+
+func safeReplyMessage(reason error) string {
+	if reason == nil {
+		return ""
+	}
+	if authErr, ok := radiuserrors.GetAuthError(reason); ok {
+		if authErr.Message != "" {
+			return authErr.Message
+		}
+	}
+	return reason.Error()
+}
+
+// CleanupState Cleanup EAP Status
+func (c *Coordinator) CleanupState(r *radius.Request) {
+	stateID := rfc2865.State_GetString(r.Packet)
+	if stateID != "" {
+		_ = c.stateManager.DeleteState(stateID) //nolint:errcheck
+	}
+}

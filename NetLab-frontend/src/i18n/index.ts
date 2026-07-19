@@ -17,6 +17,7 @@ import zhCommon from './locales/zh-CN/common.json'
 import zhLogin from './locales/zh-CN/login.json'
 import zhMenu from './locales/zh-CN/menu.json'
 import zhOperations from './locales/zh-CN/operations.json'
+import zhRadius from './locales/zh-CN/radius.json'
 import zhSettings from './locales/zh-CN/settings.json'
 
 // 英文翻译资源
@@ -24,6 +25,7 @@ import enCommon from './locales/en-US/common.json'
 import enLogin from './locales/en-US/login.json'
 import enMenu from './locales/en-US/menu.json'
 import enOperations from './locales/en-US/operations.json'
+import enRadius from './locales/en-US/radius.json'
 import enSettings from './locales/en-US/settings.json'
 
 /** 翻译资源 */
@@ -33,6 +35,7 @@ const resources = {
     login: zhLogin,
     menu: zhMenu,
     operations: zhOperations,
+    radius: zhRadius,
     settings: zhSettings,
   },
   'en-US': {
@@ -40,6 +43,7 @@ const resources = {
     login: enLogin,
     menu: enMenu,
     operations: enOperations,
+    radius: enRadius,
     settings: enSettings,
   },
 } as const

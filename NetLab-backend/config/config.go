@@ -23,6 +23,7 @@ type Config struct {
 	CORS      CORSConfig
 	Captcha   CaptchaConfig
 	Log       LogConfig
+	Radius    RadiusConfig
 }
 
 // ServerConfig 保存服务器相关配置。
@@ -127,6 +128,60 @@ type LogConfig struct {
 	Format string
 }
 
+// RadiusConfig 保存 RADIUS 认证计费服务配置。
+// RADIUS 服务基于 UDP（RadSec 为 TCP/TLS），独立于 HTTP 服务运行。
+type RadiusConfig struct {
+	// Enabled 是 RADIUS 服务总开关。
+	Enabled bool
+	// BindHost 是 UDP 监听地址。
+	BindHost string
+	// AuthPort 是认证端口（RFC 2865，默认 1812）。
+	AuthPort int
+	// AcctPort 是记账端口（RFC 2866，默认 1813）。
+	AcctPort int
+	// AcctInterimInterval 是下发给 NAS 的记账间隔秒数，
+	// 同时用于僵尸在线会话判定（超过 3 倍间隔未更新即清理）。
+	AcctInterimInterval int
+	// HistoryDays 是记账记录与认证日志的保留天数，0 表示永久保留。
+	HistoryDays int
+	// MessageAuthMode 是 Message-Authenticator 校验模式（BlastRADIUS 加固）：
+	// disabled=不校验，warn=缺失仅告警，enforce=缺失或错误直接丢弃。
+	MessageAuthMode string
+	// IgnorePassword 跳过密码校验（调试用；MAC 认证场景之外的开放放行）。
+	IgnorePassword bool
+	// SessionTimeout 是下发给 NAS 的 Session-Timeout 上限秒数；
+	// 0 表示不限制（按用户过期倒计时下发，与 toughradius 一致）。
+	SessionTimeout int
+	// RejectDelayMaxRejects 是连续拒绝触发临时封禁的阈值。
+	RejectDelayMaxRejects int
+	// RejectDelayWindowSeconds 是拒绝计数的观察窗口秒数。
+	RejectDelayWindowSeconds int
+	// EAP 相关：启用 802.1X（EAP-MD5/MSCHAPv2/TLS、PEAP、TTLS）。
+	EAPEnabled  bool
+	EAPMethod   string
+	EAPCertFile string
+	EAPKeyFile  string
+	EAPCAFile   string
+	// EAPEnabledHandlers 是允许使用的 EAP 方法列表（逗号分隔，"*" 为全部）。
+	EAPEnabledHandlers string
+	// EAPTLSMinVersion 是 EAP 隧道最低 TLS 版本（"1.2" 或 "1.3"）。
+	EAPTLSMinVersion string
+	// EAPServerCertID / EAPClientCACertID 引用 nb_radius_certs 中的证书；
+	// 为 0 时回退到 EAPCertFile/EAPCAFile 文件路径。
+	EAPServerCertID   uint64
+	EAPClientCACertID uint64
+	// RadSec 相关：RADIUS over TLS（RFC 6614，默认 2083，双向 TLS）。
+	RadsecEnabled  bool
+	RadsecPort     int
+	RadsecCertFile string
+	RadsecKeyFile  string
+	RadsecCAFile   string
+	// RadsecCertID / RadsecCACertID 引用 nb_radius_certs 中的证书；
+	// 为 0 时回退到文件路径。
+	RadsecCertID   uint64
+	RadsecCACertID uint64
+}
+
 // Load 从 .env 文件和环境变量中读取配置。
 func Load() (*Config, error) {
 	v := viper.New()
@@ -183,6 +238,30 @@ func Load() (*Config, error) {
 
 	v.SetDefault("LOG_LEVEL", "info")
 	v.SetDefault("LOG_FORMAT", "json")
+
+	v.SetDefault("RADIUS_ENABLED", false)
+	v.SetDefault("RADIUS_BIND_HOST", "0.0.0.0")
+	v.SetDefault("RADIUS_AUTH_PORT", 1812)
+	v.SetDefault("RADIUS_ACCT_PORT", 1813)
+	v.SetDefault("RADIUS_ACCT_INTERIM_INTERVAL", 120)
+	v.SetDefault("RADIUS_HISTORY_DAYS", 90)
+	v.SetDefault("RADIUS_MESSAGE_AUTH_MODE", "warn")
+	v.SetDefault("RADIUS_IGNORE_PASSWORD", false)
+	v.SetDefault("RADIUS_SESSION_TIMEOUT", 0)
+	v.SetDefault("RADIUS_REJECT_DELAY_MAX_REJECTS", 7)
+	v.SetDefault("RADIUS_REJECT_DELAY_WINDOW_SECONDS", 10)
+	v.SetDefault("RADIUS_EAP_ENABLED", false)
+	v.SetDefault("RADIUS_EAP_METHOD", "eap-md5")
+	v.SetDefault("RADIUS_EAP_CERT_FILE", "")
+	v.SetDefault("RADIUS_EAP_KEY_FILE", "")
+	v.SetDefault("RADIUS_EAP_CA_FILE", "")
+	v.SetDefault("RADIUS_EAP_ENABLED_HANDLERS", "*")
+	v.SetDefault("RADIUS_EAP_TLS_MIN_VERSION", "1.2")
+	v.SetDefault("RADIUS_RADSEC_ENABLED", false)
+	v.SetDefault("RADIUS_RADSEC_PORT", 2083)
+	v.SetDefault("RADIUS_RADSEC_CERT_FILE", "")
+	v.SetDefault("RADIUS_RADSEC_KEY_FILE", "")
+	v.SetDefault("RADIUS_RADSEC_CA_FILE", "")
 
 	// 从 .env 读取
 	v.SetConfigFile(".env")
@@ -258,6 +337,31 @@ func Load() (*Config, error) {
 			Level:  v.GetString("LOG_LEVEL"),
 			Format: v.GetString("LOG_FORMAT"),
 		},
+		Radius: RadiusConfig{
+			Enabled:                  v.GetBool("RADIUS_ENABLED"),
+			BindHost:                 v.GetString("RADIUS_BIND_HOST"),
+			AuthPort:                 v.GetInt("RADIUS_AUTH_PORT"),
+			AcctPort:                 v.GetInt("RADIUS_ACCT_PORT"),
+			AcctInterimInterval:      v.GetInt("RADIUS_ACCT_INTERIM_INTERVAL"),
+			HistoryDays:              v.GetInt("RADIUS_HISTORY_DAYS"),
+			MessageAuthMode:          strings.ToLower(strings.TrimSpace(v.GetString("RADIUS_MESSAGE_AUTH_MODE"))),
+			IgnorePassword:           v.GetBool("RADIUS_IGNORE_PASSWORD"),
+			SessionTimeout:           v.GetInt("RADIUS_SESSION_TIMEOUT"),
+			RejectDelayMaxRejects:    v.GetInt("RADIUS_REJECT_DELAY_MAX_REJECTS"),
+			RejectDelayWindowSeconds: v.GetInt("RADIUS_REJECT_DELAY_WINDOW_SECONDS"),
+			EAPEnabled:               v.GetBool("RADIUS_EAP_ENABLED"),
+			EAPMethod:                v.GetString("RADIUS_EAP_METHOD"),
+			EAPCertFile:              v.GetString("RADIUS_EAP_CERT_FILE"),
+			EAPKeyFile:               v.GetString("RADIUS_EAP_KEY_FILE"),
+			EAPCAFile:                v.GetString("RADIUS_EAP_CA_FILE"),
+			EAPEnabledHandlers:       v.GetString("RADIUS_EAP_ENABLED_HANDLERS"),
+			EAPTLSMinVersion:         v.GetString("RADIUS_EAP_TLS_MIN_VERSION"),
+			RadsecEnabled:            v.GetBool("RADIUS_RADSEC_ENABLED"),
+			RadsecPort:               v.GetInt("RADIUS_RADSEC_PORT"),
+			RadsecCertFile:           v.GetString("RADIUS_RADSEC_CERT_FILE"),
+			RadsecKeyFile:            v.GetString("RADIUS_RADSEC_KEY_FILE"),
+			RadsecCAFile:             v.GetString("RADIUS_RADSEC_CA_FILE"),
+		},
 	}
 
 	if cfg.JWT.AccessSecret == "" || cfg.JWT.RefreshSecret == "" {
@@ -271,6 +375,23 @@ func Load() (*Config, error) {
 	}
 	if cfg.JWT.SigningMode == "RS256" && (cfg.JWT.PrivateKeyPath == "" || cfg.JWT.PublicKeyPath == "") {
 		return nil, fmt.Errorf("JWT RS256 signing requires private and public key paths")
+	}
+
+	if cfg.Radius.Enabled {
+		switch cfg.Radius.MessageAuthMode {
+		case "disabled", "warn", "enforce":
+		default:
+			return nil, fmt.Errorf("RADIUS_MESSAGE_AUTH_MODE must be one of: disabled | warn | enforce")
+		}
+		if cfg.Radius.AcctInterimInterval < 30 {
+			return nil, fmt.Errorf("RADIUS_ACCT_INTERIM_INTERVAL must be >= 30 seconds")
+		}
+		if cfg.Radius.SessionTimeout < 0 {
+			return nil, fmt.Errorf("RADIUS_SESSION_TIMEOUT must be >= 0 (0 means no cap)")
+		}
+		// EAP/RadSec 的证书可来自环境变量文件路径或管理端维护的 DB 证书
+		// （nb_radius_certs，运行时选择），因此此处不强制证书文件存在；
+		// 缺证书时对应的 TLS 方法/监听器会在运行期安全降级或报错。
 	}
 
 	return cfg, nil

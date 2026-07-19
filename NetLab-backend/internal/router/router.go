@@ -12,6 +12,7 @@ import (
 	"netlab-backend/internal/handler/admin"
 	"netlab-backend/internal/handler/auth"
 	loghandler "netlab-backend/internal/handler/log"
+	radiusHandler "netlab-backend/internal/handler/radius"
 	rbacHandler "netlab-backend/internal/handler/rbac"
 	"netlab-backend/internal/middleware"
 	"netlab-backend/internal/permission"
@@ -27,6 +28,7 @@ type RouterConfig struct {
 	AdminHandler  *admin.AdminHandler
 	RBACHandler   *rbacHandler.Handler
 	LogHandler    *loghandler.Handler
+	RadiusHandler *radiusHandler.Handler
 	AuthService   *authsvc.AuthService
 	TokenService  *authsvc.TokenService
 	CryptoService *authsvc.CryptoService
@@ -350,6 +352,158 @@ func Setup(cfg RouterConfig) *gin.Engine {
 					cfg.limitModerate("logs-login-delete"),
 					middleware.RequirePermission(cfg.Authorizer, permission.LogDelete),
 					cfg.LogHandler.DeleteLoginLogs)
+			}
+
+			// ── RADIUS 认证计费管理 ──
+			if cfg.RadiusHandler != nil {
+				radiusGroup := authenticated.Group("/radius")
+				{
+					// 认证用户
+					radiusGroup.GET("/users",
+						cfg.limitStandard("radius-users-list"),
+						middleware.RequirePermission(cfg.Authorizer, permission.RadiusRead),
+						cfg.RadiusHandler.ListUsers)
+					radiusGroup.POST("/users",
+						cfg.limitModerate("radius-users-create"),
+						middleware.RequirePermission(cfg.Authorizer, permission.RadiusManage),
+						cfg.RadiusHandler.CreateUser)
+					radiusGroup.PUT("/users/:id",
+						cfg.limitModerate("radius-users-update"),
+						middleware.RequirePermission(cfg.Authorizer, permission.RadiusManage),
+						cfg.RadiusHandler.UpdateUser)
+					radiusGroup.DELETE("/users/:id",
+						cfg.limitModerate("radius-users-delete"),
+						middleware.RequirePermission(cfg.Authorizer, permission.RadiusManage),
+						cfg.RadiusHandler.DeleteUser)
+
+					// 免认证规则
+					radiusGroup.GET("/bypass",
+						cfg.limitStandard("radius-bypass-list"),
+						middleware.RequirePermission(cfg.Authorizer, permission.RadiusRead),
+						cfg.RadiusHandler.ListBypassRules)
+					radiusGroup.POST("/bypass",
+						cfg.limitModerate("radius-bypass-create"),
+						middleware.RequirePermission(cfg.Authorizer, permission.RadiusManage),
+						cfg.RadiusHandler.CreateBypassRule)
+					radiusGroup.PUT("/bypass/:id",
+						cfg.limitModerate("radius-bypass-update"),
+						middleware.RequirePermission(cfg.Authorizer, permission.RadiusManage),
+						cfg.RadiusHandler.UpdateBypassRule)
+					radiusGroup.DELETE("/bypass/:id",
+						cfg.limitModerate("radius-bypass-delete"),
+						middleware.RequirePermission(cfg.Authorizer, permission.RadiusManage),
+						cfg.RadiusHandler.DeleteBypassRule)
+
+					// 策略套餐
+					radiusGroup.GET("/profiles",
+						cfg.limitStandard("radius-profiles-list"),
+						middleware.RequirePermission(cfg.Authorizer, permission.RadiusRead),
+						cfg.RadiusHandler.ListProfiles)
+					radiusGroup.GET("/profiles/options",
+						cfg.limitStandard("radius-profiles-options"),
+						middleware.RequirePermission(cfg.Authorizer, permission.RadiusRead),
+						cfg.RadiusHandler.ListProfileOptions)
+					radiusGroup.POST("/profiles",
+						cfg.limitModerate("radius-profiles-create"),
+						middleware.RequirePermission(cfg.Authorizer, permission.RadiusManage),
+						cfg.RadiusHandler.CreateProfile)
+					radiusGroup.PUT("/profiles/:id",
+						cfg.limitModerate("radius-profiles-update"),
+						middleware.RequirePermission(cfg.Authorizer, permission.RadiusManage),
+						cfg.RadiusHandler.UpdateProfile)
+					radiusGroup.DELETE("/profiles/:id",
+						cfg.limitModerate("radius-profiles-delete"),
+						middleware.RequirePermission(cfg.Authorizer, permission.RadiusManage),
+						cfg.RadiusHandler.DeleteProfile)
+
+					// NAS 设备
+					radiusGroup.GET("/nas",
+						cfg.limitStandard("radius-nas-list"),
+						middleware.RequirePermission(cfg.Authorizer, permission.RadiusRead),
+						cfg.RadiusHandler.ListNas)
+					radiusGroup.POST("/nas",
+						cfg.limitModerate("radius-nas-create"),
+						middleware.RequirePermission(cfg.Authorizer, permission.RadiusManage),
+						cfg.RadiusHandler.CreateNas)
+					radiusGroup.PUT("/nas/:id",
+						cfg.limitModerate("radius-nas-update"),
+						middleware.RequirePermission(cfg.Authorizer, permission.RadiusManage),
+						cfg.RadiusHandler.UpdateNas)
+					radiusGroup.DELETE("/nas/:id",
+						cfg.limitModerate("radius-nas-delete"),
+						middleware.RequirePermission(cfg.Authorizer, permission.RadiusManage),
+						cfg.RadiusHandler.DeleteNas)
+
+					// 在线会话
+					radiusGroup.GET("/sessions",
+						cfg.limitStandard("radius-sessions-list"),
+						middleware.RequirePermission(cfg.Authorizer, permission.RadiusRead),
+						cfg.RadiusHandler.ListSessions)
+					radiusGroup.POST("/sessions/:id/coa",
+						cfg.limitModerate("radius-sessions-coa"),
+						middleware.RequirePermission(cfg.Authorizer, permission.RadiusManage),
+						cfg.RadiusHandler.CoASession)
+					radiusGroup.DELETE("/sessions/:id",
+						cfg.limitModerate("radius-sessions-kick"),
+						middleware.RequirePermission(cfg.Authorizer, permission.RadiusManage),
+						cfg.RadiusHandler.KickSession)
+
+					// 记账记录
+					radiusGroup.GET("/accounting",
+						cfg.limitStandard("radius-accounting-list"),
+						middleware.RequirePermission(cfg.Authorizer, permission.RadiusRead),
+						cfg.RadiusHandler.ListAccounting)
+
+					// 认证日志
+					radiusGroup.GET("/auth-logs",
+						cfg.limitStandard("radius-authlogs-list"),
+						middleware.RequirePermission(cfg.Authorizer, permission.RadiusRead),
+						cfg.RadiusHandler.ListAuthLogs)
+					radiusGroup.DELETE("/auth-logs",
+						cfg.limitModerate("radius-authlogs-delete"),
+						middleware.RequirePermission(cfg.Authorizer, permission.RadiusManage),
+						cfg.RadiusHandler.DeleteAuthLogs)
+
+					// 系统设置（读取用 RadiusRead，更新用 RadiusManage）
+					radiusGroup.GET("/settings",
+						cfg.limitStandard("radius-settings-get"),
+						middleware.RequirePermission(cfg.Authorizer, permission.RadiusRead),
+						cfg.RadiusHandler.GetSettings)
+					radiusGroup.PUT("/settings/system",
+						cfg.limitModerate("radius-settings-system"),
+						middleware.RequirePermission(cfg.Authorizer, permission.RadiusManage),
+						cfg.RadiusHandler.UpdateSystemSettings)
+					radiusGroup.PUT("/settings/server",
+						cfg.limitModerate("radius-settings-server"),
+						middleware.RequirePermission(cfg.Authorizer, permission.RadiusManage),
+						cfg.RadiusHandler.UpdateServerSettings)
+					radiusGroup.PUT("/settings/eap",
+						cfg.limitModerate("radius-settings-eap"),
+						middleware.RequirePermission(cfg.Authorizer, permission.RadiusManage),
+						cfg.RadiusHandler.UpdateEapSettings)
+
+					// TLS 证书（导出含私钥，属写权限范畴）
+					radiusGroup.GET("/certs",
+						cfg.limitStandard("radius-certs-list"),
+						middleware.RequirePermission(cfg.Authorizer, permission.RadiusRead),
+						cfg.RadiusHandler.ListCerts)
+					radiusGroup.POST("/certs",
+						cfg.limitModerate("radius-certs-create"),
+						middleware.RequirePermission(cfg.Authorizer, permission.RadiusManage),
+						cfg.RadiusHandler.CreateCert)
+					radiusGroup.PUT("/certs/:id",
+						cfg.limitModerate("radius-certs-update"),
+						middleware.RequirePermission(cfg.Authorizer, permission.RadiusManage),
+						cfg.RadiusHandler.UpdateCert)
+					radiusGroup.DELETE("/certs/:id",
+						cfg.limitModerate("radius-certs-delete"),
+						middleware.RequirePermission(cfg.Authorizer, permission.RadiusManage),
+						cfg.RadiusHandler.DeleteCert)
+					radiusGroup.GET("/certs/:id/export",
+						cfg.limitModerate("radius-certs-export"),
+						middleware.RequirePermission(cfg.Authorizer, permission.RadiusManage),
+						cfg.RadiusHandler.ExportCert)
+				}
 			}
 
 			// ── 按资源划分的受保护路由 ──

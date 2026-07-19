@@ -32,6 +32,9 @@ const (
 	keyPoliceBeian          = "police_beian"
 	keySMTP                 = "smtp"
 	keyOAuthPrefix          = "oauth." // oauth.<providerID>
+	keyRadiusSystem         = "radius.system"
+	keyRadiusServer         = "radius.server"
+	keyRadiusEap            = "radius.eap"
 )
 
 // SecretMask 是回传给前端以代替已配置密钥的占位符。
@@ -84,6 +87,41 @@ type ProviderSettings struct {
 // IsConfigured 在提供商已启用且填写了 client 凭据时返回 true。
 func (p ProviderSettings) IsConfigured() bool {
 	return p.Enabled && p.ClientID != "" && p.ClientSecret != ""
+}
+
+// RadiusSystemSettings 保存 RADIUS 系统（监听器）配置。
+// RadsecCertID/RadsecCACertID 引用 nb_radius_certs 中的证书，0 表示未配置。
+type RadiusSystemSettings struct {
+	Enabled        bool   `json:"enabled"`
+	BindHost       string `json:"bindHost"`
+	AuthPort       int    `json:"authPort"`
+	AcctPort       int    `json:"acctPort"`
+	RadsecEnabled  bool   `json:"radsecEnabled"`
+	RadsecPort     int    `json:"radsecPort"`
+	RadsecCertID   uint64 `json:"radsecCertId"`
+	RadsecCACertID uint64 `json:"radsecCaCertId"`
+}
+
+// RadiusServerSettings 保存 RADIUS 服务器行为策略配置。
+type RadiusServerSettings struct {
+	MessageAuthMode          string `json:"messageAuthMode"`
+	IgnorePassword           bool   `json:"ignorePassword"`
+	SessionTimeout           int    `json:"sessionTimeout"`
+	AcctInterimInterval      int    `json:"acctInterimInterval"`
+	HistoryDays              int    `json:"historyDays"`
+	RejectDelayMaxRejects    int    `json:"rejectDelayMaxRejects"`
+	RejectDelayWindowSeconds int    `json:"rejectDelayWindowSeconds"`
+}
+
+// RadiusEapSettings 保存 EAP（802.1X）配置。
+// TLSServerCertID/TLSClientCAID 引用 nb_radius_certs 中的证书，0 表示未配置。
+type RadiusEapSettings struct {
+	Enabled         bool   `json:"enabled"`
+	Method          string `json:"method"`
+	EnabledHandlers string `json:"enabledHandlers"`
+	TLSServerCertID uint64 `json:"tlsServerCertId"`
+	TLSClientCAID   uint64 `json:"tlsClientCaId"`
+	TLSMinVersion   string `json:"tlsMinVersion"`
 }
 
 // ─── 服务 ────────────────────────────────────────────────────────────
@@ -384,6 +422,69 @@ func (s *Service) EnabledProviders(ctx context.Context) ([]repository.OAuthProvi
 		})
 	}
 	return result, nil
+}
+
+// ─── RADIUS ──────────────────────────────────────────────────────────
+
+// radiusBlob 读取指定键的 JSON blob 到 out；键不存在时返回 (false, nil)。
+func (s *Service) radiusBlob(ctx context.Context, key string, out any) (bool, error) {
+	snap, err := s.snapshot(ctx)
+	if err != nil {
+		return false, err
+	}
+	raw, ok := snap[key]
+	if !ok || raw == "" {
+		return false, nil
+	}
+	if err := json.Unmarshal([]byte(raw), out); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+// setRadiusBlob 将配置结构序列化为 JSON blob 持久化到指定键。
+func (s *Service) setRadiusBlob(ctx context.Context, key, description string, in any) error {
+	data, err := json.Marshal(in)
+	if err != nil {
+		return err
+	}
+	return s.set(ctx, key, string(data), description)
+}
+
+// RadiusSystem 返回 RADIUS 系统（监听器）配置；第二个返回值指示键是否已配置。
+func (s *Service) RadiusSystem(ctx context.Context) (RadiusSystemSettings, bool, error) {
+	var out RadiusSystemSettings
+	ok, err := s.radiusBlob(ctx, keyRadiusSystem, &out)
+	return out, ok, err
+}
+
+// SetRadiusSystem 更新 RADIUS 系统（监听器）配置。
+func (s *Service) SetRadiusSystem(ctx context.Context, in RadiusSystemSettings) error {
+	return s.setRadiusBlob(ctx, keyRadiusSystem, "RADIUS system (listener) settings", in)
+}
+
+// RadiusServer 返回 RADIUS 服务器策略配置；第二个返回值指示键是否已配置。
+func (s *Service) RadiusServer(ctx context.Context) (RadiusServerSettings, bool, error) {
+	var out RadiusServerSettings
+	ok, err := s.radiusBlob(ctx, keyRadiusServer, &out)
+	return out, ok, err
+}
+
+// SetRadiusServer 更新 RADIUS 服务器策略配置。
+func (s *Service) SetRadiusServer(ctx context.Context, in RadiusServerSettings) error {
+	return s.setRadiusBlob(ctx, keyRadiusServer, "RADIUS server policy settings", in)
+}
+
+// RadiusEap 返回 RADIUS EAP（802.1X）配置；第二个返回值指示键是否已配置。
+func (s *Service) RadiusEap(ctx context.Context) (RadiusEapSettings, bool, error) {
+	var out RadiusEapSettings
+	ok, err := s.radiusBlob(ctx, keyRadiusEap, &out)
+	return out, ok, err
+}
+
+// SetRadiusEap 更新 RADIUS EAP（802.1X）配置。
+func (s *Service) SetRadiusEap(ctx context.Context, in RadiusEapSettings) error {
+	return s.setRadiusBlob(ctx, keyRadiusEap, "RADIUS EAP (802.1X) settings", in)
 }
 
 // ─── 登录页公开配置 ──────────────────────────────────────────────────

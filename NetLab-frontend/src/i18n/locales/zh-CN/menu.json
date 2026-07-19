@@ -6,5 +6,19 @@
   "roleManagement": "角色管理",
   "loginLogs": "登录日志",
   "profile": "个人中心",
-  "home": "首页"
+  "home": "首页",
+  "billing": "认证计费",
+  "radiusGroupBusiness": "业务管理",
+  "radiusGroupAuth": "认证方式",
+  "radiusGroupService": "服务配置",
+  "radiusNas": "NAS 设备",
+  "radiusUsers": "认证用户",
+  "radiusProfiles": "策略模板",
+  "radiusSessions": "在线会话",
+  "radiusAccounting": "计费日志",
+  "radiusAuthLogs": "认证日志",
+  "radiusDot1x": "802.1X 认证",
+  "radiusBypass": "免认证",
+  "radiusCerts": "证书管理",
+  "radiusSettings": "服务设置"
 }

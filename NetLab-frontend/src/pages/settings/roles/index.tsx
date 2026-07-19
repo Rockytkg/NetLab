@@ -52,6 +52,9 @@ const ADMIN_RESOURCES = [
   { resource: 'log', menuTitleKey: 'loginLogs' },
 ] as const
 
+/** 项目认证计费菜单下的资源节点，与左侧菜单结构对应。 */
+const BILLING_RESOURCES = [{ resource: 'radius', menuTitleKey: 'billing' }] as const
+
 /** 账户相关的资源节点（不属于系统管理菜单）。 */
 const ACCOUNT_RESOURCES = ['auth']
 
@@ -61,7 +64,7 @@ interface PermissionTreeProps {
   onChange: (value: string[]) => void
 }
 
-/** 权限树：按左侧菜单层级（系统管理 > 系统设置/用户管理/角色管理/登录日志）分组展示权限。 */
+/** 权限树：按左侧菜单层级（系统管理、项目认证计费分组）分组展示权限。 */
 function PermissionTree({ permissions, value, onChange }: PermissionTreeProps) {
   const { t } = useTranslation(['settings', 'menu'])
   const permissionCodes = useMemo(() => new Set(permissions.map((item) => item.code)), [permissions])
@@ -94,6 +97,20 @@ function PermissionTree({ permissions, value, onChange }: PermissionTreeProps) {
         children: adminChildren,
       })
     }
+    const billingChildren = BILLING_RESOURCES.filter(({ resource }) =>
+      byResource.has(resource),
+    ).map(({ resource, menuTitleKey }) => ({
+      key: `menu:${resource}`,
+      title: t(`menu:${menuTitleKey}`),
+      children: toLeaves(byResource.get(resource) ?? []),
+    }))
+    if (billingChildren.length > 0) {
+      nodes.push({
+        key: 'menu:billing',
+        title: t('menu:billing'),
+        children: billingChildren,
+      })
+    }
     const accountItems = ACCOUNT_RESOURCES.flatMap((resource) => byResource.get(resource) ?? [])
     if (accountItems.length > 0) {
       nodes.push({
@@ -105,6 +122,7 @@ function PermissionTree({ permissions, value, onChange }: PermissionTreeProps) {
     // 未映射到菜单分组的资源兜底展示，避免新权限被隐藏
     const mapped = new Set<string>([
       ...ADMIN_RESOURCES.map((item) => item.resource),
+      ...BILLING_RESOURCES.map((item) => item.resource),
       ...ACCOUNT_RESOURCES,
     ])
     const unmapped = permissions.filter((item) => !mapped.has(item.resource))

@@ -2,12 +2,18 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { Menu, theme } from 'antd'
 import {
+  AccountBookOutlined,
   ControlOutlined,
   DashboardOutlined,
+  GlobalOutlined,
   HistoryOutlined,
+  ProfileOutlined,
   SafetyCertificateOutlined,
+  SecurityScanOutlined,
   SettingOutlined,
   TeamOutlined,
+  UnlockOutlined,
+  WifiOutlined,
 } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import type { MenuProps } from 'antd'
@@ -27,9 +33,10 @@ export default function SideMenu({ collapsed }: SideMenuProps) {
 	const canReadUsers = can('user.read')
 	const canReadRbac = can('rbac.read')
 	const canReadLogs = can('log.read')
+	const canReadRadius = can('radius.read')
 
   type MenuItem = Required<MenuProps>['items'][number]
-  const rootSubmenuKeys = ['administration']
+  const rootSubmenuKeys = ['administration', 'billing']
 
   const menuItems = useMemo<MenuItem[]>(
     () => [
@@ -38,6 +45,45 @@ export default function SideMenu({ collapsed }: SideMenuProps) {
         icon: <DashboardOutlined />,
         label: t('dashboard'),
       },
+      ...(canReadRadius
+        ? [
+            {
+              key: 'billing',
+              icon: <AccountBookOutlined />,
+              label: t('billing'),
+              children: [
+                {
+                  key: 'billing-business',
+                  label: t('radiusGroupBusiness'),
+                  children: [
+                    { key: '/billing/nas', icon: <GlobalOutlined />, label: t('radiusNas') },
+                    { key: '/billing/users', icon: <TeamOutlined />, label: t('radiusUsers') },
+                    { key: '/billing/profiles', icon: <ProfileOutlined />, label: t('radiusProfiles') },
+                    { key: '/billing/sessions', icon: <WifiOutlined />, label: t('radiusSessions') },
+                    { key: '/billing/accounting', icon: <AccountBookOutlined />, label: t('radiusAccounting') },
+                    { key: '/billing/auth-logs', icon: <HistoryOutlined />, label: t('radiusAuthLogs') },
+                  ],
+                },
+                {
+                  key: 'billing-auth',
+                  label: t('radiusGroupAuth'),
+                  children: [
+                    { key: '/billing/dot1x', icon: <SecurityScanOutlined />, label: t('radiusDot1x') },
+                    { key: '/billing/bypass', icon: <UnlockOutlined />, label: t('radiusBypass') },
+                  ],
+                },
+                {
+                  key: 'billing-service',
+                  label: t('radiusGroupService'),
+                  children: [
+                    { key: '/billing/certs', icon: <SafetyCertificateOutlined />, label: t('radiusCerts') },
+                    { key: '/billing/settings', icon: <ControlOutlined />, label: t('radiusSettings') },
+                  ],
+                },
+              ],
+            } as MenuItem,
+          ]
+        : []),
       ...(canReadSettings || canReadUsers || canReadRbac || canReadLogs
         ? [
             {
@@ -86,14 +132,15 @@ export default function SideMenu({ collapsed }: SideMenuProps) {
           ]
         : []),
     ],
-    [canReadSettings, canReadUsers, canReadRbac, canReadLogs, t],
+    [canReadSettings, canReadUsers, canReadRbac, canReadLogs, canReadRadius, t],
   )
 
   const leafKeys = useMemo(() => {
     const keys: string[] = []
     const collect = (items: MenuItem[] = []) => {
       items.forEach((item) => {
-        if (!item || item.type === 'divider' || item.type === 'group') return
+        if (!item || item.type === 'divider') return
+        // group 只是标题分组，其子项仍是可达叶子，必须递归收集
         if ('children' in item && item.children) {
           collect(item.children as MenuItem[])
           return
@@ -126,9 +173,11 @@ export default function SideMenu({ collapsed }: SideMenuProps) {
   const selectedAncestorKeys = useMemo(() => {
     const findPath = (items: MenuItem[] = [], target: string, parents: string[] = []): string[] => {
       for (const item of items) {
-        if (!item || item.type === 'divider' || item.type === 'group') continue
+        if (!item || item.type === 'divider') continue
         const key = 'key' in item && typeof item.key === 'string' ? item.key : undefined
-        const nextParents = key && !key.startsWith('/') ? [...parents, key] : parents
+        // group 不是可展开的 submenu，其 key 不参与父路径收集，仅递归其子项
+        const nextParents =
+          item.type !== 'group' && key && !key.startsWith('/') ? [...parents, key] : parents
 
         if (key === target) return parents
         if ('children' in item && item.children) {
