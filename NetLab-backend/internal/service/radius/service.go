@@ -341,7 +341,7 @@ func (s *Service) UpdateProfile(ctx context.Context, id uint64, req *dtorequest.
 	return profile, nil
 }
 
-// DeleteProfile 删除套餐；被用户引用时禁止删除。
+// DeleteProfile 删除套餐；被用户或终端准入规则引用时禁止删除。
 func (s *Service) DeleteProfile(ctx context.Context, id uint64) *apperrors.AppError {
 	profile, err := s.users.GetProfileByID(ctx, id)
 	if err != nil {
@@ -352,6 +352,11 @@ func (s *Service) DeleteProfile(ctx context.Context, id uint64) *apperrors.AppEr
 	}
 	if count := s.CountProfileUsers(ctx, id); count > 0 {
 		return apperrors.New(apperrors.ErrCodeResourceInUse, "profile is referenced by users")
+	}
+	if count, err := s.bypass.CountByProfileID(ctx, id); err != nil {
+		return apperrors.Wrap(apperrors.ErrCodeInternal, "failed to count bypass profile references", err)
+	} else if count > 0 {
+		return apperrors.New(apperrors.ErrCodeResourceInUse, "profile is referenced by terminal access rules")
 	}
 	if err := s.users.DeleteProfile(ctx, id); err != nil {
 		return apperrors.Wrap(apperrors.ErrCodeInternal, "failed to delete radius profile", err)
@@ -567,20 +572,36 @@ func (s *Service) CreateBypassRule(ctx context.Context, req *dtorequest.RadiusBy
 	if appErr != nil {
 		return nil, appErr
 	}
+	if appErr := s.checkBypassProfile(ctx, req.ProfileID); appErr != nil {
+		return nil, appErr
+	}
+	if req.Type == model.RadiusBypassTypeIP && req.NasID == nil {
+		return nil, apperrors.New(apperrors.ErrCodeInvalidRequest, "ip bypass rule requires a nas scope")
+	}
+	if appErr := s.checkBypassNAS(ctx, req.NasID); appErr != nil {
+		return nil, appErr
+	}
+	if req.ExpireTime != nil && !req.ExpireTime.After(time.Now()) {
+		return nil, apperrors.New(apperrors.ErrCodeInvalidRequest, "bypass rule expiry must be in the future")
+	}
 	if existing, err := s.bypass.GetByTypeValue(ctx, req.Type, value); err != nil {
 		return nil, apperrors.Wrap(apperrors.ErrCodeInternal, "failed to check bypass rule", err)
 	} else if existing != nil {
 		return nil, apperrors.New(apperrors.ErrCodeDuplicateEntry, "bypass rule already exists")
 	}
 	rule := &model.RadiusBypass{
-		Type:   req.Type,
-		Value:  value,
-		Status: statusOrDefault(req.Status),
-		Remark: req.Remark,
+		Type:       req.Type,
+		Value:      value,
+		ProfileID:  req.ProfileID,
+		NasID:      req.NasID,
+		ExpireTime: req.ExpireTime,
+		Status:     statusOrDefault(req.Status),
+		Remark:     req.Remark,
 	}
 	if err := s.bypass.Create(ctx, rule); err != nil {
 		return nil, apperrors.Wrap(apperrors.ErrCodeInternal, "failed to create bypass rule", err)
 	}
+	s.manager.InvalidateBypassRules()
 	return rule, nil
 }
 
@@ -597,6 +618,18 @@ func (s *Service) UpdateBypassRule(ctx context.Context, id uint64, req *dtoreque
 	if appErr != nil {
 		return nil, appErr
 	}
+	if appErr := s.checkBypassProfile(ctx, req.ProfileID); appErr != nil {
+		return nil, appErr
+	}
+	if req.Type == model.RadiusBypassTypeIP && req.NasID == nil {
+		return nil, apperrors.New(apperrors.ErrCodeInvalidRequest, "ip bypass rule requires a nas scope")
+	}
+	if appErr := s.checkBypassNAS(ctx, req.NasID); appErr != nil {
+		return nil, appErr
+	}
+	if req.ExpireTime != nil && !req.ExpireTime.After(time.Now()) {
+		return nil, apperrors.New(apperrors.ErrCodeInvalidRequest, "bypass rule expiry must be in the future")
+	}
 	if rule.Type != req.Type || rule.Value != value {
 		if existing, err := s.bypass.GetByTypeValue(ctx, req.Type, value); err != nil {
 			return nil, apperrors.Wrap(apperrors.ErrCodeInternal, "failed to check bypass rule", err)
@@ -606,11 +639,15 @@ func (s *Service) UpdateBypassRule(ctx context.Context, id uint64, req *dtoreque
 	}
 	rule.Type = req.Type
 	rule.Value = value
+	rule.ProfileID = req.ProfileID
+	rule.NasID = req.NasID
+	rule.ExpireTime = req.ExpireTime
 	rule.Status = statusOrDefault(req.Status)
 	rule.Remark = req.Remark
 	if err := s.bypass.Update(ctx, rule); err != nil {
 		return nil, apperrors.Wrap(apperrors.ErrCodeInternal, "failed to update bypass rule", err)
 	}
+	s.manager.InvalidateBypassRules()
 	return rule, nil
 }
 
@@ -626,12 +663,12 @@ func (s *Service) DeleteBypassRule(ctx context.Context, id uint64) *apperrors.Ap
 	if err := s.bypass.Delete(ctx, id); err != nil {
 		return apperrors.Wrap(apperrors.ErrCodeInternal, "failed to delete bypass rule", err)
 	}
+	s.manager.InvalidateBypassRules()
 	return nil
 }
 
-// normalizeBypassValue 校验并归一化免认证规则取值：
-// mac 类型必须恰好一个合法 MAC（归一化为小写冒号分隔后存储）；
-// ip 类型必须是合法 IP 或 CIDR（去空白后存储）。
+// normalizeBypassValue 校验并归一化终端准入规则取值。IP 规则只允许单地址，
+// 不允许 CIDR，避免一条误配规则放开整段网络。
 func normalizeBypassValue(ruleType, value string) (string, *apperrors.AppError) {
 	value = strings.TrimSpace(value)
 	switch ruleType {
@@ -645,16 +682,39 @@ func normalizeBypassValue(ruleType, value string) (string, *apperrors.AppError) 
 		}
 		return normalized, nil
 	case model.RadiusBypassTypeIP:
-		if ip := net.ParseIP(value); ip != nil {
-			return value, nil
+		ip := net.ParseIP(value)
+		if ip == nil || ip.To4() == nil {
+			return "", apperrors.New(apperrors.ErrCodeInvalidRequest, "ip bypass rule requires a valid ipv4 address")
 		}
-		if _, _, err := net.ParseCIDR(value); err == nil {
-			return value, nil
-		}
-		return "", apperrors.New(apperrors.ErrCodeInvalidRequest, "invalid ip address or cidr")
+		return ip.To4().String(), nil
 	default:
 		return "", apperrors.New(apperrors.ErrCodeInvalidRequest, "bypass type must be mac or ip")
 	}
+}
+
+func (s *Service) checkBypassProfile(ctx context.Context, profileID uint64) *apperrors.AppError {
+	profile, err := s.users.GetProfileByID(ctx, profileID)
+	if err != nil {
+		return apperrors.Wrap(apperrors.ErrCodeInternal, "failed to load bypass profile", err)
+	}
+	if profile == nil || profile.Status != model.RadiusUserStatusEnabled {
+		return apperrors.New(apperrors.ErrCodeInvalidRequest, "bypass profile must be enabled")
+	}
+	return nil
+}
+
+func (s *Service) checkBypassNAS(ctx context.Context, nasID *uint64) *apperrors.AppError {
+	if nasID == nil {
+		return nil
+	}
+	nas, err := s.nas.GetByID(ctx, *nasID)
+	if err != nil {
+		return apperrors.Wrap(apperrors.ErrCodeInternal, "failed to load bypass nas", err)
+	}
+	if nas == nil || nas.Status != model.RadiusNasStatusEnabled {
+		return apperrors.New(apperrors.ErrCodeInvalidRequest, "bypass nas must be enabled")
+	}
+	return nil
 }
 
 // —— 内部辅助 ——

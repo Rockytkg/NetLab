@@ -405,6 +405,15 @@ func (s *RadiusService) GetBypassRules() []model.RadiusBypass {
 	return rules
 }
 
+// InvalidateBypassRules removes the local rule snapshot after an admin change.
+// A disabled or deleted terminal must not remain eligible for the cache TTL.
+func (s *RadiusService) InvalidateBypassRules() {
+	s.bypassCacheMu.Lock()
+	defer s.bypassCacheMu.Unlock()
+	s.bypassCache = nil
+	s.bypassCacheAt = time.Time{}
+}
+
 // UpdateUserMac 持久化用户最近看到的 MAC（绑定学习）。
 func (s *RadiusService) UpdateUserMac(username, macaddr string) {
 	ctx, cancel := context.WithTimeout(context.Background(), dbCallTimeout)

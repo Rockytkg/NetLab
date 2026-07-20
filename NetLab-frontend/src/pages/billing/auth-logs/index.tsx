@@ -6,19 +6,17 @@ import {
   Input,
   Result,
   Select,
-  Space,
   Table,
-  Tag,
   Typography,
-  theme,
 } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import { DeleteOutlined, ReloadOutlined } from '@ant-design/icons'
-import dayjs from 'dayjs'
 import { useTranslation } from 'react-i18next'
 import { radiusApi } from '@/services/radius'
 import { usePermission } from '@/hooks/usePermission'
 import Can from '@/components/auth/Can'
+import Toolbar from '@/pages/billing/components/Toolbar'
+import { renderTime } from '@/pages/billing/shared'
 import type { RadiusAuthLogItem } from '@/types/radius'
 
 const { Text } = Typography
@@ -33,7 +31,6 @@ const RESULT_TAG_COLORS: Record<string, string> = {
 /** RADIUS 认证日志页：分页列表 + 结果筛选 + 关键词搜索 + 批量删除。 */
 export default function RadiusAuthLogsPage() {
   const { t } = useTranslation(['radius', 'common', 'settings'])
-  const { token } = theme.useToken()
   const { message, modal } = App.useApp()
   const { can } = usePermission()
   const canReadLogs = can('radius.read')
@@ -71,80 +68,67 @@ export default function RadiusAuthLogsPage() {
     load()
   }, [load])
 
-  // 可截断列：仅当文本真正溢出被截断时悬停才显示完整内容提示
-  const renderEllipsis = (val?: string | null) =>
-    val ? (
-      <Text ellipsis={{ tooltip: val }} style={{ display: 'block' }}>
-        {val}
-      </Text>
-    ) : (
-      '-'
-    )
-
   const columns: ColumnsType<RadiusAuthLogItem> = [
     {
-      // 170：「YYYY-MM-DD HH:mm:ss」（19 字符）完整显示
       title: t('radius:authLogs.columns.time'),
       dataIndex: 'createdAt',
       key: 'createdAt',
-      width: 170,
-      render: (val?: string | null) => (val ? dayjs(val).format('YYYY-MM-DD HH:mm:ss') : '-'),
+      width: 160,
+      render: renderTime,
     },
     {
-      // 120：覆盖常见用户名，超长截断 + tip
       title: t('radius:authLogs.columns.username'),
       dataIndex: 'username',
       key: 'username',
       width: 120,
-      render: renderEllipsis,
+      ellipsis: { showTitle: true },
     },
     {
-      // 100：「MSCHAPv2」等认证方式 Tag 完整显示；bypass 显示为本地化标签
       title: t('radius:authLogs.columns.authType'),
       dataIndex: 'authType',
       key: 'authType',
-      width: 100,
+      width: 110,
+      responsive: ['sm'],
       render: (val: string) =>
-        val ? <Tag>{val === 'bypass' ? t('radius:authLogs.authTypeBypass') : val}</Tag> : '-',
+        val ? <Text>{val === 'bypass' ? t('radius:authLogs.authTypeBypass') : val}</Text> : '-',
     },
     {
-      // 130：IPv4「255.255.255.255」完整显示
       title: t('radius:authLogs.columns.nasAddr'),
       dataIndex: 'nasAddr',
       key: 'nasAddr',
       width: 130,
-      render: renderEllipsis,
+      ellipsis: { showTitle: true },
+      responsive: ['md'],
     },
     {
-      // 140：MAC「AA:BB:CC:DD:EE:FF」（17 字符）完整显示
       title: t('radius:authLogs.columns.macAddr'),
       dataIndex: 'macAddr',
       key: 'macAddr',
       width: 140,
-      render: renderEllipsis,
+      ellipsis: { showTitle: true },
+      responsive: ['md'],
     },
     {
-      // 90：最长 Tag「拒绝/Rejected」完整显示
       title: t('radius:authLogs.columns.result'),
       dataIndex: 'result',
       key: 'result',
-      width: 90,
+      width: 100,
       render: (val: string) =>
         val ? (
-          <Tag color={RESULT_TAG_COLORS[val] ?? 'default'}>
+          <Text style={{ color: RESULT_TAG_COLORS[val] ?? undefined }}>
             {t(`radius:authLogs.${val}`, val)}
-          </Tag>
+          </Text>
         ) : (
           '-'
         ),
     },
     {
-      // 240：失败原因多为长文本，截断 + tip
       title: t('radius:authLogs.columns.reason'),
       dataIndex: 'reason',
       key: 'reason',
-      width: 240,
-      render: renderEllipsis,
+      width: 200,
+      ellipsis: { showTitle: true },
+      responsive: ['lg'],
     },
   ]
 
@@ -175,13 +159,10 @@ export default function RadiusAuthLogsPage() {
   }
 
   return (
-    <div style={{ width: '100%' }}>
+    <div>
       <Card variant="outlined">
-        <Space
-          style={{ marginBottom: token.margin, width: '100%', justifyContent: 'space-between' }}
-          wrap
-        >
-          <Space wrap>
+        <Toolbar
+          left={
             <Can permission="radius.manage">
               <Button
                 danger
@@ -192,36 +173,39 @@ export default function RadiusAuthLogsPage() {
                 {t('radius:authLogs.deleteSelected')}
               </Button>
             </Can>
-          </Space>
-          <Space wrap>
-            <Select
-              value={resultFilter}
-              onChange={(val) => {
-                setPage(1)
-                setResultFilter(val)
-              }}
-              style={{ width: 140 }}
-              options={[
-                { value: '', label: t('radius:authLogs.resultAll') },
-                ...RESULT_VALUES.map((value) => ({
-                  value,
-                  label: t(`radius:authLogs.${value}`, value),
-                })),
-              ]}
-            />
-            <Input.Search
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              onSearch={handleSearch}
-              placeholder={t('radius:authLogs.searchPlaceholder')}
-              allowClear
-              style={{ width: 220 }}
-            />
-            <Button icon={<ReloadOutlined />} onClick={load} />
-          </Space>
-        </Space>
+          }
+          right={
+            <>
+              <Select
+                value={resultFilter}
+                onChange={(val) => {
+                  setPage(1)
+                  setResultFilter(val)
+                }}
+                className="netlab-billing-toolbar-select"
+                options={[
+                  { value: '', label: t('radius:authLogs.resultAll') },
+                  ...RESULT_VALUES.map((value) => ({
+                    value,
+                    label: t(`radius:authLogs.${value}`, value),
+                  })),
+                ]}
+              />
+              <Input.Search
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                onSearch={handleSearch}
+                placeholder={t('radius:authLogs.searchPlaceholder')}
+                allowClear
+                className="netlab-billing-toolbar-search"
+              />
+              <Button icon={<ReloadOutlined />} onClick={load} />
+            </>
+          }
+        />
 
         <Table
+          className="netlab-billing-table"
           rowKey="id"
           columns={columns}
           dataSource={data}
@@ -241,8 +225,7 @@ export default function RadiusAuthLogsPage() {
             },
             showTotal: (tt) => t('settings:loginLogs.total', { total: tt }),
           }}
-          // 列宽合计 990 + 选择列 ≈ 1050：容器更宽时按比例分配，更窄时横向滚动；空数据不启用横向滚动
-          scroll={data.length > 0 ? { x: 1050 } : undefined}
+          scroll={{ x: 1000 }}
           tableLayout="fixed"
         />
       </Card>

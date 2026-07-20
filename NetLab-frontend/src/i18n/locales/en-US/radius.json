@@ -23,6 +23,11 @@
     "create": "Add NAS Device",
     "edit": "Edit NAS Device",
     "deleteConfirm": "Delete this NAS device? Its packets will be rejected afterwards.",
+    "sections": {
+      "identity": "Identity",
+      "connection": "Connection",
+      "access": "Access Control"
+    },
     "columns": {
       "name": "Name",
       "vendor": "Vendor",
@@ -145,6 +150,11 @@
     "searchPlaceholder": "Search profile name",
     "create": "Add Profile",
     "edit": "Edit Profile",
+    "sections": {
+      "basic": "General",
+      "service": "Service Policy",
+      "network": "Address & Network"
+    },
     "deleteConfirm": "Delete this profile?",
     "deleteInUse": "Profile is still referenced by users and cannot be deleted",
     "columns": {
@@ -177,29 +187,39 @@
   },
   "bypass": {
     "searchPlaceholder": "Search value / remark",
-    "create": "Add Bypass Rule",
-    "edit": "Edit Bypass Rule",
-    "deleteConfirm": "Delete this bypass rule?",
-    "intro": "Devices matching a rule skip username/password verification and are accepted directly (MAC matched by Calling-Station-Id, IP by Framed-IP-Address).",
+    "create": "Add Terminal Access Rule",
+    "edit": "Edit Terminal Access Rule",
+    "deleteConfirm": "Delete this terminal access rule?",
+    "intro": "For headless devices and switch Fast MAC Authentication: MAC rules match device identity; IP rules exactly match Framed-IP-Address reported by the selected NAS. Both skip password validation while retaining the selected profile's concurrency, rate, and network policies.",
+    "allNas": "All trusted NAS devices",
+    "neverExpires": "No expiry",
     "columns": {
       "type": "Type",
-      "value": "Value",
+      "value": "Match value",
+      "profile": "Profile",
+      "nas": "NAS scope",
+      "expireTime": "Expires at",
       "status": "Status",
       "remark": "Remark",
       "updatedAt": "Updated At"
     },
     "form": {
-      "type": "Bypass Type",
-      "typeMac": "MAC Bypass",
-      "typeIp": "IP Bypass",
-      "value": "Value",
-      "valueRequired": "Please enter value",
+      "type": "Authentication method",
+      "typeMac": "MAC Access",
+      "typeIp": "IPv4 Access",
+      "value": "Match value",
+      "valueRequired": "Enter a match value",
       "valueMacPlaceholder": "AA:BB:CC:DD:EE:FF",
-      "valueIpPlaceholder": "192.168.1.10 or 192.168.1.0/24",
       "valueMacInvalid": "Invalid MAC address format",
-      "valueIpInvalid": "Invalid IP address or CIDR format",
-      "valueMacTip": "Matches the device MAC from Calling-Station-Id in the request",
-      "valueIpTip": "Matches the device IP from Framed-IP-Address in the request; CIDR supported",
+      "valueIpPlaceholder": "192.0.2.10",
+      "valueIpInvalid": "Enter a valid IPv4 address",
+      "valueMacTip": "Identifies the device from Calling-Station-Id or a vendor MAC attribute",
+      "valueIpTip": "Matches only Framed-IP-Address reported in the selected NAS Access-Request; CIDR is not supported",
+      "profile": "Profile",
+      "profileRequired": "Select a profile",
+      "nas": "NAS scope",
+      "nasRequired": "IP access rules require a NAS",
+      "expireTime": "Expires at",
       "status": "Status",
       "remark": "Remark"
     }
@@ -238,6 +258,11 @@
   "accounting": {
     "searchUsername": "Search username",
     "timeRange": "Time Range",
+    "presets": {
+      "today": "Today",
+      "last7Days": "Last 7 days",
+      "thisMonth": "This month"
+    },
     "detail": "Detail",
     "detailTitle": "Accounting Detail ({{username}})",
     "columns": {
@@ -310,12 +335,18 @@
     "create": "Add Certificate",
     "edit": "Edit Certificate",
     "export": "Export",
+    "uploadFile": "Choose File",
     "deleteConfirm": "Delete this certificate? Configurations referencing it will stop working.",
     "typeAll": "All Types",
     "typeServer": "Server Certificate",
     "typeCa": "CA Certificate",
     "hasKeyYes": "Yes",
     "hasKeyNo": "No",
+    "sections": {
+      "general": "General",
+      "material": "Certificate Material",
+      "metadata": "Certificate Info"
+    },
     "metadataTitle": "Certificate Info",
     "replaceTitle": "Replace Certificate Material",
     "exportTitle": "Export Certificate",
@@ -355,7 +386,11 @@
     "certNone": "None",
     "tabs": {
       "basic": "Basic",
-      "authSession": "Auth & Session"
+      "authSession": "Auth & Session",
+      "authentication": "Authentication",
+      "protection": "Reject Protection",
+      "session": "Session & Accounting",
+      "radsec": "RadSec"
     },
     "sections": {
       "basic": "Basic",

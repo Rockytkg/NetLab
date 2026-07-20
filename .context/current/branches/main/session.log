@@ -1,0 +1,11 @@
+## 2026-07-20T00:00:00+08:00
+**Decision**: Rebuild RADIUS service settings with responsive Ant Design tabs, using left-side navigation on desktop and top tabs on smaller screens; split the 802.1X form into the project's existing tabbed configuration pattern.
+**Alternatives**: The previous standalone page headings, inset section panels, and custom CSS styling.
+**Reason**: Existing RADIUS management forms already use a single outlined Card with Tabs and compact grids, and the theme explicitly configures vertical Tabs for settings navigation. Reusing that pattern keeps this operations UI quiet, dense, and visually consistent.
+**Risk**: Tabbed forms can hide validation errors in an inactive pane; the form remains mounted and preserves fields, so validation behavior is unchanged.
+
+## 2026-07-20T00:00:00+08:00
+**Decision**: Move RADIUS listener basics to the global System Settings "Authentication & Billing" panel, while leaving RadSec in RADIUS Service Settings.
+**Alternatives**: Duplicate listener state in a second configuration key or expose the existing RADIUS management API directly to the global settings UI.
+**Reason**: The existing `radius.system` JSON blob is already persisted in `system_configs` and is the runtime source of truth. The new settings endpoint preserves that record, merges the current RadSec fields, and applies it through the established Manager path under setting permissions.
+**Risk**: A concurrent RadSec and listener update can race at the read-merge-write boundary; normal administrative use is low frequency and both paths continue to validate and hot-apply the complete configuration.

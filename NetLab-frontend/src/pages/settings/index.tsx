@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Button, Card, Flex, Grid, Menu, Result, Skeleton, theme } from 'antd'
 import {
   ApiOutlined,
+  ClusterOutlined,
   IdcardOutlined,
   MailOutlined,
   ReloadOutlined,
@@ -67,6 +68,7 @@ export default function SettingsLayout() {
       { key: 'security', icon: <SafetyOutlined />, label: t('tabs.security') },
       { key: 'smtp', icon: <MailOutlined />, label: t('tabs.smtp') },
       { key: 'oauth', icon: <ApiOutlined />, label: t('tabs.oauth') },
+      { key: 'billing', icon: <ClusterOutlined />, label: t('tabs.billing') },
     ],
     [t],
   )

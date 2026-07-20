@@ -12,7 +12,8 @@
     "beian": "备案信息",
     "security": "安全策略",
     "smtp": "邮件服务",
-    "oauth": "第三方登录"
+    "oauth": "第三方登录",
+    "billing": "认证计费"
   },
   "overview": {
     "nav": "概览",
@@ -54,6 +55,16 @@
     "passkeyHelp": "开启后用户可使用指纹、面容或安全密钥免密登录。",
     "twoFactorRequired": "强制开启两步验证",
     "twoFactorRequiredHelp": "开启后，未绑定两步验证的用户登录后台时必须先完成绑定。"
+  },
+  "billing": {
+    "enabled": "启用 RADIUS 服务",
+    "enabledHelp": "控制 RADIUS 认证与记账监听器的运行状态。",
+    "bindHost": "监听地址",
+    "bindHostHelp": "UDP 监听网卡地址，0.0.0.0 表示监听全部网卡。",
+    "bindHostRequired": "请输入监听地址",
+    "authPort": "认证端口",
+    "acctPort": "记账端口",
+    "portRequired": "请输入 1 至 65535 之间的端口号"
   },
   "smtp": {
     "title": "邮件服务（SMTP）",

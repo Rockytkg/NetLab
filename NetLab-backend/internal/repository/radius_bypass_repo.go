@@ -103,3 +103,11 @@ func (r *RadiusBypassRepository) ListEnabled(ctx context.Context) ([]model.Radiu
 	}
 	return items, nil
 }
+
+// CountByProfileID reports how many terminal-access rules reference a profile.
+func (r *RadiusBypassRepository) CountByProfileID(ctx context.Context, profileID uint64) (int64, error) {
+	var count int64
+	err := r.db.WithContext(ctx).Model(&model.RadiusBypass{}).
+		Where("profile_id = ?", profileID).Count(&count).Error
+	return count, err
+}

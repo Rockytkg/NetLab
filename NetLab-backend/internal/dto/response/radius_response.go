@@ -200,13 +200,17 @@ type RadiusAuthLogListResult struct {
 
 // RadiusBypassItem 是免认证规则视图。
 type RadiusBypassItem struct {
-	ID        uint64    `json:"id"`
-	Type      string    `json:"type"`
-	Value     string    `json:"value"`
-	Status    string    `json:"status"`
-	Remark    string    `json:"remark"`
-	CreatedAt time.Time `json:"createdAt"`
-	UpdatedAt time.Time `json:"updatedAt"`
+	ID          uint64     `json:"id"`
+	Type        string     `json:"type"`
+	Value       string     `json:"value"`
+	ProfileID   uint64     `json:"profileId"`
+	ProfileName string     `json:"profileName"`
+	NasID       *uint64    `json:"nasId"`
+	ExpireTime  *time.Time `json:"expireTime"`
+	Status      string     `json:"status"`
+	Remark      string     `json:"remark"`
+	CreatedAt   time.Time  `json:"createdAt"`
+	UpdatedAt   time.Time  `json:"updatedAt"`
 }
 
 // RadiusBypassListResult 是免认证规则分页结果。
@@ -264,6 +268,14 @@ type RadiusSystemSettings struct {
 	RadsecPort     int    `json:"radsecPort"`
 	RadsecCertID   uint64 `json:"radsecCertId"`
 	RadsecCACertID uint64 `json:"radsecCaCertId"`
+}
+
+// RadiusListenerSettings 是系统设置中展示的 RADIUS 基础监听配置。
+type RadiusListenerSettings struct {
+	Enabled  bool   `json:"enabled"`
+	BindHost string `json:"bindHost"`
+	AuthPort int    `json:"authPort"`
+	AcctPort int    `json:"acctPort"`
 }
 
 // RadiusServerSettings 是 RADIUS 服务器策略设置的生效值视图。

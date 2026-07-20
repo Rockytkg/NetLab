@@ -164,8 +164,6 @@ func main() {
 		configService, userRepo, bindingRepo, tokenRepo, tokenService, logger,
 	)
 
-	adminService := authsvc.NewAdminService(configService, passkeyService)
-
 	// ── 初始化 RBAC ──────────────────────────────────────────────────
 	rbacService, err := rbac.NewService(db, logger)
 	if err != nil {
@@ -192,6 +190,7 @@ func main() {
 		radiusUserRepo, radiusNasRepo, radiusSessionRepo, radiusAccountingRepo, radiusAuthLogRepo, radiusCertRepo, radiusBypassRepo,
 		configCipher, radiusManager, configService, cfg.Radius,
 	)
+	adminService := authsvc.NewAdminService(configService, passkeyService)
 
 	// ── 初始化处理器 ─────────────────────────────────────────────────
 	twoFactorService := authsvc.NewTwoFactorService(userRepo, tokenRepo, tokenService, configService, logger)
@@ -199,7 +198,7 @@ func main() {
 	authHandler := auth.NewAuthHandler(
 		authService, verificationService, passwordService, passkeyService, tokenService, oauthService, twoFactorService, captchaMgr, rbacService, loginLogService, logger,
 	)
-	adminHandler := admin.NewAdminHandler(adminService, userAdminService, importService, emailSender, logger)
+	adminHandler := admin.NewAdminHandler(adminService, userAdminService, importService, emailSender, radiusMgmtService, logger)
 	rHandler := rbacHandler.NewHandler(rbacService)
 	logHandler := loghandler.NewHandler(loginLogService)
 	radiusHandler := radiusHandler.NewHandler(radiusMgmtService)

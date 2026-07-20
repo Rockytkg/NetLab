@@ -1,0 +1,90 @@
+/* Ant Design lacks responsive widths for toolbar controls. */
+.netlab-billing-toolbar-search {
+  max-width: 280px;
+  flex: 1 1 160px;
+}
+
+.netlab-billing-toolbar-select {
+  max-width: 160px;
+  flex: 0 1 140px;
+}
+
+.netlab-billing-toolbar-range {
+  flex: 1 1 280px;
+  max-width: 400px;
+  min-width: 240px;
+}
+
+.netlab-billing-time-popup .ant-picker-time-panel-column {
+  scrollbar-color: var(--ant-color-border-secondary) transparent;
+  scrollbar-width: thin;
+}
+
+.netlab-billing-time-popup .ant-picker-time-panel-column::-webkit-scrollbar {
+  width: 6px;
+}
+
+.netlab-billing-time-popup .ant-picker-time-panel-column::-webkit-scrollbar-thumb {
+  background: var(--ant-color-border-secondary);
+  border-radius: 3px;
+}
+
+.netlab-billing-time-popup .ant-picker-panel-container {
+  max-width: calc(100vw - 32px);
+}
+
+@media (max-width: 576px) {
+  .netlab-billing-toolbar-search,
+  .netlab-billing-toolbar-select,
+  .netlab-billing-toolbar-range {
+    width: 100%;
+    max-width: none;
+  }
+}
+
+/* Keep wide operational tables inside their card; scrolling belongs to Table. */
+.netlab-billing-table {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.netlab-billing-accounting-controls {
+  display: flex;
+  flex: 1 1 620px;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 0;
+}
+
+.netlab-billing-accounting-filters,
+.netlab-billing-accounting-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.netlab-billing-accounting-filters {
+  flex: 1 1 440px;
+}
+
+.netlab-billing-accounting-actions {
+  flex: 0 0 auto;
+}
+
+@media (max-width: 576px) {
+  .netlab-billing-accounting-controls,
+  .netlab-billing-accounting-filters,
+  .netlab-billing-accounting-actions {
+    width: 100%;
+  }
+
+  .netlab-billing-accounting-actions > button {
+    flex: 1 1 0;
+  }
+}

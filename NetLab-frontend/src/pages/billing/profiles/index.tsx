@@ -13,9 +13,8 @@ import {
   Select,
   Space,
   Table,
-  Tag,
+  Tabs,
   Typography,
-  theme,
 } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import { DeleteOutlined, EditOutlined, PlusOutlined, ReloadOutlined } from '@ant-design/icons'
@@ -23,13 +22,14 @@ import { useTranslation } from 'react-i18next'
 import { radiusApi } from '@/services/radius'
 import { usePermission } from '@/hooks/usePermission'
 import Can from '@/components/auth/Can'
+import Toolbar from '@/pages/billing/components/Toolbar'
 import { formatRate } from '@/pages/billing/format'
+import { renderStatusTag } from '@/pages/billing/shared'
 import type { RadiusProfileItem, RadiusProfilePayload } from '@/types/radius'
 
 const { Text } = Typography
 
-/** 套餐表单值；InputNumber 清空后为 null，提交时归一化为 0；
- * status 直接以 enabled/disabled 字符串承载（下拉选择），绑定项为布尔下拉。 */
+/** 套餐表单值；InputNumber 清空后为 null，提交时归一化为 0。 */
 interface ProfileFormValues {
   name: string
   upRate?: number | null
@@ -48,7 +48,6 @@ interface ProfileFormValues {
 /** 策略套餐页：分页列表 + 新建/编辑弹窗 + 行内删除。 */
 export default function ProfilesPage() {
   const { t } = useTranslation(['radius', 'common', 'settings'])
-  const { token } = theme.useToken()
   const { message, modal } = App.useApp()
   const { can } = usePermission()
   const canReadRadius = can('radius.read')
@@ -85,16 +84,6 @@ export default function ProfilesPage() {
     load()
   }, [load])
 
-  // 可截断列：Typography ellipsis 内置测量，仅在文本真正溢出时悬停显示完整内容
-  const renderEllipsis = (val: string) =>
-    val ? (
-      <Text ellipsis={{ tooltip: val }} style={{ display: 'block' }}>
-        {val}
-      </Text>
-    ) : (
-      '-'
-    )
-
   const unlimited = t('radius:common.unlimited')
 
   const columns: ColumnsType<RadiusProfileItem> = [
@@ -103,10 +92,9 @@ export default function ProfilesPage() {
       dataIndex: 'name',
       key: 'name',
       width: 160,
-      render: renderEllipsis,
+      ellipsis: { showTitle: true },
     },
     {
-      // 上行 / 下行速率，0 表示不限
       title: t('radius:profiles.columns.rate'),
       key: 'rate',
       width: 170,
@@ -117,31 +105,32 @@ export default function ProfilesPage() {
       title: t('radius:profiles.columns.activeNum'),
       dataIndex: 'activeNum',
       key: 'activeNum',
-      width: 100,
+      width: 120,
       render: (val: number) => (val > 0 ? val : unlimited),
     },
     {
       title: t('radius:profiles.columns.addrPool'),
       dataIndex: 'addrPool',
       key: 'addrPool',
-      width: 150,
-      render: renderEllipsis,
+      width: 140,
+      ellipsis: { showTitle: true },
     },
     {
       title: t('radius:profiles.columns.bind'),
       key: 'bind',
       width: 130,
+      responsive: ['sm'],
       render: (_, record) => {
         const tags: string[] = []
         if (record.bindMac) tags.push('MAC')
         if (record.bindVlan) tags.push('VLAN')
         if (tags.length === 0) return '-'
         return (
-          <Space size={token.marginXXS} wrap>
+          <span style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
             {tags.map((tag) => (
-              <Tag key={tag}>{tag}</Tag>
+              <Text key={tag} code>{tag}</Text>
             ))}
-          </Space>
+          </span>
         )
       },
     },
@@ -150,33 +139,32 @@ export default function ProfilesPage() {
       dataIndex: 'userCount',
       key: 'userCount',
       width: 110,
+      responsive: ['sm'],
     },
     {
       title: t('radius:common.status'),
       dataIndex: 'status',
       key: 'status',
-      width: 90,
-      render: (val: string) => (
-        <Tag color={val === 'enabled' ? 'success' : 'error'}>
-          {val === 'enabled' ? t('radius:common.enabled') : t('radius:common.disabled')}
-        </Tag>
-      ),
+      width: 100,
+      render: (val: string) => renderStatusTag(t, val),
     },
     {
       title: t('radius:profiles.columns.remark'),
       dataIndex: 'remark',
       key: 'remark',
-      width: 180,
-      render: renderEllipsis,
+      width: 160,
+      ellipsis: { showTitle: true },
+      responsive: ['md'],
     },
     {
       title: t('radius:common.actions'),
       key: 'actions',
       width: 140,
+      align: 'center',
       fixed: 'right',
       render: (_, record) => (
         <Can permission="radius.manage">
-          <Space size={token.marginXXS}>
+          <Space size={4}>
             <Button
               type="text"
               size="small"
@@ -259,7 +247,6 @@ export default function ProfilesPage() {
       setEditing(null)
       await load()
     } catch (err) {
-      // 表单校验失败无需提示；其余错误已由拦截器提示
       if ((err as { errorFields?: unknown }).errorFields) return
     } finally {
       setSaving(false)
@@ -274,7 +261,6 @@ export default function ProfilesPage() {
       cancelText: t('common:cancel'),
       okButtonProps: { danger: true },
       async onOk() {
-        // 套餐仍被用户引用时后端返回错误，拦截器会提示
         await radiusApi.deleteProfile(item.id)
         message.success(t('radius:common.deleteSuccess'))
         await load()
@@ -287,33 +273,33 @@ export default function ProfilesPage() {
   }
 
   return (
-    <div style={{ width: '100%' }}>
+    <div>
       <Card variant="outlined">
-        <Space
-          style={{ marginBottom: token.margin, width: '100%', justifyContent: 'space-between' }}
-          wrap
-        >
-          <Space wrap>
+        <Toolbar
+          left={
             <Can permission="radius.manage">
               <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
                 {t('radius:profiles.create')}
               </Button>
             </Can>
-          </Space>
-          <Space wrap>
-            <Input.Search
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              onSearch={handleSearch}
-              placeholder={t('radius:profiles.searchPlaceholder')}
-              allowClear
-              style={{ width: 220 }}
-            />
-            <Button icon={<ReloadOutlined />} onClick={load} />
-          </Space>
-        </Space>
+          }
+          right={
+            <>
+              <Input.Search
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                onSearch={handleSearch}
+                placeholder={t('radius:profiles.searchPlaceholder')}
+                allowClear
+                className="netlab-billing-toolbar-search"
+              />
+              <Button icon={<ReloadOutlined />} onClick={load} />
+            </>
+          }
+        />
 
         <Table
+          className="netlab-billing-table"
           rowKey="id"
           columns={columns}
           dataSource={data}
@@ -329,8 +315,7 @@ export default function ProfilesPage() {
             },
             showTotal: (tt) => t('settings:loginLogs.total', { total: tt }),
           }}
-          // 列宽合计 1230：容器更宽时按比例分配，更窄时横向滚动；空数据不启用横向滚动
-          scroll={data.length > 0 ? { x: 1230 } : undefined}
+          scroll={{ x: 1250 }}
           tableLayout="fixed"
         />
       </Card>
@@ -348,7 +333,7 @@ export default function ProfilesPage() {
         cancelText={t('common:cancel')}
         confirmLoading={saving}
         forceRender
-        width={720}
+        width={{ xs: 'calc(100vw - 32px)', sm: 560, md: 720 }}
       >
         <Form
           form={form}
@@ -363,108 +348,35 @@ export default function ProfilesPage() {
             status: 'enabled',
           }}
         >
-          <Row gutter={16}>
-            <Col xs={24} sm={12}>
-              <Form.Item
-                name="name"
-                label={t('radius:profiles.form.name')}
-                normalize={(value: string) => value?.trim()}
-                rules={[{ required: true, message: t('radius:profiles.form.nameRequired') }]}
-              >
-                <Input maxLength={64} />
-              </Form.Item>
-            </Col>
-            <Col xs={24} sm={12}>
-              <Form.Item name="status" label={t('radius:profiles.form.status')}>
-                <Select
-                  options={[
-                    { value: 'enabled', label: t('radius:common.enabled') },
-                    { value: 'disabled', label: t('radius:common.disabled') },
-                  ]}
-                />
-              </Form.Item>
-            </Col>
-            <Col xs={24} sm={8}>
-              <Form.Item name="upRate" label={t('radius:profiles.form.upRate')}>
-                <InputNumber min={0} precision={0} style={{ width: '100%' }} />
-              </Form.Item>
-            </Col>
-            <Col xs={24} sm={8}>
-              <Form.Item name="downRate" label={t('radius:profiles.form.downRate')}>
-                <InputNumber min={0} precision={0} style={{ width: '100%' }} />
-              </Form.Item>
-            </Col>
-            <Col xs={24} sm={8}>
-              <Form.Item name="activeNum" label={t('radius:profiles.form.activeNum')}>
-                <InputNumber min={0} precision={0} style={{ width: '100%' }} />
-              </Form.Item>
-            </Col>
-            <Col xs={24} sm={12}>
-              <Form.Item name="domain" label={t('radius:profiles.form.domain')}>
-                <Input maxLength={64} />
-              </Form.Item>
-            </Col>
-            <Col xs={24} sm={12}>
-              <Form.Item name="addrPool" label={t('radius:profiles.form.addrPool')}>
-                <Input maxLength={64} />
-              </Form.Item>
-            </Col>
-            <Col xs={24} sm={12}>
-              <Form.Item
-                name="ipv6PrefixPool"
-                label={t('radius:profiles.form.ipv6PrefixPool')}
-                tooltip={t('radius:profiles.form.ipv6PrefixPoolTip')}
-              >
-                <Input maxLength={64} />
-              </Form.Item>
-            </Col>
-            <Col xs={24} sm={12}>
-              <Form.Item
-                name="delegatedIpv6PrefixPool"
-                label={t('radius:profiles.form.delegatedIpv6PrefixPool')}
-                tooltip={t('radius:profiles.form.delegatedIpv6PrefixPoolTip')}
-                rules={[
-                  ({ getFieldValue }) => ({
-                    validator(_, value?: string) {
-                      const other = (getFieldValue('ipv6PrefixPool') as string | undefined)?.trim()
-                      const current = value?.trim()
-                      if (current && other && current === other) {
-                        return Promise.reject(new Error(t('radius:profiles.form.poolsDuplicate')))
-                      }
-                      return Promise.resolve()
-                    },
-                  }),
-                ]}
-              >
-                <Input maxLength={64} />
-              </Form.Item>
-            </Col>
-            <Col xs={24} sm={12}>
-              <Form.Item name="bindMac" label={t('radius:profiles.form.bindMac')}>
-                <Select
-                  options={[
-                    { value: true, label: t('radius:common.enabled') },
-                    { value: false, label: t('radius:common.disabled') },
-                  ]}
-                />
-              </Form.Item>
-            </Col>
-            <Col xs={24} sm={12}>
-              <Form.Item name="bindVlan" label={t('radius:profiles.form.bindVlan')}>
-                <Select
-                  options={[
-                    { value: true, label: t('radius:common.enabled') },
-                    { value: false, label: t('radius:common.disabled') },
-                  ]}
-                />
-              </Form.Item>
-            </Col>
-            <Col xs={24}>
-              <Form.Item name="remark" label={t('radius:profiles.form.remark')}>
-                <Input.TextArea maxLength={255} rows={3} />
-              </Form.Item>
-            </Col>
-          </Row>
+          <Tabs
+            defaultActiveKey="basic"
+            items={[
+              {
+                key: 'basic', label: t('radius:profiles.sections.basic'), children: <Row gutter={[16, 0]}>
+                  <Col xs={24} sm={12}><Form.Item name="name" label={t('radius:profiles.form.name')} normalize={(value: string) => value?.trim()} rules={[{ required: true, message: t('radius:profiles.form.nameRequired') }]}><Input maxLength={64} /></Form.Item></Col>
+                  <Col xs={24} sm={12}><Form.Item name="status" label={t('radius:profiles.form.status')}><Select options={[{ value: 'enabled', label: t('radius:common.enabled') }, { value: 'disabled', label: t('radius:common.disabled') }]} /></Form.Item></Col>
+                  <Col xs={24}><Form.Item name="domain" label={t('radius:profiles.form.domain')}><Input maxLength={64} /></Form.Item></Col>
+                  <Col xs={24}><Form.Item name="remark" label={t('radius:profiles.form.remark')}><Input.TextArea maxLength={255} rows={2} /></Form.Item></Col>
+                </Row>,
+              },
+              {
+                key: 'service', label: t('radius:profiles.sections.service'), children: <Row gutter={[16, 0]}>
+                  <Col xs={24} sm={8}><Form.Item name="upRate" label={t('radius:profiles.form.upRate')}><InputNumber min={0} precision={0} style={{ width: '100%' }} /></Form.Item></Col>
+                  <Col xs={24} sm={8}><Form.Item name="downRate" label={t('radius:profiles.form.downRate')}><InputNumber min={0} precision={0} style={{ width: '100%' }} /></Form.Item></Col>
+                  <Col xs={24} sm={8}><Form.Item name="activeNum" label={t('radius:profiles.form.activeNum')}><InputNumber min={0} precision={0} style={{ width: '100%' }} /></Form.Item></Col>
+                  <Col xs={24} sm={12}><Form.Item name="bindMac" label={t('radius:profiles.form.bindMac')}><Select options={[{ value: true, label: t('radius:common.enabled') }, { value: false, label: t('radius:common.disabled') }]} /></Form.Item></Col>
+                  <Col xs={24} sm={12}><Form.Item name="bindVlan" label={t('radius:profiles.form.bindVlan')}><Select options={[{ value: true, label: t('radius:common.enabled') }, { value: false, label: t('radius:common.disabled') }]} /></Form.Item></Col>
+                </Row>,
+              },
+              {
+                key: 'network', label: t('radius:profiles.sections.network'), children: <Row gutter={[16, 0]}>
+                  <Col xs={24} sm={12}><Form.Item name="addrPool" label={t('radius:profiles.form.addrPool')}><Input maxLength={64} /></Form.Item></Col>
+                  <Col xs={24} sm={12}><Form.Item name="ipv6PrefixPool" label={t('radius:profiles.form.ipv6PrefixPool')} tooltip={t('radius:profiles.form.ipv6PrefixPoolTip')}><Input maxLength={64} /></Form.Item></Col>
+                  <Col xs={24}><Form.Item name="delegatedIpv6PrefixPool" label={t('radius:profiles.form.delegatedIpv6PrefixPool')} tooltip={t('radius:profiles.form.delegatedIpv6PrefixPoolTip')} rules={[({ getFieldValue }) => ({ validator(_, value?: string) { const other = (getFieldValue('ipv6PrefixPool') as string | undefined)?.trim(); const current = value?.trim(); return current && other && current === other ? Promise.reject(new Error(t('radius:profiles.form.poolsDuplicate'))) : Promise.resolve() } })]}><Input maxLength={64} /></Form.Item></Col>
+                </Row>,
+              },
+            ]}
+          />
         </Form>
       </Modal>
     </div>

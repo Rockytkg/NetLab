@@ -106,6 +106,15 @@ func (m *Manager) CurrentConfig() config.RadiusConfig {
 	return m.cfg
 }
 
+// InvalidateBypassRules publishes terminal-access changes to the running server.
+func (m *Manager) InvalidateBypassRules() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.server != nil {
+		m.server.service.InvalidateBypassRules()
+	}
+}
+
 // Shutdown 停止全部监听器与后台任务（进程退出时调用）。
 func (m *Manager) Shutdown(ctx context.Context) {
 	m.mu.Lock()

@@ -10,20 +10,17 @@ import {
   Result,
   Space,
   Table,
-  Typography,
-  theme,
 } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import { DisconnectOutlined, ReloadOutlined, SearchOutlined, SendOutlined } from '@ant-design/icons'
-import dayjs from 'dayjs'
 import { useTranslation } from 'react-i18next'
 import { radiusApi } from '@/services/radius'
 import { usePermission } from '@/hooks/usePermission'
 import Can from '@/components/auth/Can'
+import Toolbar from '@/pages/billing/components/Toolbar'
 import { formatBytes, formatDuration } from '../format'
+import { renderTime } from '@/pages/billing/shared'
 import type { RadiusCoAPayload, RadiusSessionItem } from '@/types/radius'
-
-const { Text } = Typography
 
 /** CoA 表单值：两个字段均可空，但提交时至少一项有值。 */
 interface CoaFormValues {
@@ -34,7 +31,6 @@ interface CoaFormValues {
 /** RADIUS 在线会话页：分页列表 + 用户名/NAS/MAC 筛选 + 踢下线。 */
 export default function RadiusSessionsPage() {
   const { t } = useTranslation(['radius', 'common', 'settings'])
-  const { token } = theme.useToken()
   const { message, modal } = App.useApp()
   const { can } = usePermission()
   const canReadSessions = can('radius.read')
@@ -43,7 +39,6 @@ export default function RadiusSessionsPage() {
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
   const [size, setSize] = useState(20)
-  // 输入框值与生效筛选条件分离：点击搜索/重置后才应用
   const [usernameInput, setUsernameInput] = useState('')
   const [nasAddrInput, setNasAddrInput] = useState('')
   const [macAddrInput, setMacAddrInput] = useState('')
@@ -81,19 +76,6 @@ export default function RadiusSessionsPage() {
   useEffect(() => {
     load()
   }, [load])
-
-  // 可截断列：仅当文本真正溢出被截断时悬停才显示完整内容提示
-  const renderEllipsis = (val?: string | null) =>
-    val ? (
-      <Text ellipsis={{ tooltip: val }} style={{ display: 'block' }}>
-        {val}
-      </Text>
-    ) : (
-      '-'
-    )
-
-  const renderTime = (val?: string | null) =>
-    val ? dayjs(val).format('YYYY-MM-DD HH:mm:ss') : '-'
 
   const handleSearch = () => {
     setPage(1)
@@ -165,8 +147,7 @@ export default function RadiusSessionsPage() {
         )
       }
     } catch (err) {
-      if ((err as { errorFields?: unknown }).errorFields) return // 表单校验失败
-      // 其余错误已由拦截器提示
+      if ((err as { errorFields?: unknown }).errorFields) return
     } finally {
       setCoaSaving(false)
     }
@@ -174,55 +155,49 @@ export default function RadiusSessionsPage() {
 
   const columns: ColumnsType<RadiusSessionItem> = [
     {
-      // 120：覆盖常见用户名，超长截断 + tip
       title: t('radius:sessions.columns.username'),
       dataIndex: 'username',
       key: 'username',
-      width: 120,
-      render: renderEllipsis,
+      width: 110,
+      ellipsis: { showTitle: true },
     },
     {
-      // 130：IPv4「255.255.255.255」完整显示
       title: t('radius:sessions.columns.nasAddr'),
       dataIndex: 'nasAddr',
       key: 'nasAddr',
-      width: 130,
-      render: renderEllipsis,
+      width: 120,
+      ellipsis: { showTitle: true },
     },
     {
-      // 130：IPv4「255.255.255.255」完整显示
       title: t('radius:sessions.columns.framedIp'),
       dataIndex: 'framedIpaddr',
       key: 'framedIpaddr',
-      width: 130,
-      render: renderEllipsis,
+      width: 120,
+      ellipsis: { showTitle: true },
     },
     {
-      // 140：MAC「AA:BB:CC:DD:EE:FF」（17 字符）完整显示
       title: t('radius:sessions.columns.macAddr'),
       dataIndex: 'macAddr',
       key: 'macAddr',
-      width: 140,
-      render: renderEllipsis,
+      width: 130,
+      ellipsis: { showTitle: true },
     },
     {
-      // 90：NAS 物理端口号
       title: t('radius:sessions.columns.nasPort'),
       dataIndex: 'nasPort',
       key: 'nasPort',
       width: 90,
+      responsive: ['xxl'],
       render: (val: number) => val || '-',
     },
     {
-      // 170：「YYYY-MM-DD HH:mm:ss」（19 字符）完整显示
       title: t('radius:sessions.columns.startTime'),
       dataIndex: 'acctStartTime',
       key: 'acctStartTime',
-      width: 170,
+      width: 150,
       render: renderTime,
     },
     {
-      // 100：formatDuration 输出（如「1d 2h」「23h 59m」）完整显示
       title: t('radius:sessions.columns.sessionTime'),
       dataIndex: 'acctSessionTime',
       key: 'acctSessionTime',
@@ -230,15 +205,14 @@ export default function RadiusSessionsPage() {
       render: (val: number) => formatDuration(val),
     },
     {
-      // 110：会话剩余授权时长，0/空表示不限
       title: t('radius:sessions.columns.sessionTimeout'),
       dataIndex: 'sessionTimeout',
       key: 'sessionTimeout',
-      width: 110,
+      width: 120,
+      responsive: ['xxl'],
       render: (val?: number) => (val ? formatDuration(val) : '-'),
     },
     {
-      // 100：formatBytes 输出（如「123.4 GB」）完整显示
       title: t('radius:sessions.columns.upload'),
       dataIndex: 'acctInputTotal',
       key: 'acctInputTotal',
@@ -246,7 +220,6 @@ export default function RadiusSessionsPage() {
       render: (val: number) => formatBytes(val),
     },
     {
-      // 100：formatBytes 输出（如「123.4 GB」）完整显示
       title: t('radius:sessions.columns.download'),
       dataIndex: 'acctOutputTotal',
       key: 'acctOutputTotal',
@@ -254,21 +227,22 @@ export default function RadiusSessionsPage() {
       render: (val: number) => formatBytes(val),
     },
     {
-      // 170：「YYYY-MM-DD HH:mm:ss」（19 字符）完整显示
       title: t('radius:sessions.columns.lastUpdate'),
       dataIndex: 'lastUpdate',
       key: 'lastUpdate',
-      width: 170,
+      width: 150,
+      responsive: ['xxl'],
       render: renderTime,
     },
     {
       title: t('radius:common.actions'),
       key: 'actions',
-      width: 170,
+      width: 150,
+      align: 'center',
       fixed: 'right',
       render: (_, record) => (
         <Can permission="radius.manage">
-          <Space size={token.marginXXS}>
+          <Space size={4}>
             <Button
               type="text"
               size="small"
@@ -297,48 +271,50 @@ export default function RadiusSessionsPage() {
   }
 
   return (
-    <div style={{ width: '100%' }}>
+    <div>
       <Card variant="outlined">
-        <Space
-          style={{ marginBottom: token.margin, width: '100%', justifyContent: 'space-between' }}
-          wrap
-        >
-          <Space wrap>
-            <Button type="primary" icon={<SearchOutlined />} onClick={handleSearch}>
-              {t('common:search')}
-            </Button>
-            <Button onClick={handleReset}>{t('common:reset')}</Button>
-          </Space>
-          <Space wrap>
-            <Input
-              value={usernameInput}
-              onChange={(e) => setUsernameInput(e.target.value)}
-              onPressEnter={handleSearch}
-              placeholder={t('radius:sessions.searchUsername')}
-              allowClear
-              style={{ width: 180 }}
-            />
-            <Input
-              value={nasAddrInput}
-              onChange={(e) => setNasAddrInput(e.target.value)}
-              onPressEnter={handleSearch}
-              placeholder={t('radius:sessions.searchNas')}
-              allowClear
-              style={{ width: 160 }}
-            />
-            <Input
-              value={macAddrInput}
-              onChange={(e) => setMacAddrInput(e.target.value)}
-              onPressEnter={handleSearch}
-              placeholder={t('radius:sessions.searchMac')}
-              allowClear
-              style={{ width: 180 }}
-            />
-            <Button icon={<ReloadOutlined />} onClick={load} />
-          </Space>
-        </Space>
+        <Toolbar
+          left={
+            <>
+              <Button type="primary" icon={<SearchOutlined />} onClick={handleSearch}>
+                {t('common:search')}
+              </Button>
+              <Button onClick={handleReset}>{t('common:reset')}</Button>
+            </>
+          }
+          right={
+            <>
+              <Input
+                value={usernameInput}
+                onChange={(e) => setUsernameInput(e.target.value)}
+                onPressEnter={handleSearch}
+                placeholder={t('radius:sessions.searchUsername')}
+                allowClear
+                className="netlab-billing-toolbar-search"
+              />
+              <Input
+                value={nasAddrInput}
+                onChange={(e) => setNasAddrInput(e.target.value)}
+                onPressEnter={handleSearch}
+                placeholder={t('radius:sessions.searchNas')}
+                allowClear
+                className="netlab-billing-toolbar-search"
+              />
+              <Input
+                value={macAddrInput}
+                onChange={(e) => setMacAddrInput(e.target.value)}
+                onPressEnter={handleSearch}
+                placeholder={t('radius:sessions.searchMac')}
+                allowClear
+                className="netlab-billing-toolbar-search"
+              />
+              <Button icon={<ReloadOutlined />} onClick={load} />
+            </>
+          }
+        />
 
         <Table
+          className="netlab-billing-table"
           rowKey="id"
           columns={columns}
           dataSource={data}
@@ -354,8 +330,7 @@ export default function RadiusSessionsPage() {
             },
             showTotal: (tt) => t('settings:loginLogs.total', { total: tt }),
           }}
-          // 列宽合计 1530：容器更宽时按比例分配，更窄时横向滚动；空数据不启用横向滚动
-          scroll={data.length > 0 ? { x: 1530 } : undefined}
+          scroll={{ x: 1250 }}
           tableLayout="fixed"
         />
       </Card>
@@ -374,6 +349,7 @@ export default function RadiusSessionsPage() {
         cancelText={t('common:cancel')}
         confirmLoading={coaSaving}
         forceRender
+        width={{ xs: 'calc(100vw - 32px)', sm: 520 }}
       >
         <Form form={coaForm} layout="vertical" requiredMark={false}>
           <Form.Item

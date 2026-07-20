@@ -176,13 +176,17 @@ export interface RadiusNasPayload {
   remark?: string
 }
 
-/** 免认证类型：mac=按 Calling-Station-Id 匹配，ip=按 Framed-IP-Address 匹配（支持 CIDR）。 */
+/** 哑终端准入规则可按 MAC 或 NAS 上报的 IPv4 精确匹配。 */
 export type RadiusBypassType = 'mac' | 'ip'
 
 export interface RadiusBypassItem {
   id: number
   type: RadiusBypassType
   value: string
+  profileId: number
+  profileName?: string
+  nasId?: number | null
+  expireTime?: string | null
   status: string
   remark: string
   createdAt: string
@@ -206,6 +210,9 @@ export interface RadiusBypassListResult {
 export interface RadiusBypassPayload {
   type: RadiusBypassType
   value: string
+  profileId: number
+  nasId?: number | null
+  expireTime?: string | null
   status?: string
   remark?: string
 }

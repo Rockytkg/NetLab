@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useState } from 'react'
+import dayjs, { type Dayjs } from 'dayjs'
 import {
   Alert,
   App,
   Button,
   Card,
   Col,
+  DatePicker,
   Form,
   Input,
   Modal,
@@ -13,9 +15,7 @@ import {
   Select,
   Space,
   Table,
-  Tag,
   Typography,
-  theme,
 } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import {
@@ -25,10 +25,11 @@ import {
   ReloadOutlined,
 } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
-import dayjs from 'dayjs'
 import { radiusApi } from '@/services/radius'
 import { usePermission } from '@/hooks/usePermission'
 import Can from '@/components/auth/Can'
+import Toolbar from '@/pages/billing/components/Toolbar'
+import { renderStatusTag, renderTime } from '@/pages/billing/shared'
 import type { RadiusBypassItem, RadiusBypassPayload, RadiusBypassType } from '@/types/radius'
 
 const { Text } = Typography
@@ -37,32 +38,19 @@ const { Text } = Typography
 interface BypassFormValues {
   type: RadiusBypassType
   value: string
+  profileId: number
+  nasId?: number
+  expireTime?: Dayjs
   status: string
   remark?: string
 }
 
 const MAC_PATTERN = /^[0-9a-fA-F]{2}([:-][0-9a-fA-F]{2}){5}$/
+const IPV4_PATTERN = /^(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}$/
 
-/** 校验 IPv4/IPv6 地址或 CIDR 网段。 */
-const isValidIpOrCidr = (raw: string): boolean => {
-  const [ip, prefix, ...rest] = raw.split('/')
-  if (rest.length > 0 || !ip) return false
-  const isV4 =
-    /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.test(ip) &&
-    ip.split('.').every((part) => Number(part) <= 255)
-  const isV6 = ip.includes(':') && /^[0-9a-fA-F:]+$/.test(ip)
-  if (!isV4 && !isV6) return false
-  if (prefix === undefined) return true
-  if (!/^\d+$/.test(prefix)) return false
-  const max = isV4 ? 32 : 128
-  const num = Number(prefix)
-  return num >= 0 && num <= max
-}
-
-/** 免认证规则页：命中规则的终端跳过认证直接放行（MAC 或 IP 匹配）。 */
+/** 哑终端与交换机 Fast MAC Authentication 的准入规则页。 */
 export default function BypassPage() {
   const { t } = useTranslation(['radius', 'common', 'settings'])
-  const { token } = theme.useToken()
   const { message, modal } = App.useApp()
   const { can } = usePermission()
   const canReadRadius = can('radius.read')
@@ -80,6 +68,8 @@ export default function BypassPage() {
   const [editing, setEditing] = useState<RadiusBypassItem | null>(null)
   const [form] = Form.useForm<BypassFormValues>()
   const [saving, setSaving] = useState(false)
+  const [profiles, setProfiles] = useState<Array<{ id: number; name: string }>>([])
+  const [nasItems, setNasItems] = useState<Array<{ id: number; name: string; ipaddr: string }>>([])
   const typeWatch = Form.useWatch('type', form)
 
   const load = useCallback(async () => {
@@ -100,68 +90,88 @@ export default function BypassPage() {
     load()
   }, [load])
 
-  // 可截断列：仅在文本真正溢出时悬停显示完整内容
-  const renderEllipsis = (val?: string | null) =>
-    val ? (
-      <Text ellipsis={{ tooltip: val }} style={{ display: 'block' }}>
-        {val}
-      </Text>
-    ) : (
-      '-'
-    )
+  useEffect(() => {
+    if (!canReadRadius) return
+    void Promise.all([radiusApi.listProfileOptions(), radiusApi.listNas({ page: 1, size: 200 })])
+      .then(([profileItems, nasResult]) => {
+        setProfiles(profileItems)
+        setNasItems(nasResult.items ?? [])
+      })
+      .catch(() => undefined)
+  }, [canReadRadius])
 
   const columns: ColumnsType<RadiusBypassItem> = [
     {
       title: t('radius:bypass.columns.type'),
-      dataIndex: 'type',
       key: 'type',
+      width: 100,
+      render: (_: unknown, record) => <Text>{record.type === 'ip' ? t('radius:bypass.form.typeIp') : t('radius:bypass.form.typeMac')}</Text>,
+    },
+    {
+      title: t('radius:bypass.columns.profile'),
+      dataIndex: 'profileId',
+      key: 'profileId',
+      width: 130,
+      render: (id: number) => profiles.find((profile) => profile.id === id)?.name ?? `#${id}`,
+    },
+    {
+      title: t('radius:bypass.columns.nas'),
+      dataIndex: 'nasId',
+      key: 'nasId',
       width: 140,
-      render: (val: RadiusBypassType) => (
-        <Tag color={val === 'mac' ? 'geekblue' : 'purple'}>
-          {val === 'mac' ? t('radius:bypass.form.typeMac') : t('radius:bypass.form.typeIp')}
-        </Tag>
-      ),
+      responsive: ['md'],
+      render: (id?: number | null) => {
+        if (!id) return t('radius:bypass.allNas')
+        const nas = nasItems.find((item) => item.id === id)
+        return nas ? `${nas.name} (${nas.ipaddr})` : `#${id}`
+      },
+    },
+    {
+      title: t('radius:bypass.columns.expireTime'),
+      dataIndex: 'expireTime',
+      key: 'expireTime',
+      width: 140,
+      responsive: ['lg'],
+      render: (value?: string | null) => (value ? renderTime(value) : t('radius:bypass.neverExpires')),
     },
     {
       title: t('radius:bypass.columns.value'),
       dataIndex: 'value',
       key: 'value',
-      width: 220,
-      render: (val: string) => renderEllipsis(val),
+      width: 150,
+      ellipsis: { showTitle: true },
     },
     {
       title: t('radius:common.status'),
       dataIndex: 'status',
       key: 'status',
       width: 90,
-      render: (val: string) => (
-        <Tag color={val === 'enabled' ? 'success' : 'error'}>
-          {val === 'enabled' ? t('radius:common.enabled') : t('radius:common.disabled')}
-        </Tag>
-      ),
+      render: (val: string) => renderStatusTag(t, val),
     },
     {
       title: t('radius:common.remark'),
       dataIndex: 'remark',
       key: 'remark',
-      width: 200,
-      render: (val: string) => renderEllipsis(val),
+      width: 140,
+      ellipsis: { showTitle: true },
     },
     {
       title: t('radius:bypass.columns.updatedAt'),
       dataIndex: 'updatedAt',
       key: 'updatedAt',
-      width: 170,
-      render: (val: string) => (val ? dayjs(val).format('YYYY-MM-DD HH:mm:ss') : '-'),
+      width: 140,
+      responsive: ['sm'],
+      render: renderTime,
     },
     {
       title: t('radius:common.actions'),
       key: 'actions',
-      width: 150,
+      width: 140,
+      align: 'center',
       fixed: 'right',
       render: (_, record) => (
-        <Space size={token.marginXXS}>
-          <Can permission="radius.manage">
+        <Can permission="radius.manage">
+          <Space size={4}>
             <Button
               type="text"
               size="small"
@@ -179,8 +189,8 @@ export default function BypassPage() {
             >
               {t('radius:common.delete')}
             </Button>
-          </Can>
-        </Space>
+          </Space>
+        </Can>
       ),
     },
   ]
@@ -203,6 +213,9 @@ export default function BypassPage() {
     form.setFieldsValue({
       type: record.type,
       value: record.value,
+      profileId: record.profileId,
+      nasId: record.nasId ?? undefined,
+      expireTime: record.expireTime ? dayjs(record.expireTime) : undefined,
       status: record.status,
       remark: record.remark,
     })
@@ -216,6 +229,9 @@ export default function BypassPage() {
       const payload: RadiusBypassPayload = {
         type: values.type,
         value: values.value.trim(),
+        profileId: values.profileId,
+        nasId: values.nasId ?? null,
+        expireTime: values.expireTime?.toISOString(),
         status: values.status ?? 'enabled',
         remark: values.remark?.trim() ?? '',
       }
@@ -256,58 +272,59 @@ export default function BypassPage() {
   }
 
   return (
-    <div style={{ width: '100%' }}>
+    <div>
       <Card variant="outlined">
         <Alert
           type="info"
           showIcon
           title={t('radius:bypass.intro')}
-          style={{ marginBottom: token.margin }}
+          style={{ marginBottom: 16 }}
         />
-        <Space
-          style={{ marginBottom: token.margin, width: '100%', justifyContent: 'space-between' }}
-          wrap
-        >
-          <Space wrap>
+        <Toolbar
+          left={
             <Can permission="radius.manage">
               <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
                 {t('radius:bypass.create')}
               </Button>
             </Can>
-          </Space>
-          <Space wrap>
-            <Input.Search
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              onSearch={handleSearch}
-              placeholder={t('radius:bypass.searchPlaceholder')}
-              allowClear
-              style={{ width: 240 }}
-            />
-            <Button icon={<ReloadOutlined />} onClick={load} />
-          </Space>
-        </Space>
-
-        <Table
-          rowKey="id"
-          columns={columns}
-          dataSource={data}
-          loading={loading}
-          pagination={{
-            current: page,
-            pageSize: size,
-            total,
-            showSizeChanger: true,
-            onChange: (p, s) => {
-              setPage(p)
-              setSize(s)
-            },
-            showTotal: (tt) => t('settings:loginLogs.total', { total: tt }),
-          }}
-          // 列宽合计 970：容器更宽时按比例分配，更窄时横向滚动；空数据不启用横向滚动
-          scroll={data.length > 0 ? { x: 970 } : undefined}
-          tableLayout="fixed"
+          }
+          right={
+            <>
+              <Input.Search
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                onSearch={handleSearch}
+                placeholder={t('radius:bypass.searchPlaceholder')}
+                allowClear
+                className="netlab-billing-toolbar-search"
+              />
+              <Button icon={<ReloadOutlined />} onClick={load} />
+            </>
+          }
         />
+
+        <div style={{ width: '100%', minWidth: 0, overflow: 'hidden' }}>
+          <Table
+            className="netlab-billing-table"
+            rowKey="id"
+            columns={columns}
+            dataSource={data}
+            loading={loading}
+            pagination={{
+              current: page,
+              pageSize: size,
+              total,
+              showSizeChanger: true,
+              onChange: (p, s) => {
+                setPage(p)
+                setSize(s)
+              },
+              showTotal: (tt) => t('settings:loginLogs.total', { total: tt }),
+            }}
+            scroll={{ x: 1250 }}
+            tableLayout="fixed"
+          />
+        </div>
       </Card>
 
       {/* 新增/编辑免认证规则 */}
@@ -323,11 +340,11 @@ export default function BypassPage() {
         cancelText={t('common:cancel')}
         confirmLoading={saving}
         forceRender
-        width={560}
+        width={{ xs: 'calc(100vw - 32px)', sm: 560 }}
       >
         <Form form={form} layout="vertical" requiredMark={false}>
           <Row gutter={16}>
-            <Col xs={24} sm={12}>
+            <Col xs={24} sm={8}>
               <Form.Item name="type" label={t('radius:bypass.form.type')}>
                 <Select
                   options={[
@@ -337,6 +354,59 @@ export default function BypassPage() {
                 />
               </Form.Item>
             </Col>
+            <Col xs={24} sm={16}>
+              <Form.Item
+                name="value"
+                label={t('radius:bypass.form.value')}
+                tooltip={typeWatch === 'ip' ? t('radius:bypass.form.valueIpTip') : t('radius:bypass.form.valueMacTip')}
+                normalize={(value: string) => value?.trim()}
+                rules={[
+                  { required: true, message: t('radius:bypass.form.valueRequired') },
+                  {
+                    validator: (_, value?: string) => {
+                      if (!value) return Promise.resolve()
+                      const valid = typeWatch === 'ip' ? IPV4_PATTERN.test(value) : MAC_PATTERN.test(value)
+                      return valid ? Promise.resolve() : Promise.reject(new Error(t(typeWatch === 'ip' ? 'radius:bypass.form.valueIpInvalid' : 'radius:bypass.form.valueMacInvalid')))
+                    },
+                  },
+                ]}
+              >
+                <Input
+                  maxLength={128}
+                  placeholder={typeWatch === 'ip' ? t('radius:bypass.form.valueIpPlaceholder') : t('radius:bypass.form.valueMacPlaceholder')}
+                />
+              </Form.Item>
+            </Col>
+            <Col xs={24} sm={12}>
+              <Form.Item
+                name="profileId"
+                label={t('radius:bypass.form.profile')}
+                rules={[{ required: true, message: t('radius:bypass.form.profileRequired') }]}
+              >
+                <Select
+                  showSearch={{ optionFilterProp: 'label' }}
+                  options={profiles.map((profile) => ({ value: profile.id, label: profile.name }))}
+                />
+              </Form.Item>
+            </Col>
+            <Col xs={24} sm={12}>
+              <Form.Item
+                name="nasId"
+                label={t('radius:bypass.form.nas')}
+                rules={typeWatch === 'ip' ? [{ required: true, message: t('radius:bypass.form.nasRequired') }] : []}
+              >
+                <Select
+                  allowClear
+                  placeholder={t('radius:bypass.allNas')}
+                  options={nasItems.map((nas) => ({ value: nas.id, label: `${nas.name} (${nas.ipaddr})` }))}
+                />
+              </Form.Item>
+            </Col>
+            <Col xs={24} sm={12}>
+              <Form.Item name="expireTime" label={t('radius:bypass.form.expireTime')}>
+                <DatePicker showTime allowClear style={{ width: '100%' }} />
+              </Form.Item>
+            </Col>
             <Col xs={24} sm={12}>
               <Form.Item name="status" label={t('radius:bypass.form.status')}>
                 <Select
@@ -344,43 +414,6 @@ export default function BypassPage() {
                     { value: 'enabled', label: t('radius:common.enabled') },
                     { value: 'disabled', label: t('radius:common.disabled') },
                   ]}
-                />
-              </Form.Item>
-            </Col>
-            <Col xs={24}>
-              <Form.Item
-                name="value"
-                label={t('radius:bypass.form.value')}
-                tooltip={
-                  typeWatch === 'ip'
-                    ? t('radius:bypass.form.valueIpTip')
-                    : t('radius:bypass.form.valueMacTip')
-                }
-                normalize={(value: string) => value?.trim()}
-                rules={[
-                  { required: true, message: t('radius:bypass.form.valueRequired') },
-                  {
-                    validator: (_, value?: string) => {
-                      if (!value) return Promise.resolve()
-                      if (typeWatch === 'ip') {
-                        return isValidIpOrCidr(value)
-                          ? Promise.resolve()
-                          : Promise.reject(new Error(t('radius:bypass.form.valueIpInvalid')))
-                      }
-                      return MAC_PATTERN.test(value)
-                        ? Promise.resolve()
-                        : Promise.reject(new Error(t('radius:bypass.form.valueMacInvalid')))
-                    },
-                  },
-                ]}
-              >
-                <Input
-                  maxLength={128}
-                  placeholder={
-                    typeWatch === 'ip'
-                      ? t('radius:bypass.form.valueIpPlaceholder')
-                      : t('radius:bypass.form.valueMacPlaceholder')
-                  }
                 />
               </Form.Item>
             </Col>

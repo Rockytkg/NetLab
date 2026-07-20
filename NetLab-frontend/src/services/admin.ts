@@ -15,6 +15,7 @@ import type {
   UpdateUserParams,
   CreateUserParams,
   AdminUserExportView,
+  RadiusListenerSettings,
 } from '@/types/settings'
 
 /** 触发浏览器将 Blob 保存为本地文件。 */
@@ -53,6 +54,16 @@ export const adminApi = {
   /** 更新安全策略 */
   updateSecurity(params: SecuritySettings): Promise<{ message: string }> {
     return request.put('/settings/security', params)
+  },
+
+  /** 获取 RADIUS 基础监听配置。 */
+  getRadiusListenerSettings(): Promise<RadiusListenerSettings> {
+    return request.get('/settings/radius-listener')
+  },
+
+  /** 更新 RADIUS 基础监听配置。 */
+  updateRadiusListenerSettings(params: RadiusListenerSettings): Promise<{ message: string }> {
+    return request.put('/settings/radius-listener', params)
   },
 
   /** 更新备案信息 */

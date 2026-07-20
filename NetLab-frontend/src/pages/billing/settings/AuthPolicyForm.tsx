@@ -3,7 +3,6 @@ import {
   App,
   Button,
   Col,
-  Divider,
   Form,
   InputNumber,
   Row,
@@ -19,15 +18,21 @@ import Can from '@/components/auth/Can'
 import type { RadiusServerSettings } from '@/types/radius'
 
 type MessageAuthMode = RadiusServerSettings['messageAuthMode']
+export type PolicySection = 'authentication' | 'protection' | 'session'
+
+interface AuthPolicyFormProps {
+  section: PolicySection
+}
 
 /** 认证与会话策略表单：安全策略与会话/记账默认值。 */
-export default function AuthPolicyForm() {
+export default function AuthPolicyForm({ section }: AuthPolicyFormProps) {
   const { t } = useTranslation(['radius', 'common'])
   const { message } = App.useApp()
 
   const [form] = Form.useForm<RadiusServerSettings>()
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [currentSettings, setCurrentSettings] = useState<RadiusServerSettings | null>(null)
   const messageAuthMode = Form.useWatch('messageAuthMode', form)
 
   const load = useCallback(async () => {
@@ -35,6 +40,7 @@ export default function AuthPolicyForm() {
     try {
       const settings = await radiusApi.getSettings()
       form.setFieldsValue(settings.server)
+      setCurrentSettings(settings.server)
     } catch {
       // 拦截器已提示错误
     } finally {
@@ -46,11 +52,13 @@ export default function AuthPolicyForm() {
     load()
   }, [load])
 
-  const handleSave = async (values: RadiusServerSettings) => {
+  const handleSave = async (values: Partial<RadiusServerSettings>) => {
+    if (!currentSettings) return
     setSaving(true)
     try {
-      const updated = await radiusApi.updateServerSettings(values)
+      const updated = await radiusApi.updateServerSettings({ ...currentSettings, ...values })
       form.setFieldsValue(updated)
+      setCurrentSettings(updated)
       message.success(t('radius:common.saveSuccess'))
     } catch {
       // 拦截器已提示错误
@@ -69,8 +77,7 @@ export default function AuthPolicyForm() {
   return (
     <Spin spinning={loading}>
       <Form form={form} layout="vertical" requiredMark={false} onFinish={handleSave}>
-        <Divider titlePlacement="start">{t('radius:config.sections.security')}</Divider>
-        <Row gutter={[24, 0]}>
+        {section === 'authentication' && <Row gutter={[24, 0]}>
           <Col xs={24} sm={12}>
             <Form.Item
               name="messageAuthMode"
@@ -101,8 +108,8 @@ export default function AuthPolicyForm() {
               <Switch />
             </Form.Item>
           </Col>
-        </Row>
-        <Row gutter={[24, 0]}>
+        </Row>}
+        {section === 'protection' && <Row gutter={[24, 0]}>
           <Col xs={24} sm={12}>
             <Form.Item
               name="rejectDelayMaxRejects"
@@ -123,10 +130,8 @@ export default function AuthPolicyForm() {
               <InputNumber min={1} max={3600} precision={0} style={{ width: '100%' }} />
             </Form.Item>
           </Col>
-        </Row>
-
-        <Divider titlePlacement="start">{t('radius:config.sections.session')}</Divider>
-        <Row gutter={[24, 0]}>
+        </Row>}
+        {section === 'session' && <Row gutter={[24, 0]}>
           <Col xs={24} sm={8}>
             <Form.Item
               name="sessionTimeout"
@@ -157,7 +162,7 @@ export default function AuthPolicyForm() {
               <InputNumber min={0} precision={0} style={{ width: '100%' }} />
             </Form.Item>
           </Col>
-        </Row>
+        </Row>}
 
         <Can permission="radius.manage">
           <Button type="primary" htmlType="submit" icon={<SaveOutlined />} loading={saving}>

@@ -13,6 +13,7 @@ import (
 	"netlab-backend/internal/middleware"
 	authsvc "netlab-backend/internal/service/auth"
 	sysconfig "netlab-backend/internal/service/config"
+	radiussvc "netlab-backend/internal/service/radius"
 	"netlab-backend/pkg/apperrors"
 	"netlab-backend/pkg/response"
 )
@@ -23,18 +24,39 @@ type AdminHandler struct {
 	userAdminService *authsvc.UserAdminService
 	importService    *authsvc.UserImportService
 	mailer           *mailer.Provider
+	radiusService    *radiussvc.Service
 	logger           *zap.Logger
 }
 
 // NewAdminHandler 创建一个新的 AdminHandler。
-func NewAdminHandler(adminService *authsvc.AdminService, userAdminService *authsvc.UserAdminService, importService *authsvc.UserImportService, mailerProvider *mailer.Provider, logger *zap.Logger) *AdminHandler {
+func NewAdminHandler(adminService *authsvc.AdminService, userAdminService *authsvc.UserAdminService, importService *authsvc.UserImportService, mailerProvider *mailer.Provider, radiusService *radiussvc.Service, logger *zap.Logger) *AdminHandler {
 	return &AdminHandler{
 		adminService:     adminService,
 		userAdminService: userAdminService,
 		importService:    importService,
 		mailer:           mailerProvider,
+		radiusService:    radiusService,
 		logger:           logger,
 	}
+}
+
+// GetRadiusListenerSettings 返回系统设置中的 RADIUS 基础监听配置。
+func (h *AdminHandler) GetRadiusListenerSettings(c *gin.Context) {
+	response.SuccessOK(c, h.radiusService.ListenerSettings(c.Request.Context()))
+}
+
+// UpdateRadiusListenerSettings 更新 RADIUS 基础监听配置并热应用。
+func (h *AdminHandler) UpdateRadiusListenerSettings(c *gin.Context) {
+	var params request.RadiusListenerSettingsRequest
+	if err := c.ShouldBindJSON(&params); err != nil {
+		response.Error(c, apperrors.New(apperrors.ErrCodeInvalidCode, "invalid parameters: "+err.Error()))
+		return
+	}
+	if err := h.radiusService.UpdateListenerSettings(c.Request.Context(), &params); err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.SuccessOK(c, dtoresponse.MessageResponse{Message: "radius listener settings updated"})
 }
 
 // GetSettings 处理 GET /api/settings

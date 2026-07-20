@@ -71,14 +71,16 @@ type RadiusIDsRequest struct {
 	IDs []uint64 `json:"ids" binding:"required,min=1,max=500"`
 }
 
-// RadiusBypassUpsertRequest 是创建/更新免认证规则的请求体。
-// type=mac 时 value 必须恰好是一个合法 MAC；type=ip 时 value 必须是
-// 合法 IP 或 CIDR（服务端校验并归一化存储）。
+// RadiusBypassUpsertRequest 是创建/更新哑终端准入规则的请求体。
+// IP 规则只接受单个 IPv4，且必须限定 NAS；两种规则均必须关联策略套餐。
 type RadiusBypassUpsertRequest struct {
-	Type   string `json:"type" binding:"required,oneof=mac ip"`
-	Value  string `json:"value" binding:"required,min=1,max=128"`
-	Status string `json:"status" binding:"omitempty,oneof=enabled disabled"`
-	Remark string `json:"remark" binding:"omitempty,max=255"`
+	Type       string     `json:"type" binding:"required,oneof=mac ip"`
+	Value      string     `json:"value" binding:"required,min=1,max=128"`
+	ProfileID  uint64     `json:"profileId" binding:"required,min=1"`
+	NasID      *uint64    `json:"nasId" binding:"omitempty,min=1"`
+	ExpireTime *time.Time `json:"expireTime"`
+	Status     string     `json:"status" binding:"omitempty,oneof=enabled disabled"`
+	Remark     string     `json:"remark" binding:"omitempty,max=255"`
 }
 
 // RadiusCoARequest 是 CoA 动态授权变更（会话策略下发）的请求体。
@@ -109,6 +111,15 @@ type RadiusSystemSettingsRequest struct {
 	RadsecPort     int    `json:"radsecPort" binding:"omitempty,min=1,max=65535"`
 	RadsecCertID   uint64 `json:"radsecCertId"`
 	RadsecCACertID uint64 `json:"radsecCaCertId"`
+}
+
+// RadiusListenerSettingsRequest 是系统设置中管理的 RADIUS 基础监听配置。
+// RadSec 配置仍由认证计费服务设置单独管理。
+type RadiusListenerSettingsRequest struct {
+	Enabled  bool   `json:"enabled"`
+	BindHost string `json:"bindHost" binding:"required,max=64"`
+	AuthPort int    `json:"authPort" binding:"min=1,max=65535"`
+	AcctPort int    `json:"acctPort" binding:"min=1,max=65535"`
 }
 
 // RadiusServerSettingsRequest 是 RADIUS 服务器策略设置的请求体。

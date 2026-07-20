@@ -124,6 +124,32 @@ func (s *Service) UpdateSystemSettings(ctx context.Context, req *dtorequest.Radi
 	return nil
 }
 
+// ListenerSettings 返回系统设置中管理的 RADIUS 基础监听配置。
+func (s *Service) ListenerSettings(ctx context.Context) dtoresponse.RadiusListenerSettings {
+	cfg := s.EffectiveConfig(ctx)
+	return dtoresponse.RadiusListenerSettings{
+		Enabled:  cfg.Enabled,
+		BindHost: cfg.BindHost,
+		AuthPort: cfg.AuthPort,
+		AcctPort: cfg.AcctPort,
+	}
+}
+
+// UpdateListenerSettings 合并当前 RadSec 配置后更新监听器，保持同一配置表记录和热更新路径。
+func (s *Service) UpdateListenerSettings(ctx context.Context, req *dtorequest.RadiusListenerSettingsRequest) *apperrors.AppError {
+	cfg := s.EffectiveConfig(ctx)
+	return s.UpdateSystemSettings(ctx, &dtorequest.RadiusSystemSettingsRequest{
+		Enabled:        req.Enabled,
+		BindHost:       req.BindHost,
+		AuthPort:       req.AuthPort,
+		AcctPort:       req.AcctPort,
+		RadsecEnabled:  cfg.RadsecEnabled,
+		RadsecPort:     cfg.RadsecPort,
+		RadsecCertID:   cfg.RadsecCertID,
+		RadsecCACertID: cfg.RadsecCACertID,
+	})
+}
+
 // UpdateServerSettings 校验并持久化 RADIUS 服务器策略设置，随后应用到运行时。
 func (s *Service) UpdateServerSettings(ctx context.Context, req *dtorequest.RadiusServerSettingsRequest) *apperrors.AppError {
 	switch req.MessageAuthMode {

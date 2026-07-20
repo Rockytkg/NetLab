@@ -4,7 +4,6 @@ import {
   Button,
   Card,
   Col,
-  Collapse,
   DatePicker,
   Form,
   Input,
@@ -15,9 +14,8 @@ import {
   Select,
   Space,
   Table,
-  Tag,
+  Tabs,
   Typography,
-  theme,
 } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import {
@@ -31,14 +29,14 @@ import dayjs, { type Dayjs } from 'dayjs'
 import { radiusApi } from '@/services/radius'
 import { usePermission } from '@/hooks/usePermission'
 import Can from '@/components/auth/Can'
+import Toolbar from '@/pages/billing/components/Toolbar'
 import { formatRate } from '../format'
+import { renderStatusTag, renderTime } from '@/pages/billing/shared'
 import type { RadiusProfileOption, RadiusUserItem, RadiusUserPayload } from '@/types/radius'
 
 const { Text } = Typography
 
-/** 编辑表单值：expireTime 用 Dayjs 承载，提交时再转 ISO 字符串；
- * status 直接以 enabled/disabled 字符串承载（下拉选择）；
- * macAddr 在文本域中每行一个，提交时归一化为逗号分隔。 */
+/** 编辑表单值：expireTime 用 Dayjs 承载，提交时再转 ISO 字符串。 */
 interface UserFormValues {
   username: string
   password?: string
@@ -68,10 +66,8 @@ interface UserFormValues {
   remark?: string
 }
 
-/** 单个 MAC：AA:BB:CC:DD:EE:FF 或 AA-BB-CC-DD-EE-FF。 */
 const MAC_PATTERN = /^[0-9a-fA-F]{2}([:-][0-9a-fA-F]{2}){5}$/
 
-/** 拆分用户输入（换行/逗号/分号/空格均可），归一化为小写冒号格式并去重。 */
 const splitMacInput = (raw?: string): string[] => {
   if (!raw) return []
   const seen = new Set<string>()
@@ -90,16 +86,13 @@ const splitMacInput = (raw?: string): string[] => {
   return result
 }
 
-/** 提交格式：逗号分隔；存储侧后端同样以此归一化。 */
 const normalizeMacInput = (raw?: string): string => splitMacInput(raw).join(',')
 
-/** 回填表单：逗号分隔 → 每行一个。 */
 const macListToLines = (raw?: string): string | undefined => {
   const items = splitMacInput(raw)
   return items.length ? items.join('\n') : undefined
 }
 
-/** 校验失败定位：带校验规则的字段名 → 所在折叠面板 key（用于自动展开出错面板）。 */
 const FIELD_SECTION: Record<string, string> = {
   username: 'auth',
   password: 'auth',
@@ -109,7 +102,6 @@ const FIELD_SECTION: Record<string, string> = {
 /** RADIUS 认证用户页：分页列表 + 状态筛选 + 创建/编辑/删除。 */
 export default function RadiusUsersPage() {
   const { t } = useTranslation(['radius', 'common', 'settings'])
-  const { token } = theme.useToken()
   const { message, modal } = App.useApp()
   const { can } = usePermission()
   const canReadRadius = can('radius.read')
@@ -123,15 +115,12 @@ export default function RadiusUsersPage() {
   const [statusFilter, setStatusFilter] = useState('')
   const [loading, setLoading] = useState(false)
 
-  // 创建/编辑共用一个弹窗：editingUser 为 null 时是创建
   const [modalOpen, setModalOpen] = useState(false)
   const [editingUser, setEditingUser] = useState<RadiusUserItem | null>(null)
   const [form] = Form.useForm<UserFormValues>()
   const [saving, setSaving] = useState(false)
   const [profileOptions, setProfileOptions] = useState<RadiusProfileOption[]>([])
-  // 折叠面板手风琴：默认只展开账号信息；校验失败时展开出错字段所在面板
-  const [activeSection, setActiveSection] = useState<string[]>(['auth'])
-  // 绑定下拉联动：未启用时禁用对应的 MAC/VLAN 输入
+  const [activeSection, setActiveSection] = useState('auth')
   const bindMacOn = Form.useWatch('bindMac', form)
   const bindVlanOn = Form.useWatch('bindVlan', form)
 
@@ -158,59 +147,48 @@ export default function RadiusUsersPage() {
     load()
   }, [load])
 
-  // 可截断列：仅在文本真正溢出时悬停显示完整内容
-  const renderEllipsis = (val: string) =>
-    val ? (
-      <Text ellipsis={{ tooltip: val }} style={{ display: 'block' }}>
-        {val}
-      </Text>
-    ) : (
-      '-'
-    )
-
   const unlimited = t('radius:common.unlimited')
 
   const columns: ColumnsType<RadiusUserItem> = [
     {
-      // 140：常见用户名完整显示，超长截断 + tip
       title: t('radius:users.columns.username'),
       dataIndex: 'username',
       key: 'username',
-      width: 140,
-      render: renderEllipsis,
+      width: 130,
+      ellipsis: { showTitle: true },
     },
     {
       title: t('radius:users.columns.realname'),
       dataIndex: 'realname',
       key: 'realname',
-      width: 110,
-      render: renderEllipsis,
+      width: 100,
+      ellipsis: { showTitle: true },
+      responsive: ['xxl'],
     },
     {
-      // 130：手机号定长，可为空
       title: t('radius:users.columns.mobile'),
       dataIndex: 'mobile',
       key: 'mobile',
-      width: 130,
+      width: 120,
+      responsive: ['xxl'],
       render: (val: string) => val || '-',
     },
     {
       title: t('radius:users.columns.profile'),
       dataIndex: 'profileName',
       key: 'profileName',
-      width: 130,
-      render: renderEllipsis,
+      width: 120,
+      ellipsis: { showTitle: true },
+      responsive: ['sm'],
     },
     {
-      // 180：上/下行速率「1 Mbps / 1 Mbps」完整显示
       title: t('radius:users.columns.rate'),
       key: 'rate',
-      width: 180,
+      width: 150,
       render: (_, record) =>
         `${formatRate(record.upRate, unlimited)} / ${formatRate(record.downRate, unlimited)}`,
     },
     {
-      // 100：0 表示不限
       title: t('radius:users.columns.activeNum'),
       dataIndex: 'activeNum',
       key: 'activeNum',
@@ -221,50 +199,49 @@ export default function RadiusUsersPage() {
       title: t('radius:users.columns.macAddr'),
       dataIndex: 'macAddr',
       key: 'macAddr',
-      width: 140,
-      render: (val: string) => renderEllipsis(val?.split(',').join(', ')),
+      width: 110,
+      ellipsis: { showTitle: true },
+      responsive: ['md'],
+      render: (val: string) =>
+        val ? <Text ellipsis>{val.split(',').join(', ')}</Text> : '-',
     },
     {
-      // 170：「YYYY-MM-DD HH:mm:ss」完整显示
       title: t('radius:users.columns.expireTime'),
       dataIndex: 'expireTime',
       key: 'expireTime',
-      width: 170,
-      render: (val: string) => (val ? dayjs(val).format('YYYY-MM-DD HH:mm:ss') : '-'),
+      width: 140,
+      render: renderTime,
     },
     {
       title: t('radius:users.columns.status'),
       dataIndex: 'status',
       key: 'status',
       width: 90,
-      render: (val: string) => (
-        <Tag color={val === 'enabled' ? 'success' : 'error'}>
-          {t(`radius:common.${val}`, val)}
-        </Tag>
-      ),
+      render: (val: string) => renderStatusTag(t, val),
     },
     {
-      // 90：在线会话数，>0 高亮
       title: t('radius:users.columns.online'),
       dataIndex: 'onlineCount',
       key: 'onlineCount',
       width: 90,
-      render: (val: number) => <Tag color={val > 0 ? 'green' : 'default'}>{val}</Tag>,
+      render: (val: number) => <Text type={val > 0 ? 'success' : 'secondary'}>{val}</Text>,
     },
     {
       title: t('radius:users.columns.lastOnline'),
       dataIndex: 'lastOnline',
       key: 'lastOnline',
-      width: 170,
-      render: (val?: string | null) => (val ? dayjs(val).format('YYYY-MM-DD HH:mm:ss') : '-'),
+      width: 150,
+      responsive: ['xxl'],
+      render: renderTime,
     },
     {
       title: t('radius:common.actions'),
       key: 'actions',
-      width: 160,
+      width: 140,
+      align: 'center',
       fixed: 'right',
       render: (_, record) => (
-        <Space size={token.marginXXS}>
+        <Space size={4}>
           <Can permission="radius.manage">
             <Button
               type="text"
@@ -294,7 +271,6 @@ export default function RadiusUsersPage() {
     setKeyword(search.trim())
   }
 
-  // 套餐下拉在打开弹窗时加载，失败由拦截器提示
   const loadProfileOptions = async () => {
     try {
       const options = await radiusApi.listProfileOptions()
@@ -391,11 +367,9 @@ export default function RadiusUsersPage() {
         vlanid2: values.vlanid2 ?? 0,
         remark: values.remark ?? '',
       }
-      // 过期时间留空：创建由后端默认一年，更新保持不变
       if (values.expireTime) {
         payload.expireTime = values.expireTime.toISOString()
       }
-      // 编辑时密码留空表示不修改
       if (values.password) {
         payload.password = values.password
       }
@@ -409,15 +383,13 @@ export default function RadiusUsersPage() {
       setEditingUser(null)
       await load()
     } catch (err) {
-      // 表单校验失败：展开出错字段所在折叠面板
       const validation = err as { errorFields?: { name?: (string | number)[] }[] }
       const firstField = validation.errorFields?.[0]?.name?.[0]
       if (firstField !== undefined) {
         const section = FIELD_SECTION[String(firstField)]
-        if (section) setActiveSection([section])
+        if (section) setActiveSection(section)
         return
       }
-      // 其余错误已由拦截器提示
     } finally {
       setSaving(false)
     }
@@ -443,46 +415,46 @@ export default function RadiusUsersPage() {
   }
 
   return (
-    <div style={{ width: '100%' }}>
+    <div>
       <Card variant="outlined">
-        <Space
-          style={{ marginBottom: token.margin, width: '100%', justifyContent: 'space-between' }}
-          wrap
-        >
-          <Space wrap>
+        <Toolbar
+          left={
             <Can permission="radius.manage">
               <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
                 {t('radius:users.create')}
               </Button>
             </Can>
-          </Space>
-          <Space wrap>
-            <Select
-              value={statusFilter}
-              onChange={(val) => {
-                setPage(1)
-                setStatusFilter(val)
-              }}
-              style={{ width: 140 }}
-              options={[
-                { value: '', label: t('radius:common.status') },
-                { value: 'enabled', label: t('radius:common.enabled') },
-                { value: 'disabled', label: t('radius:common.disabled') },
-              ]}
-            />
-            <Input.Search
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              onSearch={handleSearch}
-              placeholder={t('radius:users.searchPlaceholder')}
-              allowClear
-              style={{ width: 240 }}
-            />
-            <Button icon={<ReloadOutlined />} onClick={load} />
-          </Space>
-        </Space>
+          }
+          right={
+            <>
+              <Select
+                value={statusFilter}
+                onChange={(val) => {
+                  setPage(1)
+                  setStatusFilter(val)
+                }}
+                className="netlab-billing-toolbar-select"
+                options={[
+                  { value: '', label: t('radius:common.status') },
+                  { value: 'enabled', label: t('radius:common.enabled') },
+                  { value: 'disabled', label: t('radius:common.disabled') },
+                ]}
+              />
+              <Input.Search
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                onSearch={handleSearch}
+                placeholder={t('radius:users.searchPlaceholder')}
+                allowClear
+                className="netlab-billing-toolbar-search"
+              />
+              <Button icon={<ReloadOutlined />} onClick={load} />
+            </>
+          }
+        />
 
         <Table
+          className="netlab-billing-table"
           rowKey="id"
           columns={columns}
           dataSource={data}
@@ -498,10 +470,8 @@ export default function RadiusUsersPage() {
             },
             showTotal: (tt) => t('settings:users.total', { total: tt }),
           }}
-          // 有数据：固定布局 + 横向滚动（列宽合计 1600，更宽时按比例分配）；
-          // 空数据：撤掉列宽约束回退自动布局，表头收进容器且无横向滚动条
-          scroll={data.length > 0 ? { x: 1600 } : undefined}
-          tableLayout={data.length > 0 ? 'fixed' : undefined}
+          scroll={{ x: 1250 }}
+          tableLayout="fixed"
         />
       </Card>
 
@@ -518,14 +488,12 @@ export default function RadiusUsersPage() {
         cancelText={t('common:cancel')}
         confirmLoading={saving}
         forceRender
-        width={720}
+        width={{ xs: 'calc(100vw - 32px)', sm: 560, md: 720 }}
       >
         <Form form={form} layout="vertical" requiredMark={false}>
-          {/* 手风琴折叠面板：任意时刻只展开一个分区，弹窗高度不随字段数增长 */}
-          <Collapse
-            accordion
+          <Tabs
             activeKey={activeSection}
-            onChange={(keys) => setActiveSection(keys as string[])}
+            onChange={setActiveSection}
             items={[
               {
                 key: 'auth',

@@ -521,6 +521,16 @@ func Setup(cfg RouterConfig) *gin.Engine {
 						middleware.RequirePermission(cfg.Authorizer, permission.SettingUpdate),
 						cfg.AdminHandler.UpdateSecurity,
 					)
+					settingsGroup.GET("/radius-listener",
+						cfg.limitStandard("admin-radius-listener-get"),
+						middleware.RequirePermission(cfg.Authorizer, permission.SettingRead),
+						cfg.AdminHandler.GetRadiusListenerSettings,
+					)
+					settingsGroup.PUT("/radius-listener",
+						cfg.limitModerate("admin-radius-listener-update"),
+						middleware.RequirePermission(cfg.Authorizer, permission.SettingUpdate),
+						cfg.AdminHandler.UpdateRadiusListenerSettings,
+					)
 					settingsGroup.PUT("/beian",
 						cfg.limitModerate("admin-beian"),
 						middleware.RequirePermission(cfg.Authorizer, permission.SettingUpdate),

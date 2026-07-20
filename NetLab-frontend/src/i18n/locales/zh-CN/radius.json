@@ -23,6 +23,11 @@
     "create": "新增 NAS 设备",
     "edit": "编辑 NAS 设备",
     "deleteConfirm": "确定删除该 NAS 设备吗？删除后其报文将被拒绝。",
+    "sections": {
+      "identity": "设备标识",
+      "connection": "连接设置",
+      "access": "访问控制"
+    },
     "columns": {
       "name": "名称",
       "vendor": "厂商",
@@ -145,6 +150,11 @@
     "searchPlaceholder": "搜索套餐名称",
     "create": "新增套餐",
     "edit": "编辑套餐",
+    "sections": {
+      "basic": "基本信息",
+      "service": "服务策略",
+      "network": "地址与网络"
+    },
     "deleteConfirm": "确定删除该套餐吗？",
     "deleteInUse": "该套餐仍被用户引用，无法删除",
     "columns": {
@@ -177,29 +187,39 @@
   },
   "bypass": {
     "searchPlaceholder": "搜索匹配值 / 备注",
-    "create": "新增免认证",
-    "edit": "编辑免认证",
-    "deleteConfirm": "确定删除该免认证规则吗？",
-    "intro": "命中规则的终端将跳过用户名/密码校验直接放行（按 Calling-Station-Id 匹配 MAC，按 Framed-IP-Address 匹配 IP）。",
+    "create": "新增终端准入规则",
+    "edit": "编辑终端准入规则",
+    "deleteConfirm": "确定删除该终端准入规则吗？",
+    "intro": "用于哑终端和交换机 Fast MAC Authentication：MAC 规则按终端标识匹配；IP 规则仅精确匹配指定 NAS 上报的 Framed-IP-Address。两者均跳过口令校验，但仍执行所选套餐的并发、限速和网络策略。",
+    "allNas": "所有已信任 NAS",
+    "neverExpires": "长期有效",
     "columns": {
       "type": "类型",
       "value": "匹配值",
+      "profile": "策略套餐",
+      "nas": "NAS 范围",
+      "expireTime": "失效时间",
       "status": "状态",
       "remark": "备注",
       "updatedAt": "更新时间"
     },
     "form": {
-      "type": "免认证类型",
-      "typeMac": "MAC 免认证",
-      "typeIp": "IP 免认证",
+      "type": "认证方式",
+      "typeMac": "MAC 准入",
+      "typeIp": "IPv4 准入",
       "value": "匹配值",
       "valueRequired": "请输入匹配值",
       "valueMacPlaceholder": "AA:BB:CC:DD:EE:FF",
-      "valueIpPlaceholder": "192.168.1.10 或 192.168.1.0/24",
       "valueMacInvalid": "MAC 地址格式不正确",
-      "valueIpInvalid": "IP 地址或 CIDR 格式不正确",
-      "valueMacTip": "按请求中的 Calling-Station-Id 匹配终端 MAC",
-      "valueIpTip": "按请求中的 Framed-IP-Address 匹配终端 IP，支持 CIDR 网段",
+      "valueIpPlaceholder": "192.0.2.10",
+      "valueIpInvalid": "请输入有效的 IPv4 地址",
+      "valueMacTip": "使用 Calling-Station-Id 或厂商 MAC 属性识别终端",
+      "valueIpTip": "仅匹配该 NAS 在 Access-Request 中上报的 Framed-IP-Address，不支持网段",
+      "profile": "策略套餐",
+      "profileRequired": "请选择策略套餐",
+      "nas": "NAS 范围",
+      "nasRequired": "IP 准入规则必须选择 NAS",
+      "expireTime": "失效时间",
       "status": "状态",
       "remark": "备注"
     }
@@ -238,6 +258,11 @@
   "accounting": {
     "searchUsername": "搜索用户名",
     "timeRange": "时间范围",
+    "presets": {
+      "today": "今天",
+      "last7Days": "近 7 天",
+      "thisMonth": "本月"
+    },
     "detail": "详情",
     "detailTitle": "记账详情（{{username}}）",
     "columns": {
@@ -310,12 +335,18 @@
     "create": "新增证书",
     "edit": "编辑证书",
     "export": "导出",
+    "uploadFile": "选择文件",
     "deleteConfirm": "确定删除该证书吗？引用它的配置将无法生效。",
     "typeAll": "全部类型",
     "typeServer": "服务器证书",
     "typeCa": "CA 证书",
     "hasKeyYes": "是",
     "hasKeyNo": "否",
+    "sections": {
+      "general": "基本信息",
+      "material": "证书材料",
+      "metadata": "证书信息"
+    },
     "metadataTitle": "证书信息",
     "replaceTitle": "替换证书材料",
     "exportTitle": "导出证书",
@@ -355,7 +386,11 @@
     "certNone": "未选择",
     "tabs": {
       "basic": "基础设置",
-      "authSession": "认证与会话"
+      "authSession": "认证与会话",
+      "authentication": "认证管理",
+      "protection": "拒绝防护",
+      "session": "会话与记账",
+      "radsec": "RadSec"
     },
     "sections": {
       "basic": "基本",

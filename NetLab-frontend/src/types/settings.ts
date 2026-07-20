@@ -110,6 +110,14 @@ export interface UpdateUserParams {
 	disableTwoFactor?: boolean
 }
 
+/** 系统设置中管理的 RADIUS 基础监听配置。 */
+export interface RadiusListenerSettings {
+  enabled: boolean
+  bindHost: string
+  authPort: number
+  acctPort: number
+}
+
 /** 单用户创建字段 */
 export interface CreateUserParams {
 	username: string

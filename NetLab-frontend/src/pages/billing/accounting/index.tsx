@@ -7,11 +7,9 @@ import {
   Drawer,
   Input,
   Result,
-  Space,
   Table,
   Tag,
-  Typography,
-  theme,
+  Tooltip,
 } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import { EyeOutlined, ReloadOutlined, SearchOutlined } from '@ant-design/icons'
@@ -19,16 +17,17 @@ import { useTranslation } from 'react-i18next'
 import dayjs, { type Dayjs } from 'dayjs'
 import { radiusApi } from '@/services/radius'
 import { usePermission } from '@/hooks/usePermission'
+import Toolbar from '@/pages/billing/components/Toolbar'
+import { renderTime } from '@/pages/billing/shared'
 import type { RadiusAccountingItem } from '@/types/radius'
 import { formatBytes, formatDuration } from '../format'
 
-const { Text } = Typography
 const { RangePicker } = DatePicker
 
 /** RangePicker 的值：起止两个 dayjs，未选为 null。 */
 type RangeValue = [Dayjs | null, Dayjs | null] | null
 
-// 终止原因着色：正常终止绿色，异常/强制终止红色，其余黄色
+// 终止原因着色
 const TERMINATE_GREEN = ['User-Request', 'Session-Timeout', 'Idle-Timeout']
 const TERMINATE_RED = ['Admin-Reset', 'Lost-Carrier', 'Port-Error', 'NAS-Error']
 
@@ -41,7 +40,6 @@ function terminateCauseColor(cause: string): string {
 /** 记账记录页：按用户名 + 时间范围筛选的 RADIUS 记账分页列表。 */
 export default function AccountingPage() {
   const { t } = useTranslation(['radius', 'common', 'settings'])
-  const { token } = theme.useToken()
   const { can } = usePermission()
   const canReadRadius = can('radius.read')
 
@@ -50,14 +48,11 @@ export default function AccountingPage() {
   const [page, setPage] = useState(1)
   const [size, setSize] = useState(20)
   const [loading, setLoading] = useState(false)
-  // 输入中的筛选值（点搜索后才生效）
   const [usernameInput, setUsernameInput] = useState('')
   const [range, setRange] = useState<RangeValue>(null)
-  // 已生效的筛选条件
   const [username, setUsername] = useState('')
   const [startTime, setStartTime] = useState('')
   const [endTime, setEndTime] = useState('')
-  // 详情抽屉
   const [detail, setDetail] = useState<RadiusAccountingItem | null>(null)
 
   const load = useCallback(async () => {
@@ -84,104 +79,93 @@ export default function AccountingPage() {
     load()
   }, [load])
 
-  // 可截断列：Typography ellipsis 内置测量，文本溢出被截断时悬停显示完整内容
-  const renderEllipsis = (val: string) =>
-    val ? (
-      <Text ellipsis={{ tooltip: val }} style={{ display: 'block' }}>
-        {val}
-      </Text>
-    ) : (
-      '-'
-    )
-
-  const renderTime = (val?: string | null) =>
-    val ? dayjs(val).format('YYYY-MM-DD HH:mm:ss') : '-'
-
   const columns: ColumnsType<RadiusAccountingItem> = [
     {
       title: t('radius:accounting.columns.username'),
       dataIndex: 'username',
       key: 'username',
-      width: 140,
-      render: renderEllipsis,
+      width: 110,
+      ellipsis: { showTitle: true },
     },
     {
       title: t('radius:accounting.columns.nasAddr'),
       dataIndex: 'nasAddr',
       key: 'nasAddr',
-      width: 130,
-      render: renderEllipsis,
+      width: 120,
+      ellipsis: { showTitle: true },
+      responsive: ['sm'],
     },
     {
       title: t('radius:accounting.columns.framedIp'),
       dataIndex: 'framedIpaddr',
       key: 'framedIpaddr',
-      width: 130,
-      render: renderEllipsis,
+      width: 120,
+      ellipsis: { showTitle: true },
     },
     {
       title: t('radius:accounting.columns.macAddr'),
       dataIndex: 'macAddr',
       key: 'macAddr',
-      width: 140,
-      render: renderEllipsis,
+      width: 130,
+      ellipsis: { showTitle: true },
+      responsive: ['sm'],
     },
     {
       title: t('radius:accounting.columns.startTime'),
       dataIndex: 'acctStartTime',
       key: 'acctStartTime',
-      width: 170,
+      width: 150,
       render: renderTime,
     },
     {
       title: t('radius:accounting.columns.stopTime'),
       dataIndex: 'acctStopTime',
       key: 'acctStopTime',
-      width: 170,
+      width: 150,
       render: renderTime,
     },
     {
       title: t('radius:accounting.columns.sessionTime'),
       dataIndex: 'acctSessionTime',
       key: 'acctSessionTime',
-      width: 110,
+      width: 100,
+      responsive: ['sm'],
       render: (val: number) => formatDuration(val),
     },
     {
       title: t('radius:accounting.columns.upload'),
       dataIndex: 'acctInputTotal',
       key: 'acctInputTotal',
-      width: 110,
+      width: 100,
+      responsive: ['md'],
       render: (val: number) => formatBytes(val),
     },
     {
       title: t('radius:accounting.columns.download'),
       dataIndex: 'acctOutputTotal',
       key: 'acctOutputTotal',
-      width: 110,
+      width: 100,
+      responsive: ['md'],
       render: (val: number) => formatBytes(val),
     },
     {
       title: t('radius:accounting.columns.sessionId'),
       dataIndex: 'acctSessionId',
       key: 'acctSessionId',
-      width: 180,
-      render: renderEllipsis,
+      width: 140,
+      ellipsis: { showTitle: true },
+      responsive: ['xxl'],
     },
     {
       title: t('radius:common.actions'),
       key: 'actions',
-      width: 90,
+      width: 96,
+      align: 'center',
       fixed: 'right',
       render: (_, record) => (
-        <Button
-          type="text"
-          size="small"
-          icon={<EyeOutlined />}
-          onClick={() => setDetail(record)}
-        >
-          {t('radius:accounting.detail')}
-        </Button>
+        <Tooltip title={t('radius:accounting.detail')}>
+          <Button type="text" size="small" icon={<EyeOutlined />} onClick={() => setDetail(record)} />
+        </Tooltip>
       ),
     },
   ]
@@ -189,7 +173,6 @@ export default function AccountingPage() {
   const handleSearch = () => {
     setPage(1)
     setUsername(usernameInput.trim())
-    // RangePicker 值转 RFC3339；showTime 下结束时间取用户所选精确时刻即可
     setStartTime(range?.[0] ? range[0].toISOString() : '')
     setEndTime(range?.[1] ? range[1].toISOString() : '')
   }
@@ -208,38 +191,52 @@ export default function AccountingPage() {
   }
 
   return (
-    <div style={{ width: '100%' }}>
+    <div>
       <Card variant="outlined">
-        <Space
-          style={{ marginBottom: token.margin, width: '100%', justifyContent: 'space-between' }}
-          wrap
-        >
-          <Space wrap>
-            <Input
-              value={usernameInput}
-              onChange={(e) => setUsernameInput(e.target.value)}
-              onPressEnter={handleSearch}
-              placeholder={t('radius:accounting.searchUsername')}
-              allowClear
-              style={{ width: 200 }}
-            />
-            <RangePicker
-              showTime
-              value={range}
-              onChange={(val) => setRange(val)}
-              placeholder={[t('radius:accounting.timeRange'), t('radius:accounting.timeRange')]}
-            />
-          </Space>
-          <Space wrap>
-            <Button type="primary" icon={<SearchOutlined />} onClick={handleSearch}>
-              {t('radius:common.search')}
-            </Button>
-            <Button onClick={handleReset}>{t('radius:common.reset')}</Button>
-            <Button icon={<ReloadOutlined />} onClick={load} />
-          </Space>
-        </Space>
+        <Toolbar
+          rightFullWidth
+          right={
+            <div className="netlab-billing-accounting-controls">
+              <div className="netlab-billing-accounting-filters">
+                <Input
+                  value={usernameInput}
+                  onChange={(e) => setUsernameInput(e.target.value)}
+                  onPressEnter={handleSearch}
+                  placeholder={t('radius:accounting.searchUsername')}
+                  allowClear
+                  className="netlab-billing-toolbar-search"
+                />
+                <RangePicker
+                  showTime={{ format: 'HH:mm:ss' }}
+                  value={range}
+                  onChange={(val) => setRange(val)}
+                  placeholder={[t('radius:accounting.timeRange'), t('radius:accounting.timeRange')]}
+                  format="YYYY-MM-DD HH:mm:ss"
+                  presets={[
+                    { label: t('radius:accounting.presets.today'), value: [dayjs().startOf('day'), dayjs()] },
+                    { label: t('radius:accounting.presets.last7Days'), value: [dayjs().subtract(6, 'day').startOf('day'), dayjs()] },
+                    { label: t('radius:accounting.presets.thisMonth'), value: [dayjs().startOf('month'), dayjs()] },
+                  ]}
+                  classNames={{ popup: { root: 'netlab-billing-time-popup' } }}
+                  styles={{ popup: { root: { maxWidth: 'calc(100vw - 32px)' } } }}
+                  className="netlab-billing-toolbar-range"
+                />
+              </div>
+              <div className="netlab-billing-accounting-actions">
+                <Button type="primary" icon={<SearchOutlined />} onClick={handleSearch}>
+                  {t('radius:common.search')}
+                </Button>
+                <Button onClick={handleReset}>{t('radius:common.reset')}</Button>
+                <Tooltip title={t('radius:common.refresh')}>
+                  <Button icon={<ReloadOutlined />} onClick={load} />
+                </Tooltip>
+              </div>
+            </div>
+          }
+        />
 
         <Table
+          className="netlab-billing-table"
           rowKey="id"
           columns={columns}
           dataSource={data}
@@ -255,21 +252,20 @@ export default function AccountingPage() {
             },
             showTotal: (tt) => t('settings:loginLogs.total', { total: tt }),
           }}
-          // 列宽合计 1480：容器更宽时按比例分配，更窄时横向滚动；空数据不启用横向滚动
-          scroll={data.length > 0 ? { x: 1480 } : undefined}
+          scroll={{ x: 1250 }}
           tableLayout="fixed"
         />
       </Card>
 
-      {/* 记账详情：全字段分区展示 */}
+      {/* 记账详情 */}
       <Drawer
         title={t('radius:accounting.detailTitle', { username: detail?.username ?? '' })}
         open={!!detail}
         onClose={() => setDetail(null)}
-        width={520}
+        size="min(520px, 100vw)"
       >
         {detail && (
-          <Space orientation="vertical" size={token.margin} style={{ width: '100%' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             <Descriptions
               title={t('radius:accounting.sections.device')}
               column={1}
@@ -390,7 +386,7 @@ export default function AccountingPage() {
                 )}
               </Descriptions.Item>
             </Descriptions>
-          </Space>
+          </div>
         )}
       </Drawer>
     </div>

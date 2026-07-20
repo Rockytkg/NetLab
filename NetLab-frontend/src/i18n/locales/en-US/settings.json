@@ -12,7 +12,8 @@
     "beian": "Filing Info",
     "security": "Security",
     "smtp": "Email Service",
-    "oauth": "Third-party Login"
+    "oauth": "Third-party Login",
+    "billing": "Authentication & Billing"
   },
   "overview": {
     "nav": "Overview",
@@ -54,6 +55,16 @@
     "passkeyHelp": "When on, users can log in passwordless with fingerprint, face, or a security key.",
     "twoFactorRequired": "Require Two-Factor Authentication",
     "twoFactorRequiredHelp": "When on, users without 2FA must bind an authenticator before accessing the backend."
+  },
+  "billing": {
+    "enabled": "Enable RADIUS Service",
+    "enabledHelp": "Controls whether the RADIUS authentication and accounting listeners run.",
+    "bindHost": "Bind Host",
+    "bindHostHelp": "UDP listener interface; 0.0.0.0 listens on all interfaces.",
+    "bindHostRequired": "Please enter a bind host",
+    "authPort": "Authentication Port",
+    "acctPort": "Accounting Port",
+    "portRequired": "Enter a port between 1 and 65535"
   },
   "smtp": {
     "title": "Email Service (SMTP)",

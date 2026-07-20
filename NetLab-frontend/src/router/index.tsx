@@ -22,6 +22,7 @@ const BeianPanel = lazy(() => import('@/pages/settings/panels/BeianPanel'))
 const SecurityPanel = lazy(() => import('@/pages/settings/panels/SecurityPanel'))
 const SMTPPanel = lazy(() => import('@/pages/settings/panels/SMTPPanel'))
 const OAuthPanel = lazy(() => import('@/pages/settings/panels/OAuthPanel'))
+const BillingPanel = lazy(() => import('@/pages/settings/panels/BillingPanel'))
 const SettingsProfilePage = lazy(() => import('@/pages/settings/profile'))
 const UsersPage = lazy(() => import('@/pages/settings/users'))
 const RolesPage = lazy(() => import('@/pages/settings/roles'))
@@ -102,6 +103,7 @@ const router = createBrowserRouter([
           { path: 'security', element: <SecurityPanel /> },
           { path: 'smtp', element: <SMTPPanel /> },
           { path: 'oauth', element: <OAuthPanel /> },
+          { path: 'billing', element: <BillingPanel /> },
         ],
       },
       { path: '/settings/profile', element: <SettingsProfilePage /> },

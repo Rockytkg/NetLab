@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net"
 	"strings"
+	"time"
 
 	"go.uber.org/zap"
 	"layeh.com/radius"
@@ -111,12 +112,40 @@ func (s *AuthService) stageVendorParsing(ctx *AuthPipelineContext) error {
 		return fmt.Errorf("nas should not be nil before vendor parsing")
 	}
 	ctx.VendorRequest = s.ParseVendor(ctx.Request, ctx.NAS.VendorCode)
-	ctx.IsMacAuth = ctx.VendorRequest.MacAddr != "" && ctx.VendorRequest.MacAddr == ctx.Username
+	// Fast MAC Authentication is not represented consistently across vendors.
+	// Accept a vendor attribute first, then Calling-Station-Id, then a MAC-form
+	// User-Name. The last form is used by switches that send only User-Name.
+	mac := normalizeAuthMAC(ctx.VendorRequest.MacAddr)
+	if mac == "" {
+		mac = normalizeAuthMAC(ctx.CallingStationID)
+	}
+	if mac == "" {
+		mac = normalizeAuthMAC(ctx.Username)
+	}
+	ctx.VendorRequest.MacAddr = mac
+	ctx.IsMacAuth = mac != "" && mac == normalizeAuthMAC(ctx.Username)
 	return nil
 }
 
-// stageBypassCheck 免认证检查：命中启用规则（MAC/IP）时直接 Access-Accept，
-// 跳过用户加载与密码校验（EAP 流程同样短路），并记录一条 bypass 认证日志。
+// normalizeAuthMAC accepts common NAS representations, including 12 hex digits
+// in User-Name, and produces the canonical lowercase colon-separated form.
+func normalizeAuthMAC(raw string) string {
+	raw = strings.TrimSpace(raw)
+	compact := strings.ReplaceAll(strings.ReplaceAll(raw, ":", ""), "-", "")
+	if len(compact) == 12 {
+		raw = strings.Join([]string{
+			compact[0:2], compact[2:4], compact[4:6], compact[6:8], compact[8:10], compact[10:12],
+		}, ":")
+	}
+	mac, err := net.ParseMAC(raw)
+	if err != nil || len(mac) != 6 {
+		return ""
+	}
+	return strings.ToLower(mac.String())
+}
+
+// stageBypassCheck 为哑终端/Fast MAC Authentication 检查 MAC 准入规则。
+// 命中时仅跳过口令校验，仍会执行套餐策略并下发相应的 Access-Accept 属性。
 func (s *AuthService) stageBypassCheck(ctx *AuthPipelineContext) error {
 	rules := s.GetBypassRules()
 	if len(rules) == 0 {
@@ -127,6 +156,27 @@ func (s *AuthService) stageBypassCheck(ctx *AuthPipelineContext) error {
 		return nil
 	}
 
+	profile, err := s.UserRepo.GetProfileByID(ctx.Context, rule.ProfileID)
+	if err != nil || profile == nil || profile.Status != model.RadiusUserStatusEnabled {
+		return nil // Invalid/deleted profiles must fail closed and fall through to normal auth.
+	}
+	profileID := rule.ProfileID
+	terminal := &model.RadiusUser{
+		Username:        ctx.Username,
+		MacAddr:         terminalMAC(rule, ctx),
+		BindMac:         rule.Type == model.RadiusBypassTypeMac,
+		ProfileID:       &profileID,
+		ProfileLinkMode: model.RadiusLinkModeDynamic,
+		Profile:         profile,
+		Status:          model.RadiusUserStatusEnabled,
+		ExpireTime:      time.Now().Add(24 * time.Hour),
+	}
+	// skipPasswordValidation is deliberate here; false makes the normal
+	// checkers (including the profile's concurrent-session limit) run.
+	if err := s.authenticateUser(ctx.Context, ctx.Request, ctx.Response, terminal, ctx.NAS, ctx.VendorRequest, false, true); err != nil {
+		return err
+	}
+	s.applyAcceptEnhancers(terminal, ctx.NAS, ctx.VendorRequest, ctx.Response)
 	s.addResponseMessageAuthenticator(ctx.Response, ctx.NAS.Secret)
 	s.SendAccept(ctx.Writer, ctx.Request, ctx.Response)
 
@@ -150,28 +200,32 @@ func (s *AuthService) stageBypassCheck(ctx *AuthPipelineContext) error {
 	return nil
 }
 
-// matchBypassRule 返回首个命中当前请求的免认证规则。
-// 候选 MAC 取厂商解析结果（已归一为 ':' 分隔）；候选 IP 取
-// Framed-IP-Address 属性与可解析为 IP 的 Calling-Station-Id。
+// matchBypassRule 返回首个命中当前请求、尚未过期且 NAS 范围匹配的规则。
+// IP 规则仅使用 Framed-IP-Address，绝不从 Calling-Station-Id 文本猜测地址。
 func matchBypassRule(rules []model.RadiusBypass, ctx *AuthPipelineContext) (model.RadiusBypass, bool) {
 	mac := ctx.VendorRequest.MacAddr
-
-	var ips []net.IP
-	if ip := rfc2865.FramedIPAddress_Get(ctx.Request.Packet); ip != nil && !ip.IsUnspecified() {
-		ips = append(ips, ip)
-	}
-	if ip := net.ParseIP(strings.TrimSpace(ctx.CallingStationID)); ip != nil {
-		ips = append(ips, ip)
+	var framedIP net.IP
+	if ctx.Request != nil {
+		framedIP = rfc2865.FramedIPAddress_Get(ctx.Request.Packet)
 	}
 
 	for _, rule := range rules {
+		if rule.ProfileID == 0 {
+			continue
+		}
+		if rule.NasID != nil && (ctx.NAS == nil || *rule.NasID != ctx.NAS.ID) {
+			continue
+		}
+		if rule.ExpireTime != nil && !rule.ExpireTime.After(time.Now()) {
+			continue
+		}
 		switch rule.Type {
 		case model.RadiusBypassTypeMac:
 			if mac != "" && model.MacListContains(rule.Value, mac) {
 				return rule, true
 			}
 		case model.RadiusBypassTypeIP:
-			if bypassIPMatch(rule.Value, ips) {
+			if rule.NasID != nil && bypassIPv4Match(rule.Value, framedIP) {
 				return rule, true
 			}
 		}
@@ -179,39 +233,25 @@ func matchBypassRule(rules []model.RadiusBypass, ctx *AuthPipelineContext) (mode
 	return model.RadiusBypass{}, false
 }
 
-// bypassIPMatch 判断规则取值（单 IP 或 CIDR）是否覆盖任一候选 IP。
-func bypassIPMatch(value string, ips []net.IP) bool {
-	if len(ips) == 0 {
-		return false
-	}
-	value = strings.TrimSpace(value)
-	if strings.Contains(value, "/") {
-		_, ipNet, err := net.ParseCIDR(value)
-		if err != nil {
-			return false
-		}
-		for _, ip := range ips {
-			if ipNet.Contains(ip) {
-				return true
-			}
-		}
-		return false
-	}
+func bypassIPv4Match(value string, candidate net.IP) bool {
 	ruleIP := net.ParseIP(value)
-	if ruleIP == nil {
-		return false
+	return ruleIP != nil && ruleIP.To4() != nil && candidate != nil && candidate.To4() != nil && ruleIP.Equal(candidate)
+}
+
+func terminalMAC(rule model.RadiusBypass, ctx *AuthPipelineContext) string {
+	if rule.Type == model.RadiusBypassTypeMac {
+		return rule.Value
 	}
-	for _, ip := range ips {
-		if ruleIP.Equal(ip) {
-			return true
-		}
-	}
-	return false
+	return ctx.VendorRequest.MacAddr
 }
 
 // stageLoadUser 加载并校验用户（状态/有效期，密码已解密，套餐已回填）。
 func (s *AuthService) stageLoadUser(ctx *AuthPipelineContext) error {
-	user, err := s.GetValidUser(ctx.Username, ctx.IsMacAuth)
+	identifier := ctx.Username
+	if ctx.IsMacAuth {
+		identifier = ctx.VendorRequest.MacAddr
+	}
+	user, err := s.GetValidUser(identifier, ctx.IsMacAuth)
 	if err != nil {
 		return err
 	}

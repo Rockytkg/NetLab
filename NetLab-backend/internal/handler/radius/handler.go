@@ -759,13 +759,16 @@ func (h *Handler) DeleteBypassRule(c *gin.Context) {
 
 func bypassToDTO(r *model.RadiusBypass) dtoresponse.RadiusBypassItem {
 	return dtoresponse.RadiusBypassItem{
-		ID:        r.ID,
-		Type:      r.Type,
-		Value:     r.Value,
-		Status:    r.Status,
-		Remark:    r.Remark,
-		CreatedAt: r.CreatedAt,
-		UpdatedAt: r.UpdatedAt,
+		ID:         r.ID,
+		Type:       r.Type,
+		Value:      r.Value,
+		ProfileID:  r.ProfileID,
+		NasID:      r.NasID,
+		ExpireTime: r.ExpireTime,
+		Status:     r.Status,
+		Remark:     r.Remark,
+		CreatedAt:  r.CreatedAt,
+		UpdatedAt:  r.UpdatedAt,
 	}
 }
 
