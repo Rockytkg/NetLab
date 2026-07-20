@@ -31,7 +31,8 @@ import { usePermission } from '@/hooks/usePermission'
 import Can from '@/components/auth/Can'
 import Toolbar from '@/pages/billing/components/Toolbar'
 import { formatRate } from '../format'
-import { renderStatusTag, renderTime } from '@/pages/billing/shared'
+import { billingDetailRow, renderStatusTag, renderTime } from '@/pages/billing/shared'
+import BillingDetailModal from '@/pages/billing/components/BillingDetailModal'
 import type { RadiusProfileOption, RadiusUserItem, RadiusUserPayload } from '@/types/radius'
 
 const { Text } = Typography
@@ -117,6 +118,7 @@ export default function RadiusUsersPage() {
 
   const [modalOpen, setModalOpen] = useState(false)
   const [editingUser, setEditingUser] = useState<RadiusUserItem | null>(null)
+  const [detail, setDetail] = useState<RadiusUserItem | null>(null)
   const [form] = Form.useForm<UserFormValues>()
   const [saving, setSaving] = useState(false)
   const [profileOptions, setProfileOptions] = useState<RadiusProfileOption[]>([])
@@ -459,6 +461,7 @@ export default function RadiusUsersPage() {
           columns={columns}
           dataSource={data}
           loading={loading}
+          onRow={billingDetailRow(setDetail)}
           pagination={{
             current: page,
             pageSize: size,
@@ -474,6 +477,23 @@ export default function RadiusUsersPage() {
           tableLayout="fixed"
         />
       </Card>
+
+      <BillingDetailModal title={detail?.username ?? ''} open={!!detail} onClose={() => setDetail(null)} items={detail ? [
+        { label: t('radius:users.columns.username'), value: detail.username },
+        { label: t('radius:users.columns.realname'), value: detail.realname },
+        { label: t('radius:users.form.email'), value: detail.email },
+        { label: t('radius:users.columns.mobile'), value: detail.mobile },
+        { label: t('radius:users.form.address'), value: detail.address },
+        { label: t('radius:users.columns.profile'), value: detail.profileName },
+        { label: t('radius:users.columns.macAddr'), value: detail.macAddr },
+        { label: t('radius:users.columns.rate'), value: `${formatRate(detail.upRate, unlimited)} / ${formatRate(detail.downRate, unlimited)}` },
+        { label: t('radius:users.columns.activeNum'), value: detail.activeNum || unlimited },
+        { label: t('radius:users.columns.expireTime'), value: renderTime(detail.expireTime) },
+        { label: t('radius:users.columns.online'), value: detail.onlineCount },
+        { label: t('radius:users.columns.lastOnline'), value: renderTime(detail.lastOnline) },
+        { label: t('radius:users.columns.status'), value: renderStatusTag(t, detail.status) },
+        { label: t('radius:common.remark'), value: detail.remark },
+      ] : []} />
 
       {/* 创建/编辑认证用户 */}
       <Modal

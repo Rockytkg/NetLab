@@ -19,7 +19,8 @@ import { usePermission } from '@/hooks/usePermission'
 import Can from '@/components/auth/Can'
 import Toolbar from '@/pages/billing/components/Toolbar'
 import { formatBytes, formatDuration } from '../format'
-import { renderTime } from '@/pages/billing/shared'
+import { billingDetailRow, renderTime } from '@/pages/billing/shared'
+import BillingDetailModal from '@/pages/billing/components/BillingDetailModal'
 import type { RadiusCoAPayload, RadiusSessionItem } from '@/types/radius'
 
 /** CoA 表单值：两个字段均可空，但提交时至少一项有值。 */
@@ -50,6 +51,7 @@ export default function RadiusSessionsPage() {
   // CoA 下发弹窗
   const [coaOpen, setCoaOpen] = useState(false)
   const [coaTarget, setCoaTarget] = useState<RadiusSessionItem | null>(null)
+  const [detail, setDetail] = useState<RadiusSessionItem | null>(null)
   const [coaForm] = Form.useForm<CoaFormValues>()
   const [coaSaving, setCoaSaving] = useState(false)
 
@@ -188,7 +190,7 @@ export default function RadiusSessionsPage() {
       key: 'nasPort',
       width: 90,
       responsive: ['xxl'],
-      render: (val: number) => val || '-',
+      render: (val?: number) => val ?? '-',
     },
     {
       title: t('radius:sessions.columns.startTime'),
@@ -319,6 +321,7 @@ export default function RadiusSessionsPage() {
           columns={columns}
           dataSource={data}
           loading={loading}
+          onRow={billingDetailRow(setDetail)}
           pagination={{
             current: page,
             pageSize: size,
@@ -334,6 +337,22 @@ export default function RadiusSessionsPage() {
           tableLayout="fixed"
         />
       </Card>
+
+      <BillingDetailModal title={detail?.username ?? ''} open={!!detail} onClose={() => setDetail(null)} items={detail ? [
+        { label: t('radius:sessions.columns.username'), value: detail.username },
+        { label: t('radius:sessions.columns.nasAddr'), value: detail.nasAddr },
+        { label: t('radius:sessions.columns.framedIp'), value: detail.framedIpaddr },
+        { label: t('radius:sessions.columns.macAddr'), value: detail.macAddr },
+        { label: t('radius:sessions.columns.nasPort'), value: detail.nasPort },
+        { label: t('radius:sessions.columns.startTime'), value: renderTime(detail.acctStartTime) },
+        { label: t('radius:sessions.columns.sessionTime'), value: formatDuration(detail.acctSessionTime) },
+        { label: t('radius:sessions.columns.sessionTimeout'), value: detail.sessionTimeout ? formatDuration(detail.sessionTimeout) : '-' },
+        { label: t('radius:sessions.columns.upload'), value: formatBytes(detail.acctInputTotal) },
+        { label: t('radius:sessions.columns.download'), value: formatBytes(detail.acctOutputTotal) },
+        { label: t('radius:sessions.columns.lastUpdate'), value: renderTime(detail.lastUpdate) },
+        { label: t('radius:sessions.form.sessionId'), value: detail.acctSessionId },
+        { label: t('radius:sessions.form.nasPortId'), value: detail.nasPortId },
+      ] : []} />
 
       {/* 下发 CoA：修改会话的 Session-Timeout / Filter-Id */}
       <Modal

@@ -31,7 +31,8 @@ import { radiusApi } from '@/services/radius'
 import { usePermission } from '@/hooks/usePermission'
 import Can from '@/components/auth/Can'
 import Toolbar from '@/pages/billing/components/Toolbar'
-import { renderTime } from '@/pages/billing/shared'
+import { billingDetailRow, renderTime } from '@/pages/billing/shared'
+import BillingDetailModal from '@/pages/billing/components/BillingDetailModal'
 import type { RadiusCertItem, RadiusCertPayload, RadiusCertType } from '@/types/radius'
 
 const { Text } = Typography
@@ -114,6 +115,7 @@ export default function RadiusCertsPage() {
   // 新增/编辑弹窗
   const [modalOpen, setModalOpen] = useState(false)
   const [editingCert, setEditingCert] = useState<RadiusCertItem | null>(null)
+  const [detail, setDetail] = useState<RadiusCertItem | null>(null)
   const [form] = Form.useForm<CertFormValues>()
   const [saving, setSaving] = useState(false)
   const [activeFormSection, setActiveFormSection] = useState('general')
@@ -402,6 +404,7 @@ export default function RadiusCertsPage() {
           columns={columns}
           dataSource={data}
           loading={loading}
+          onRow={billingDetailRow(setDetail)}
           pagination={{
             current: page,
             pageSize: size,
@@ -417,6 +420,21 @@ export default function RadiusCertsPage() {
           tableLayout="fixed"
         />
       </Card>
+
+      <BillingDetailModal title={detail?.name ?? ''} open={!!detail} onClose={() => setDetail(null)} items={detail ? [
+        { label: t('radius:certs.columns.name'), value: detail.name },
+        { label: t('radius:certs.form.certType'), value: certTypeTag(detail.certType) },
+        { label: t('radius:certs.metadata.subject'), value: detail.subject },
+        { label: t('radius:certs.metadata.issuer'), value: detail.issuer },
+        { label: t('radius:certs.metadata.serial'), value: detail.serial },
+        { label: t('radius:certs.metadata.fingerprint'), value: detail.fingerprint },
+        { label: t('radius:certs.metadata.notBefore'), value: renderTime(detail.notBefore) },
+        { label: t('radius:certs.metadata.notAfter'), value: renderTime(detail.notAfter) },
+        { label: t('radius:certs.columns.hasKey'), value: detail.hasKey ? t('radius:certs.hasKeyYes') : t('radius:certs.hasKeyNo') },
+        { label: t('radius:common.remark'), value: detail.remark },
+        { label: t('radius:common.createdAt'), value: renderTime(detail.createdAt) },
+        { label: t('radius:common.updatedAt'), value: renderTime(detail.updatedAt) },
+      ] : []} />
 
       {/* 新增/编辑证书 */}
       <Modal

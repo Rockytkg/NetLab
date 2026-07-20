@@ -213,7 +213,7 @@
       "valueMacInvalid": "Invalid MAC address format",
       "valueIpPlaceholder": "192.0.2.10",
       "valueIpInvalid": "Enter a valid IPv4 address",
-      "valueMacTip": "Identifies the device from Calling-Station-Id or a vendor MAC attribute",
+      "valueMacTip": "Accepts AA:BB:CC:DD:EE:FF, AA-BB-CC-DD-EE-FF, or AABBCCDDEEFF; matches Calling-Station-Id, vendor MAC attributes, or User-Name",
       "valueIpTip": "Matches only Framed-IP-Address reported in the selected NAS Access-Request; CIDR is not supported",
       "profile": "Profile",
       "profileRequired": "Select a profile",

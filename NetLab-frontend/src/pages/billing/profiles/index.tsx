@@ -24,7 +24,8 @@ import { usePermission } from '@/hooks/usePermission'
 import Can from '@/components/auth/Can'
 import Toolbar from '@/pages/billing/components/Toolbar'
 import { formatRate } from '@/pages/billing/format'
-import { renderStatusTag } from '@/pages/billing/shared'
+import { billingDetailRow, renderStatusTag, renderTime } from '@/pages/billing/shared'
+import BillingDetailModal from '@/pages/billing/components/BillingDetailModal'
 import type { RadiusProfileItem, RadiusProfilePayload } from '@/types/radius'
 
 const { Text } = Typography
@@ -63,6 +64,7 @@ export default function ProfilesPage() {
   // 新建/编辑共用一个弹窗，editing 为空表示新建
   const [formOpen, setFormOpen] = useState(false)
   const [editing, setEditing] = useState<RadiusProfileItem | null>(null)
+  const [detail, setDetail] = useState<RadiusProfileItem | null>(null)
   const [form] = Form.useForm<ProfileFormValues>()
   const [saving, setSaving] = useState(false)
 
@@ -304,6 +306,7 @@ export default function ProfilesPage() {
           columns={columns}
           dataSource={data}
           loading={loading}
+          onRow={billingDetailRow(setDetail)}
           pagination={{
             current: page,
             pageSize: size,
@@ -319,6 +322,24 @@ export default function ProfilesPage() {
           tableLayout="fixed"
         />
       </Card>
+
+      <BillingDetailModal title={detail?.name ?? ''} open={!!detail} onClose={() => setDetail(null)} items={detail ? [
+        { label: t('radius:profiles.columns.name'), value: detail.name },
+        { label: t('radius:profiles.form.upRate'), value: formatRate(detail.upRate, unlimited) },
+        { label: t('radius:profiles.form.downRate'), value: formatRate(detail.downRate, unlimited) },
+        { label: t('radius:profiles.columns.activeNum'), value: detail.activeNum || unlimited },
+        { label: t('radius:profiles.columns.addrPool'), value: detail.addrPool },
+        { label: t('radius:profiles.form.ipv6PrefixPool'), value: detail.ipv6PrefixPool },
+        { label: t('radius:profiles.form.delegatedIpv6PrefixPool'), value: detail.delegatedIpv6PrefixPool },
+        { label: t('radius:profiles.form.domain'), value: detail.domain },
+        { label: t('radius:profiles.form.bindMac'), value: detail.bindMac ? t('radius:common.enabled') : t('radius:common.disabled') },
+        { label: t('radius:profiles.form.bindVlan'), value: detail.bindVlan ? t('radius:common.enabled') : t('radius:common.disabled') },
+        { label: t('radius:profiles.columns.userCount'), value: detail.userCount },
+        { label: t('radius:common.status'), value: renderStatusTag(t, detail.status) },
+        { label: t('radius:common.remark'), value: detail.remark },
+        { label: t('radius:common.createdAt'), value: renderTime(detail.createdAt) },
+        { label: t('radius:common.updatedAt'), value: renderTime(detail.updatedAt) },
+      ] : []} />
 
       {/* 新建/编辑套餐 */}
       <Modal

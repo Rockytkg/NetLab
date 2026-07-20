@@ -29,7 +29,8 @@ import { radiusApi } from '@/services/radius'
 import { usePermission } from '@/hooks/usePermission'
 import Can from '@/components/auth/Can'
 import Toolbar from '@/pages/billing/components/Toolbar'
-import { renderStatusTag, renderTime } from '@/pages/billing/shared'
+import { billingDetailRow, renderStatusTag, renderTime } from '@/pages/billing/shared'
+import BillingDetailModal from '@/pages/billing/components/BillingDetailModal'
 import type { RadiusBypassItem, RadiusBypassPayload, RadiusBypassType } from '@/types/radius'
 
 const { Text } = Typography
@@ -45,7 +46,7 @@ interface BypassFormValues {
   remark?: string
 }
 
-const MAC_PATTERN = /^[0-9a-fA-F]{2}([:-][0-9a-fA-F]{2}){5}$/
+const MAC_PATTERN = /^(?:[0-9a-fA-F]{2}([:-][0-9a-fA-F]{2}){5}|[0-9a-fA-F]{12})$/
 const IPV4_PATTERN = /^(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}$/
 
 /** 哑终端与交换机 Fast MAC Authentication 的准入规则页。 */
@@ -66,6 +67,7 @@ export default function BypassPage() {
   // 新增/编辑弹窗
   const [modalOpen, setModalOpen] = useState(false)
   const [editing, setEditing] = useState<RadiusBypassItem | null>(null)
+  const [detail, setDetail] = useState<RadiusBypassItem | null>(null)
   const [form] = Form.useForm<BypassFormValues>()
   const [saving, setSaving] = useState(false)
   const [profiles, setProfiles] = useState<Array<{ id: number; name: string }>>([])
@@ -310,6 +312,7 @@ export default function BypassPage() {
             columns={columns}
             dataSource={data}
             loading={loading}
+            onRow={billingDetailRow(setDetail)}
             pagination={{
               current: page,
               pageSize: size,
@@ -326,6 +329,23 @@ export default function BypassPage() {
           />
         </div>
       </Card>
+
+      <BillingDetailModal
+        title={detail ? `${t('radius:bypass.form.type')} · ${detail.value}` : ''}
+        open={!!detail}
+        onClose={() => setDetail(null)}
+        items={detail ? [
+          { label: t('radius:bypass.columns.type'), value: detail.type === 'ip' ? t('radius:bypass.form.typeIp') : t('radius:bypass.form.typeMac') },
+          { label: t('radius:bypass.columns.value'), value: detail.value },
+          { label: t('radius:bypass.columns.profile'), value: profiles.find((profile) => profile.id === detail.profileId)?.name ?? `#${detail.profileId}` },
+          { label: t('radius:bypass.columns.nas'), value: detail.nasId ? nasItems.find((nas) => nas.id === detail.nasId)?.name ?? `#${detail.nasId}` : t('radius:bypass.allNas') },
+          { label: t('radius:bypass.columns.expireTime'), value: renderTime(detail.expireTime) },
+          { label: t('radius:common.status'), value: renderStatusTag(t, detail.status) },
+          { label: t('radius:common.remark'), value: detail.remark },
+          { label: t('radius:common.createdAt'), value: renderTime(detail.createdAt) },
+          { label: t('radius:bypass.columns.updatedAt'), value: renderTime(detail.updatedAt) },
+        ] : []}
+      />
 
       {/* 新增/编辑免认证规则 */}
       <Modal
@@ -358,6 +378,7 @@ export default function BypassPage() {
               <Form.Item
                 name="value"
                 label={t('radius:bypass.form.value')}
+                dependencies={['type']}
                 tooltip={typeWatch === 'ip' ? t('radius:bypass.form.valueIpTip') : t('radius:bypass.form.valueMacTip')}
                 normalize={(value: string) => value?.trim()}
                 rules={[

@@ -28,7 +28,8 @@ import { radiusApi } from '@/services/radius'
 import { usePermission } from '@/hooks/usePermission'
 import Can from '@/components/auth/Can'
 import Toolbar from '@/pages/billing/components/Toolbar'
-import { renderStatusTag } from '@/pages/billing/shared'
+import { billingDetailRow, renderStatusTag, renderTime } from '@/pages/billing/shared'
+import BillingDetailModal from '@/pages/billing/components/BillingDetailModal'
 import { RADIUS_VENDOR_CODES, type RadiusNasItem, type RadiusNasPayload } from '@/types/radius'
 
 const { Text } = Typography
@@ -66,6 +67,7 @@ export default function NasPage() {
   // 新增/编辑弹窗
   const [modalOpen, setModalOpen] = useState(false)
   const [editingNas, setEditingNas] = useState<RadiusNasItem | null>(null)
+  const [detail, setDetail] = useState<RadiusNasItem | null>(null)
   const [form] = Form.useForm<NasFormValues>()
   const [saving, setSaving] = useState(false)
   const [activeFormSection, setActiveFormSection] = useState('identity')
@@ -319,6 +321,7 @@ export default function NasPage() {
           columns={columns}
           dataSource={data}
           loading={loading}
+          onRow={billingDetailRow(setDetail)}
           pagination={{
             current: page,
             pageSize: size,
@@ -334,6 +337,21 @@ export default function NasPage() {
           tableLayout="fixed"
         />
       </Card>
+
+      <BillingDetailModal title={detail?.name ?? ''} open={!!detail} onClose={() => setDetail(null)} items={detail ? [
+        { label: t('radius:nas.columns.name'), value: detail.name },
+        { label: t('radius:nas.columns.vendor'), value: vendorLabel(detail.vendorCode) },
+        { label: t('radius:nas.columns.ipaddr'), value: detail.ipaddr },
+        { label: t('radius:nas.columns.identifier'), value: detail.identifier },
+        { label: t('radius:nas.form.hostname'), value: detail.hostname },
+        { label: t('radius:nas.columns.model'), value: detail.model },
+        { label: t('radius:nas.columns.coaPort'), value: detail.coaPort },
+        { label: t('radius:nas.form.tags'), value: detail.tags },
+        { label: t('radius:common.status'), value: renderStatusTag(t, detail.status) },
+        { label: t('radius:common.remark'), value: detail.remark },
+        { label: t('radius:common.createdAt'), value: renderTime(detail.createdAt) },
+        { label: t('radius:common.updatedAt'), value: renderTime(detail.updatedAt) },
+      ] : []} />
 
       {/* 新增/编辑 NAS 设备 */}
       <Modal

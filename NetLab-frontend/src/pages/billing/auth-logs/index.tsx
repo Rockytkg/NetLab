@@ -16,7 +16,8 @@ import { radiusApi } from '@/services/radius'
 import { usePermission } from '@/hooks/usePermission'
 import Can from '@/components/auth/Can'
 import Toolbar from '@/pages/billing/components/Toolbar'
-import { renderTime } from '@/pages/billing/shared'
+import { billingDetailRow, renderTime } from '@/pages/billing/shared'
+import BillingDetailModal from '@/pages/billing/components/BillingDetailModal'
 import type { RadiusAuthLogItem } from '@/types/radius'
 
 const { Text } = Typography
@@ -44,6 +45,7 @@ export default function RadiusAuthLogsPage() {
   const [resultFilter, setResultFilter] = useState('')
   const [loading, setLoading] = useState(false)
   const [selectedRowKeys, setSelectedRowKeys] = useState<Key[]>([])
+  const [detail, setDetail] = useState<RadiusAuthLogItem | null>(null)
 
   const load = useCallback(async () => {
     if (!canReadLogs) return
@@ -210,6 +212,7 @@ export default function RadiusAuthLogsPage() {
           columns={columns}
           dataSource={data}
           loading={loading}
+          onRow={billingDetailRow(setDetail)}
           rowSelection={{
             selectedRowKeys,
             onChange: setSelectedRowKeys,
@@ -229,6 +232,16 @@ export default function RadiusAuthLogsPage() {
           tableLayout="fixed"
         />
       </Card>
+
+      <BillingDetailModal title={detail?.username ?? ''} open={!!detail} onClose={() => setDetail(null)} items={detail ? [
+        { label: t('radius:authLogs.columns.time'), value: renderTime(detail.createdAt) },
+        { label: t('radius:authLogs.columns.username'), value: detail.username },
+        { label: t('radius:authLogs.columns.authType'), value: detail.authType === 'bypass' ? t('radius:authLogs.authTypeBypass') : detail.authType },
+        { label: t('radius:authLogs.columns.result'), value: detail.result },
+        { label: t('radius:authLogs.columns.nasAddr'), value: detail.nasAddr },
+        { label: t('radius:authLogs.columns.macAddr'), value: detail.macAddr },
+        { label: t('radius:authLogs.columns.reason'), value: detail.reason },
+      ] : []} />
     </div>
   )
 }

@@ -4,8 +4,8 @@ import {
   Card,
   DatePicker,
   Descriptions,
-  Drawer,
   Input,
+  Modal,
   Result,
   Table,
   Tag,
@@ -18,7 +18,7 @@ import dayjs, { type Dayjs } from 'dayjs'
 import { radiusApi } from '@/services/radius'
 import { usePermission } from '@/hooks/usePermission'
 import Toolbar from '@/pages/billing/components/Toolbar'
-import { renderTime } from '@/pages/billing/shared'
+import { billingDetailRow, renderTime } from '@/pages/billing/shared'
 import type { RadiusAccountingItem } from '@/types/radius'
 import { formatBytes, formatDuration } from '../format'
 
@@ -241,6 +241,7 @@ export default function AccountingPage() {
           columns={columns}
           dataSource={data}
           loading={loading}
+          onRow={billingDetailRow(setDetail)}
           pagination={{
             current: page,
             pageSize: size,
@@ -258,11 +259,12 @@ export default function AccountingPage() {
       </Card>
 
       {/* 记账详情 */}
-      <Drawer
+      <Modal
         title={t('radius:accounting.detailTitle', { username: detail?.username ?? '' })}
         open={!!detail}
-        onClose={() => setDetail(null)}
-        size="min(520px, 100vw)"
+        onCancel={() => setDetail(null)}
+        footer={null}
+        width={{ xs: 'calc(100vw - 32px)', sm: 720 }}
       >
         {detail && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -354,7 +356,7 @@ export default function AccountingPage() {
                 {formatBytes(detail.acctOutputTotal)}
               </Descriptions.Item>
               <Descriptions.Item label={t('radius:accounting.fields.totalTraffic')}>
-                {formatBytes((detail.acctInputTotal || 0) + (detail.acctOutputTotal || 0))}
+                {formatBytes((detail.acctInputTotal ?? 0) + (detail.acctOutputTotal ?? 0))}
               </Descriptions.Item>
               <Descriptions.Item label={t('radius:accounting.fields.acctInputPackets')}>
                 {detail.acctInputPackets ?? '-'}
@@ -388,7 +390,7 @@ export default function AccountingPage() {
             </Descriptions>
           </div>
         )}
-      </Drawer>
+      </Modal>
     </div>
   )
 }

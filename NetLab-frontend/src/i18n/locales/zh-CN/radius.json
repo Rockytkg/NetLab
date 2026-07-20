@@ -213,7 +213,7 @@
       "valueMacInvalid": "MAC 地址格式不正确",
       "valueIpPlaceholder": "192.0.2.10",
       "valueIpInvalid": "请输入有效的 IPv4 地址",
-      "valueMacTip": "使用 Calling-Station-Id 或厂商 MAC 属性识别终端",
+      "valueMacTip": "支持 AA:BB:CC:DD:EE:FF、AA-BB-CC-DD-EE-FF 或 AABBCCDDEEFF；匹配 Calling-Station-Id、厂商 MAC 属性或 User-Name",
       "valueIpTip": "仅匹配该 NAS 在 Access-Request 中上报的 Framed-IP-Address，不支持网段",
       "profile": "策略套餐",
       "profileRequired": "请选择策略套餐",
