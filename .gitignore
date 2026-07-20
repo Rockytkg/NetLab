@@ -57,7 +57,6 @@ temp/
 
 # ===== AI 辅助工具相关（不提交） =====
 # Claude Code / Anthropic
-# 注：CLAUDE.md 作为团队共享的项目开发指引，保留提交
 CLAUDE.local.md
 .claude/
 skills-lock.json

@@ -1,6 +1,3 @@
 # NetLab
 
-AI coding agent 入口文档：
-
-- [Development Constitution](CLAUDE.md)
-- [API Guide for AI Coding Agents](docs/api-for-ai-agents.md)
+本仓库将 AI 辅助工具的本地配置与指引排除在 Git 之外，具体规则以根目录 `.gitignore` 为准。

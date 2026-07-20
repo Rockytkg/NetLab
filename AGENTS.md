@@ -59,4 +59,4 @@ Pull requests should include a clear description, linked issue when available, s
 
 ## Security & Configuration Tips
 
-Do not commit `.env` or `.env.local`. Keep frontend and backend pre-shared auth/signature keys synchronized between `NetLab-frontend/.env.local` and `NetLab-backend/.env`. Review `CLAUDE.md` and `NetLab-frontend/CLAUDE.md` before larger architecture or UI changes.
+Do not commit `.env` or `.env.local`. Keep frontend and backend pre-shared auth/signature keys synchronized between `NetLab-frontend/.env.local` and `NetLab-backend/.env`. Local AI-assistant guidance such as `CLAUDE.md` is ignored by Git; consult it when it is available locally, but do not rely on it as a versioned project artifact.
