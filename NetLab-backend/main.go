@@ -19,16 +19,24 @@ import (
 	"netlab-backend/internal/handler/admin"
 	"netlab-backend/internal/handler/auth"
 	loghandler "netlab-backend/internal/handler/log"
+	portalHandler "netlab-backend/internal/handler/portal"
 	radiusHandler "netlab-backend/internal/handler/radius"
 	rbacHandler "netlab-backend/internal/handler/rbac"
 	"netlab-backend/internal/mailer"
 	"netlab-backend/internal/middleware"
+	"netlab-backend/internal/portal"
+	"netlab-backend/internal/portal/protocol"
+	cmccv1 "netlab-backend/internal/portal/protocol/cmcc/v1"
+	cmccv2 "netlab-backend/internal/portal/protocol/cmcc/v2"
+	huaweiv1 "netlab-backend/internal/portal/protocol/huawei/v1"
+	huaweiv2 "netlab-backend/internal/portal/protocol/huawei/v2"
 	"netlab-backend/internal/radiusd"
 	"netlab-backend/internal/repository"
 	"netlab-backend/internal/router"
 	authsvc "netlab-backend/internal/service/auth"
 	sysconfig "netlab-backend/internal/service/config"
 	logsvc "netlab-backend/internal/service/log"
+	portalsvc "netlab-backend/internal/service/portal"
 	radiussvc "netlab-backend/internal/service/radius"
 	"netlab-backend/internal/service/rbac"
 	"netlab-backend/pkg/captcha"
@@ -127,6 +135,8 @@ func main() {
 	radiusAuthLogRepo := repository.NewRadiusAuthLogRepository(db)
 	radiusCertRepo := repository.NewRadiusCertRepository(db)
 	radiusBypassRepo := repository.NewRadiusBypassRepository(db)
+	portalNasRepo := repository.NewPortalNasRepository(db)
+	portalSessionRepo := repository.NewPortalSessionRepository(db)
 
 	// ── 初始化运行时配置服务 ─────────────────────────────────────────
 	configService := sysconfig.NewService(configRepo, configCipher, rdb)
@@ -190,6 +200,28 @@ func main() {
 		radiusUserRepo, radiusNasRepo, radiusSessionRepo, radiusAccountingRepo, radiusAuthLogRepo, radiusCertRepo, radiusBypassRepo,
 		configCipher, radiusManager, configService, cfg.Radius,
 	)
+	// Portal 协议实现必须在组合根显式注册，避免 init 顺序影响运行时行为。
+	portalRegistry := protocol.NewRegistry()
+	for _, handler := range []protocol.ProtocolHandler{
+		cmccv1.NewHandler(nil), cmccv2.NewHandler(nil),
+		huaweiv1.NewHandler(nil), huaweiv2.NewHandler(nil),
+	} {
+		if err := portalRegistry.Register(handler); err != nil {
+			logger.Fatal("注册Portal协议失败", zap.String("profile", string(handler.Profile())), zap.Error(err))
+		}
+	}
+	portalMgmtService := portalsvc.NewService(
+		portalNasRepo, portalSessionRepo, configCipher,
+		portal.NewProtocolClient(portalRegistry, logger), portalsvc.NewSessionStore(rdb), configService, cfg.Portal, logger,
+	)
+	if err := portalMgmtService.Start(context.Background()); err != nil {
+		logger.Fatal("初始化Portal运行时失败", zap.Error(err))
+	}
+	portalManager := portal.NewManager(logger, portalMgmtService.HandleNotification)
+	portalMgmtService.SetManager(portalManager)
+	if err := portalManager.Apply(portalMgmtService.EffectiveConfig(context.Background())); err != nil {
+		logger.Fatal("初始化Portal通知监听器失败", zap.Error(err))
+	}
 	adminService := authsvc.NewAdminService(configService, passkeyService)
 
 	// ── 初始化处理器 ─────────────────────────────────────────────────
@@ -198,10 +230,11 @@ func main() {
 	authHandler := auth.NewAuthHandler(
 		authService, verificationService, passwordService, passkeyService, tokenService, oauthService, twoFactorService, captchaMgr, rbacService, loginLogService, logger,
 	)
-	adminHandler := admin.NewAdminHandler(adminService, userAdminService, importService, emailSender, radiusMgmtService, logger)
+	adminHandler := admin.NewAdminHandler(adminService, userAdminService, importService, emailSender, radiusMgmtService, portalMgmtService, logger)
 	rHandler := rbacHandler.NewHandler(rbacService)
 	logHandler := loghandler.NewHandler(loginLogService)
 	radiusHandler := radiusHandler.NewHandler(radiusMgmtService)
+	portalHandler := portalHandler.NewHandler(portalMgmtService)
 
 	// ── 初始化限流器 ─────────────────────────────────────────────────
 	var rateLimiter *middleware.RateLimiter
@@ -218,6 +251,7 @@ func main() {
 		RBACHandler:   rHandler,
 		LogHandler:    logHandler,
 		RadiusHandler: radiusHandler,
+		PortalHandler: portalHandler,
 		AuthService:   authService,
 		TokenService:  tokenService,
 		CryptoService: cryptoService,
@@ -248,7 +282,6 @@ func main() {
 			zap.Bool("radsec", effectiveRadiusCfg.RadsecEnabled),
 		)
 	}
-
 	// 在 goroutine 中启动服务器
 	go func() {
 		logger.Info("Server listening", zap.String("addr", srv.Addr))
@@ -276,6 +309,12 @@ func main() {
 		defer radiusCancel()
 		radiusManager.Shutdown(radiusCtx)
 		logger.Info("RADIUS service stopped")
+	}
+	if err := portalManager.Shutdown(); err != nil {
+		logger.Warn("Portal通知监听器停止失败", zap.Error(err))
+	}
+	if err := portalMgmtService.Shutdown(ctx); err != nil {
+		logger.Warn("Portal运行时停止超时", zap.Error(err))
 	}
 
 	logger.Info("Server exited gracefully")

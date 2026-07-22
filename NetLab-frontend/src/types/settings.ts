@@ -118,6 +118,12 @@ export interface RadiusListenerSettings {
   acctPort: number
 }
 
+/** 认证计费页统一保存的 RADIUS 与 Portal 监听配置。 */
+export interface BillingSettings {
+	radius: RadiusListenerSettings
+	portal: { enabled: boolean; notifyPort: number }
+}
+
 /** 单用户创建字段 */
 export interface CreateUserParams {
 	username: string

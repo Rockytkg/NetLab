@@ -33,7 +33,8 @@ export default function SideMenu({ collapsed }: SideMenuProps) {
 	const canReadUsers = can('user.read')
 	const canReadRbac = can('rbac.read')
 	const canReadLogs = can('log.read')
-	const canReadRadius = can('radius.read')
+		const canReadRadius = can('radius.read')
+		const canReadPortal = can('portal.read')
 
   type MenuItem = Required<MenuProps>['items'][number]
   const rootSubmenuKeys = ['administration', 'billing']
@@ -45,7 +46,7 @@ export default function SideMenu({ collapsed }: SideMenuProps) {
         icon: <DashboardOutlined />,
         label: t('dashboard'),
       },
-      ...(canReadRadius
+	      ...(canReadRadius || canReadPortal
         ? [
             {
               key: 'billing',
@@ -68,8 +69,9 @@ export default function SideMenu({ collapsed }: SideMenuProps) {
                   key: 'billing-auth',
                   label: t('radiusGroupAuth'),
                   children: [
-                    { key: '/billing/dot1x', icon: <SecurityScanOutlined />, label: t('radiusDot1x') },
-                    { key: '/billing/bypass', icon: <UnlockOutlined />, label: t('radiusBypass') },
+	            { key: '/billing/dot1x', icon: <SecurityScanOutlined />, label: t('radiusDot1x') },
+	                    { key: '/billing/bypass', icon: <UnlockOutlined />, label: t('radiusBypass') },
+	                    ...(canReadPortal ? [{ key: '/billing/portal', icon: <WifiOutlined />, label: t('portal') }] : []),
                   ],
                 },
                 {
@@ -132,7 +134,7 @@ export default function SideMenu({ collapsed }: SideMenuProps) {
           ]
         : []),
     ],
-    [canReadSettings, canReadUsers, canReadRbac, canReadLogs, canReadRadius, t],
+	    [canReadSettings, canReadUsers, canReadRbac, canReadLogs, canReadRadius, canReadPortal, t],
   )
 
   const leafKeys = useMemo(() => {

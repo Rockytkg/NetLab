@@ -57,6 +57,9 @@
     "twoFactorRequiredHelp": "开启后，未绑定两步验证的用户登录后台时必须先完成绑定。"
   },
   "billing": {
+	"portalEnabled": "启用 Portal 通知监听",
+	"portalEnabledHelp": "接收 AC 主动发送的用户下线通知。",
+	"portalNotifyPort": "Portal 通知端口",
     "enabled": "启用 RADIUS 服务",
     "enabledHelp": "控制 RADIUS 认证与记账监听器的运行状态。",
     "bindHost": "监听地址",
@@ -329,6 +332,10 @@
       "radius": {
         "read": "查看认证计费数据",
         "manage": "管理认证用户、NAS 设备、套餐与会话"
+      },
+      "portal": {
+        "read": "查看 Portal NAS 与会话",
+        "manage": "管理 Portal NAS 与会话"
       },
       "rbac": {
         "read": "查看角色与权限",

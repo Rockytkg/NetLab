@@ -20,5 +20,6 @@
   "radiusDot1x": "802.1X",
   "radiusBypass": "Auth Bypass",
   "radiusCerts": "Certificates",
-  "radiusSettings": "Service Settings"
+  "radiusSettings": "Service Settings",
+  "portal": "Portal Authentication"
 }

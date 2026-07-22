@@ -2,6 +2,9 @@ package config
 
 import (
 	"fmt"
+	"net"
+	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -24,6 +27,7 @@ type Config struct {
 	Captcha   CaptchaConfig
 	Log       LogConfig
 	Radius    RadiusConfig
+	Portal    PortalConfig
 }
 
 // ServerConfig 保存服务器相关配置。
@@ -49,10 +53,16 @@ type DatabaseConfig struct {
 
 // DSN 返回 PostgreSQL 连接字符串。
 func (d DatabaseConfig) DSN() string {
-	return fmt.Sprintf(
-		"host=%s port=%d user=%s password=%s dbname=%s sslmode=%s",
-		d.Host, d.Port, d.User, d.Password, d.Name, d.SSLMode,
-	)
+	u := &url.URL{
+		Scheme: "postgres",
+		User:   url.UserPassword(d.User, d.Password),
+		Host:   net.JoinHostPort(d.Host, strconv.Itoa(d.Port)),
+		Path:   d.Name,
+	}
+	q := u.Query()
+	q.Set("sslmode", d.SSLMode)
+	u.RawQuery = q.Encode()
+	return u.String()
 }
 
 // RedisConfig 保存 Redis 连接配置。
@@ -182,6 +192,13 @@ type RadiusConfig struct {
 	RadsecCACertID uint64
 }
 
+// PortalConfig controls the NAS-initiated Portal notification listener.
+type PortalConfig struct {
+	Enabled    bool
+	BindHost   string
+	NotifyPort int
+}
+
 // Load 从 .env 文件和环境变量中读取配置。
 func Load() (*Config, error) {
 	v := viper.New()
@@ -262,13 +279,15 @@ func Load() (*Config, error) {
 	v.SetDefault("RADIUS_RADSEC_CERT_FILE", "")
 	v.SetDefault("RADIUS_RADSEC_KEY_FILE", "")
 	v.SetDefault("RADIUS_RADSEC_CA_FILE", "")
+	v.SetDefault("PORTAL_ENABLED", false)
+	v.SetDefault("PORTAL_BIND_HOST", "0.0.0.0")
+	v.SetDefault("PORTAL_NOTIFY_PORT", 50100)
 
-	// 从 .env 读取
-	v.SetConfigFile(".env")
-	v.SetConfigType("env")
+	// 操作系统环境变量优先于 .env，便于容器化部署覆盖本地配置。
 	v.AutomaticEnv()
-
-	_ = v.ReadInConfig() // 如果 .env 不存在则忽略错误
+	if err := mergeEnvFile(v, ".env"); err != nil {
+		return nil, err
+	}
 
 	// 解析时长
 	readTimeout := durationOrDefault(v.GetString("SERVER_READ_TIMEOUT"), 30*time.Second)
@@ -362,6 +381,7 @@ func Load() (*Config, error) {
 			RadsecKeyFile:            v.GetString("RADIUS_RADSEC_KEY_FILE"),
 			RadsecCAFile:             v.GetString("RADIUS_RADSEC_CA_FILE"),
 		},
+		Portal: PortalConfig{Enabled: v.GetBool("PORTAL_ENABLED"), BindHost: v.GetString("PORTAL_BIND_HOST"), NotifyPort: v.GetInt("PORTAL_NOTIFY_PORT")},
 	}
 
 	if cfg.JWT.AccessSecret == "" || cfg.JWT.RefreshSecret == "" {
@@ -369,6 +389,12 @@ func Load() (*Config, error) {
 	}
 	if cfg.JWT.AccessSecret == cfg.JWT.RefreshSecret {
 		return nil, fmt.Errorf("JWT access and refresh secrets must be different")
+	}
+	if err := validateDatabaseConfig(cfg.DB); err != nil {
+		return nil, err
+	}
+	if cfg.Portal.Enabled && (cfg.Portal.NotifyPort < 1 || cfg.Portal.NotifyPort > 65535) {
+		return nil, fmt.Errorf("PORTAL_NOTIFY_PORT must be between 1 and 65535")
 	}
 	if cfg.JWT.SigningMode != "HS256" && cfg.JWT.SigningMode != "RS256" {
 		return nil, fmt.Errorf("unsupported JWT signing mode: %s", cfg.JWT.SigningMode)
@@ -395,6 +421,19 @@ func Load() (*Config, error) {
 	}
 
 	return cfg, nil
+}
+
+func validateDatabaseConfig(cfg DatabaseConfig) error {
+	if strings.TrimSpace(cfg.Host) == "" || strings.TrimSpace(cfg.User) == "" || strings.TrimSpace(cfg.Name) == "" {
+		return fmt.Errorf("DB_HOST, DB_USER, and DB_NAME must be non-empty")
+	}
+	if cfg.Port < 1 || cfg.Port > 65535 {
+		return fmt.Errorf("DB_PORT must be between 1 and 65535")
+	}
+	if cfg.MaxOpenConns < 1 || cfg.MaxIdleConns < 0 || cfg.MaxIdleConns > cfg.MaxOpenConns {
+		return fmt.Errorf("DB connection pool settings must satisfy 0 <= DB_MAX_IDLE_CONNS <= DB_MAX_OPEN_CONNS")
+	}
+	return nil
 }
 
 // splitAndTrim 分割以逗号分隔的字符串并去除每个元素的空白字符。

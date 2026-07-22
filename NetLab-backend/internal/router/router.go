@@ -12,6 +12,7 @@ import (
 	"netlab-backend/internal/handler/admin"
 	"netlab-backend/internal/handler/auth"
 	loghandler "netlab-backend/internal/handler/log"
+	portalHandler "netlab-backend/internal/handler/portal"
 	radiusHandler "netlab-backend/internal/handler/radius"
 	rbacHandler "netlab-backend/internal/handler/rbac"
 	"netlab-backend/internal/middleware"
@@ -29,6 +30,7 @@ type RouterConfig struct {
 	RBACHandler   *rbacHandler.Handler
 	LogHandler    *loghandler.Handler
 	RadiusHandler *radiusHandler.Handler
+	PortalHandler *portalHandler.Handler
 	AuthService   *authsvc.AuthService
 	TokenService  *authsvc.TokenService
 	CryptoService *authsvc.CryptoService
@@ -64,6 +66,9 @@ func Setup(cfg RouterConfig) *gin.Engine {
 	// ── API 路由 ──────────────────────────────────────────
 	api := r.Group("/api")
 	{
+		if cfg.PortalHandler != nil {
+			api.POST("/portal/authenticate", cfg.limitStrict("portal-authenticate"), cfg.PortalHandler.Authenticate)
+		}
 		publicAuth := api.Group(authRoutePrefix)
 		publicAuth.Use(middleware.OptionalAuth(cfg.JWTManager, cfg.SessionStore))
 		{
@@ -506,6 +511,19 @@ func Setup(cfg RouterConfig) *gin.Engine {
 				}
 			}
 
+			// ── Portal 认证管理 ──
+			if cfg.PortalHandler != nil {
+				portalGroup := authenticated.Group("/portal")
+				portalGroup.GET("/settings", cfg.limitStandard("portal-settings-get"), middleware.RequirePermission(cfg.Authorizer, permission.PortalRead), cfg.PortalHandler.GetSettings)
+				portalGroup.PUT("/settings", cfg.limitModerate("portal-settings-update"), middleware.RequirePermission(cfg.Authorizer, permission.PortalManage), cfg.PortalHandler.UpdateSettings)
+				portalGroup.GET("/nas", cfg.limitStandard("portal-nas-list"), middleware.RequirePermission(cfg.Authorizer, permission.PortalRead), cfg.PortalHandler.ListNas)
+				portalGroup.POST("/nas", cfg.limitModerate("portal-nas-create"), middleware.RequirePermission(cfg.Authorizer, permission.PortalManage), cfg.PortalHandler.CreateNas)
+				portalGroup.PUT("/nas/:id", cfg.limitModerate("portal-nas-update"), middleware.RequirePermission(cfg.Authorizer, permission.PortalManage), cfg.PortalHandler.UpdateNas)
+				portalGroup.DELETE("/nas/:id", cfg.limitModerate("portal-nas-delete"), middleware.RequirePermission(cfg.Authorizer, permission.PortalManage), cfg.PortalHandler.DeleteNas)
+				portalGroup.GET("/sessions", cfg.limitStandard("portal-sessions-list"), middleware.RequirePermission(cfg.Authorizer, permission.PortalRead), cfg.PortalHandler.ListSessions)
+				portalGroup.DELETE("/sessions/:id", cfg.limitModerate("portal-sessions-terminate"), middleware.RequirePermission(cfg.Authorizer, permission.PortalManage), cfg.PortalHandler.TerminateSession)
+			}
+
 			// ── 按资源划分的受保护路由 ──
 			if cfg.AdminHandler != nil {
 				settingsGroup := authenticated.Group("/settings")
@@ -526,6 +544,8 @@ func Setup(cfg RouterConfig) *gin.Engine {
 						middleware.RequirePermission(cfg.Authorizer, permission.SettingRead),
 						cfg.AdminHandler.GetRadiusListenerSettings,
 					)
+					settingsGroup.GET("/billing", cfg.limitStandard("admin-billing-get"), middleware.RequirePermission(cfg.Authorizer, permission.SettingRead), cfg.AdminHandler.GetBillingSettings)
+					settingsGroup.PUT("/billing", cfg.limitModerate("admin-billing-update"), middleware.RequirePermission(cfg.Authorizer, permission.SettingUpdate), cfg.AdminHandler.UpdateBillingSettings)
 					settingsGroup.PUT("/radius-listener",
 						cfg.limitModerate("admin-radius-listener-update"),
 						middleware.RequirePermission(cfg.Authorizer, permission.SettingUpdate),

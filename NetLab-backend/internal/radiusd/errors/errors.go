@@ -318,12 +318,6 @@ func WrapAcctError(metricsType string, err error) error {
 	return NewAcctErrorWithCause(metricsType, err.Error(), err)
 }
 
-// WrapError converts a general error into an AuthError (deprecated, use WrapAuthError)
-// Kept for backward compatibility
-func WrapError(metricsType string, err error) error {
-	return WrapAuthError(metricsType, err)
-}
-
 // NewError creates a generic non-typed error
 func NewError(message string) error {
 	return errors.New(message)

@@ -1,0 +1,13 @@
+{
+  "title": "Portal Authentication",
+  "common": { "actions": "Actions", "edit": "Edit", "delete": "Delete" },
+  "vendor": { "mobile": "China Mobile", "huawei": "Huawei" },
+  "profile": { "cmccV1": "China Mobile Portal V1", "cmccV2": "China Mobile WLAN V2.0.0", "huaweiV1": "Huawei Portal V1", "huaweiV2": "Huawei Portal V2" },
+  "status": { "enabled": "Enabled", "disabled": "Disabled", "terminated": "Terminated" },
+  "nas": { "tab": "Portal NAS", "create": "Add NAS", "edit": "Edit NAS", "search": "Search name or source IP", "name": "Name", "identifier": "AC identifier", "vendor": "Vendor", "profile": "Protocol version", "sourceIp": "Source IP", "acPort": "AC port", "secret": "Shared secret", "status": "Status" },
+  "settings": { "enabled": "Enable Portal notification listener", "enabledHelp": "Receive NAS-initiated user logout notifications.", "bindHost": "Bind host", "notifyPort": "Notification port" },
+  "sessions": { "tab": "Online Sessions", "search": "Search username", "username": "Username", "clientIp": "Client IP", "mac": "MAC Address", "authenticatedAt": "Authenticated at", "lastSeenAt": "Last seen", "terminate": "Disconnect" },
+  "confirm": { "deleteNas": "Delete this Portal NAS?", "terminate": "Send a logout request to the device?" },
+  "messages": { "saved": "Saved", "deleted": "Deleted", "terminated": "Logout request sent" },
+  "login": { "title": "WLAN Network Login", "username": "Username", "password": "Password", "authType": "Authentication method", "chap": "CHAP", "pap": "PAP", "submit": "Connect", "missingContext": "Missing AC or client network address", "success": "Connected", "successDetail": "Network access is now available." }
+}

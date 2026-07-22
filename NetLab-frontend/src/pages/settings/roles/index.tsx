@@ -53,7 +53,7 @@ const ADMIN_RESOURCES = [
 ] as const
 
 /** 项目认证计费菜单下的资源节点，与左侧菜单结构对应。 */
-const BILLING_RESOURCES = [{ resource: 'radius', menuTitleKey: 'billing' }] as const
+const BILLING_RESOURCES = [{ resource: 'radius', menuTitleKey: 'billing' }, { resource: 'portal', menuTitleKey: 'portal' }] as const
 
 /** 账户相关的资源节点（不属于系统管理菜单）。 */
 const ACCOUNT_RESOURCES = ['auth']

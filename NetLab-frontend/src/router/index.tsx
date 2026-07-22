@@ -37,6 +37,8 @@ const RadiusSettingsPage = lazy(() => import('@/pages/billing/settings'))
 const RadiusDot1xPage = lazy(() => import('@/pages/billing/dot1x'))
 const RadiusBypassPage = lazy(() => import('@/pages/billing/bypass'))
 const RadiusCertsPage = lazy(() => import('@/pages/billing/certs'))
+const PortalPage = lazy(() => import('@/pages/billing/portal'))
+const PortalLoginPage = lazy(() => import('@/pages/portal-login'))
 
 const router = createBrowserRouter([
   // ── 公开路由 ──
@@ -55,6 +57,10 @@ const router = createBrowserRouter([
   {
     path: '/403',
     element: <ForbiddenPage />,
+  },
+  {
+    path: '/portal',
+    element: <PortalLoginPage />,
   },
   {
     path: '/account/security-required',
@@ -123,6 +129,7 @@ const router = createBrowserRouter([
       { path: '/billing/bypass', element: <RadiusBypassPage /> },
       { path: '/billing/certs', element: <RadiusCertsPage /> },
       { path: '/billing/settings', element: <RadiusSettingsPage /> },
+      { path: '/billing/portal', element: <PortalPage /> },
       // 旧配置页合并/迁移后的兼容重定向
       { path: '/billing/radius-config', element: <Navigate to="/billing/settings" replace /> },
       { path: '/billing/eap-config', element: <Navigate to="/billing/dot1x" replace /> },

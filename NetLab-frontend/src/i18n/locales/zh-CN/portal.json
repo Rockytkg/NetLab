@@ -1,0 +1,13 @@
+{
+  "title": "Portal 认证",
+  "common": { "actions": "操作", "edit": "编辑", "delete": "删除" },
+  "vendor": { "mobile": "移动", "huawei": "华为" },
+  "profile": { "cmccV1": "中国移动 Portal V1", "cmccV2": "中国移动 WLAN V2.0.0", "huaweiV1": "华为 Portal V1", "huaweiV2": "华为 Portal V2" },
+  "status": { "enabled": "启用", "disabled": "停用", "terminated": "已终止" },
+  "nas": { "tab": "Portal NAS", "create": "新增 NAS", "edit": "编辑 NAS", "search": "搜索名称或源 IP", "name": "名称", "identifier": "AC 标识", "vendor": "厂商", "profile": "协议版本", "sourceIp": "源 IP", "acPort": "AC 端口", "secret": "共享密钥", "status": "状态" },
+  "settings": { "enabled": "启用 Portal 通知监听", "enabledHelp": "接收 AC 主动发送的用户下线通知。", "bindHost": "绑定地址", "notifyPort": "通知端口" },
+  "sessions": { "tab": "在线会话", "search": "搜索用户名", "username": "用户名", "clientIp": "客户端 IP", "mac": "MAC 地址", "authenticatedAt": "认证时间", "lastSeenAt": "最后活动", "terminate": "强制下线" },
+  "confirm": { "deleteNas": "确定删除该 Portal NAS 吗？", "terminate": "确定向设备发送下线通知吗？" },
+  "messages": { "saved": "已保存", "deleted": "已删除", "terminated": "已发送下线请求" },
+  "login": { "title": "WLAN 网络认证", "username": "用户名", "password": "密码", "authType": "认证方式", "chap": "CHAP", "pap": "PAP", "submit": "连接网络", "missingContext": "缺少 AC 或用户网络地址", "success": "认证成功", "successDetail": "网络访问已开通。" }
+}

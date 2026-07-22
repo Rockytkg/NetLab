@@ -57,6 +57,9 @@
     "twoFactorRequiredHelp": "When on, users without 2FA must bind an authenticator before accessing the backend."
   },
   "billing": {
+	"portalEnabled": "Enable Portal notification listener",
+	"portalEnabledHelp": "Receive NAS-initiated user logout notifications.",
+	"portalNotifyPort": "Portal notification port",
     "enabled": "Enable RADIUS Service",
     "enabledHelp": "Controls whether the RADIUS authentication and accounting listeners run.",
     "bindHost": "Bind Host",
@@ -329,6 +332,10 @@
       "radius": {
         "read": "View RADIUS billing data",
         "manage": "Manage RADIUS users, NAS devices, profiles and sessions"
+      },
+      "portal": {
+        "read": "View Portal NAS devices and sessions",
+        "manage": "Manage Portal NAS devices and sessions"
       },
       "rbac": {
         "read": "View roles and permissions",

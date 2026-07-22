@@ -35,6 +35,7 @@ const (
 	keyRadiusSystem         = "radius.system"
 	keyRadiusServer         = "radius.server"
 	keyRadiusEap            = "radius.eap"
+	keyPortalSystem         = "portal.system"
 )
 
 // SecretMask 是回传给前端以代替已配置密钥的占位符。
@@ -122,6 +123,13 @@ type RadiusEapSettings struct {
 	TLSServerCertID uint64 `json:"tlsServerCertId"`
 	TLSClientCAID   uint64 `json:"tlsClientCaId"`
 	TLSMinVersion   string `json:"tlsMinVersion"`
+}
+
+// PortalSystemSettings 保存 Portal 通知监听器的运行时配置。
+type PortalSystemSettings struct {
+	Enabled    bool   `json:"enabled"`
+	BindHost   string `json:"bindHost"`
+	NotifyPort int    `json:"notifyPort"`
 }
 
 // ─── 服务 ────────────────────────────────────────────────────────────
@@ -485,6 +493,18 @@ func (s *Service) RadiusEap(ctx context.Context) (RadiusEapSettings, bool, error
 // SetRadiusEap 更新 RADIUS EAP（802.1X）配置。
 func (s *Service) SetRadiusEap(ctx context.Context, in RadiusEapSettings) error {
 	return s.setRadiusBlob(ctx, keyRadiusEap, "RADIUS EAP (802.1X) settings", in)
+}
+
+// PortalSystem returns the persisted Portal listener override when configured.
+func (s *Service) PortalSystem(ctx context.Context) (PortalSystemSettings, bool, error) {
+	var out PortalSystemSettings
+	ok, err := s.radiusBlob(ctx, keyPortalSystem, &out)
+	return out, ok, err
+}
+
+// SetPortalSystem persists Portal listener settings and publishes invalidation.
+func (s *Service) SetPortalSystem(ctx context.Context, in PortalSystemSettings) error {
+	return s.setRadiusBlob(ctx, keyPortalSystem, "Portal system (listener) settings", in)
 }
 
 // ─── 登录页公开配置 ──────────────────────────────────────────────────

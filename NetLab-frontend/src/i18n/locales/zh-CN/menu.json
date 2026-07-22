@@ -20,5 +20,6 @@
   "radiusDot1x": "802.1X 认证",
   "radiusBypass": "免认证",
   "radiusCerts": "证书管理",
-  "radiusSettings": "服务设置"
+  "radiusSettings": "服务设置",
+  "portal": "Portal 认证"
 }

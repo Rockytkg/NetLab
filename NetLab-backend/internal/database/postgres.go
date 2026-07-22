@@ -69,6 +69,8 @@ func AutoMigrate(db *gorm.DB) error {
 		&model.RadiusAuthLog{},
 		&model.RadiusCert{},
 		&model.RadiusBypass{},
+		&model.PortalNas{},
+		&model.PortalSession{},
 	}
 
 	if err := db.AutoMigrate(models...); err != nil {

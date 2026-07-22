@@ -13,6 +13,7 @@ import (
 	"netlab-backend/internal/middleware"
 	authsvc "netlab-backend/internal/service/auth"
 	sysconfig "netlab-backend/internal/service/config"
+	portalsvc "netlab-backend/internal/service/portal"
 	radiussvc "netlab-backend/internal/service/radius"
 	"netlab-backend/pkg/apperrors"
 	"netlab-backend/pkg/response"
@@ -25,19 +26,44 @@ type AdminHandler struct {
 	importService    *authsvc.UserImportService
 	mailer           *mailer.Provider
 	radiusService    *radiussvc.Service
+	portalService    *portalsvc.Service
 	logger           *zap.Logger
 }
 
 // NewAdminHandler 创建一个新的 AdminHandler。
-func NewAdminHandler(adminService *authsvc.AdminService, userAdminService *authsvc.UserAdminService, importService *authsvc.UserImportService, mailerProvider *mailer.Provider, radiusService *radiussvc.Service, logger *zap.Logger) *AdminHandler {
+func NewAdminHandler(adminService *authsvc.AdminService, userAdminService *authsvc.UserAdminService, importService *authsvc.UserImportService, mailerProvider *mailer.Provider, radiusService *radiussvc.Service, portalService *portalsvc.Service, logger *zap.Logger) *AdminHandler {
 	return &AdminHandler{
 		adminService:     adminService,
 		userAdminService: userAdminService,
 		importService:    importService,
 		mailer:           mailerProvider,
 		radiusService:    radiusService,
+		portalService:    portalService,
 		logger:           logger,
 	}
+}
+
+// GetBillingSettings returns the unified RADIUS and Portal listener configuration.
+func (h *AdminHandler) GetBillingSettings(c *gin.Context) {
+	response.SuccessOK(c, gin.H{"radius": h.radiusService.ListenerSettings(c.Request.Context()), "portal": h.portalService.EffectiveConfig(c.Request.Context())})
+}
+
+// UpdateBillingSettings validates, persists, and hot-applies both listener configurations.
+func (h *AdminHandler) UpdateBillingSettings(c *gin.Context) {
+	var params request.BillingSettingsRequest
+	if err := c.ShouldBindJSON(&params); err != nil {
+		response.Error(c, apperrors.New(apperrors.ErrCodeInvalidCode, "invalid parameters: "+err.Error()))
+		return
+	}
+	if err := h.radiusService.UpdateListenerSettings(c.Request.Context(), &params.Radius); err != nil {
+		response.Error(c, err)
+		return
+	}
+	if err := h.portalService.UpdateSettings(c.Request.Context(), params.Portal.Enabled, params.Radius.BindHost, params.Portal.NotifyPort); err != nil {
+		response.Error(c, err)
+		return
+	}
+	h.GetBillingSettings(c)
 }
 
 // GetRadiusListenerSettings 返回系统设置中的 RADIUS 基础监听配置。

@@ -28,6 +28,8 @@ const (
 	LogDelete     = "log.delete"
 	RadiusRead    = "radius.read"
 	RadiusManage  = "radius.manage"
+	PortalRead    = "portal.read"
+	PortalManage  = "portal.manage"
 )
 
 // Catalog is the single source of truth for permissions that can be assigned.
@@ -47,4 +49,6 @@ var Catalog = []Definition{
 	{Resource: "log", Action: "delete", Description: "Delete login logs"},
 	{Resource: "radius", Action: "read", Description: "View RADIUS billing data"},
 	{Resource: "radius", Action: "manage", Description: "Manage RADIUS users, NAS devices, profiles and sessions"},
+	{Resource: "portal", Action: "read", Description: "View Portal NAS devices and sessions"},
+	{Resource: "portal", Action: "manage", Description: "Manage Portal NAS devices and sessions"},
 }

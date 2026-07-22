@@ -15,7 +15,7 @@ import type {
   UpdateUserParams,
   CreateUserParams,
   AdminUserExportView,
-  RadiusListenerSettings,
+	BillingSettings,
 } from '@/types/settings'
 
 /** 触发浏览器将 Blob 保存为本地文件。 */
@@ -56,15 +56,10 @@ export const adminApi = {
     return request.put('/settings/security', params)
   },
 
-  /** 获取 RADIUS 基础监听配置。 */
-  getRadiusListenerSettings(): Promise<RadiusListenerSettings> {
-    return request.get('/settings/radius-listener')
-  },
-
-  /** 更新 RADIUS 基础监听配置。 */
-  updateRadiusListenerSettings(params: RadiusListenerSettings): Promise<{ message: string }> {
-    return request.put('/settings/radius-listener', params)
-  },
+	/** 获取认证计费页的统一监听配置。 */
+	getBillingSettings(): Promise<BillingSettings> { return request.get('/settings/billing') },
+	/** 统一保存并热应用 RADIUS 与 Portal 监听配置。 */
+	updateBillingSettings(params: BillingSettings): Promise<BillingSettings> { return request.put('/settings/billing', params) },
 
   /** 更新备案信息 */
   updateBeian(params: BeianSettings): Promise<{ message: string }> {
